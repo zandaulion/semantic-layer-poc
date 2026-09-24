@@ -63,6 +63,30 @@ test('the safety check accepts the declared schema and rejects another', () => {
   assert.equal(result.bare, 'passed');
 });
 
+test('an uppercase catalog accepts a draft written in either case', () => {
+  // Regression: references were lower-cased before lookup while the catalog was
+  // keyed by its own spelling, so every correct draft against a warehouse with
+  // uppercase physical names -- the common case outside this fixture -- came
+  // back as touching an unknown table.
+  const upper = catalogFor('BANK_DWH');
+  upper.tables[0].table_name = 'D_CUST';
+  const output = withCatalog(upper, `
+    const { checkSql, referencedTables } = await import('./sql-check.js');
+    console.log(JSON.stringify({
+      asDeclared: checkSql('SELECT * FROM BANK_DWH.D_CUST').tables,
+      lowered: checkSql('SELECT * FROM bank_dwh.d_cust').tables,
+      mixed: checkSql('SELECT * FROM Bank_Dwh.D_Cust').tables,
+      reported: referencedTables('SELECT * FROM bank_dwh.d_cust').known,
+    }));
+  `);
+  const result = JSON.parse(output);
+  assert.equal(result.asDeclared, 'passed');
+  assert.equal(result.lowered, 'passed');
+  assert.equal(result.mixed, 'passed');
+  // Reported under the catalog's spelling, whatever the draft used.
+  assert.deepEqual(result.reported, ['D_CUST']);
+});
+
 test('a catalog that declares no schema still falls back to the fixture default', () => {
   const catalog = catalogFor('ignored');
   delete catalog.schema_name;

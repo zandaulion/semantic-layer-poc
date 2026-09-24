@@ -93,8 +93,16 @@ cryptic physical names, lexical retrieval over names alone degrades badly, and
 this is where hybrid retrieval with embeddings earns its cost. The
 [metadata model](elasticsearch-metadata-model.md) describes that fuller design.
 
-**This is also the component that most determines answer quality.** A table that
-retrieval never returns cannot be recovered by any amount of prompt engineering.
+**This is also the component that most determines answer quality** for facts. A
+fact that retrieval never returns cannot be recovered downstream — dimensions
+are a different matter, since component 5 supplies those structurally.
+
+Measured against an abbreviated catalog, search recall was **unchanged**:
+curated grain and column descriptions carry lexical retrieval on their own.
+Strip those as well and recall falls by nearly half, with facts disappearing
+first. The practical conclusion is that descriptions are worth more than
+renaming, and it is written up in
+[retrieval and naming](retrieval-and-naming.md).
 
 ## 5. Bounded context assembly
 
@@ -102,12 +110,24 @@ retrieval never returns cannot be recovered by any amount of prompt engineering.
 a compact block of table name, type, grain and columns, plus candidate joins, and
 refuses the request if the prompt exceeds 40,000 characters.
 
-**Verdict.** Reuse the design. Three properties matter and all three transfer:
-the context is **bounded** by construction rather than by hope; joins are
-labelled *candidate* so the model is not told they are approved; and the prompt
-has a hard ceiling with a defined behaviour when it is hit. Prompt size is driven
-by the width of retrieved tables, not the size of the warehouse — worth knowing
-when sizing a KV cache.
+**Verdict.** Reuse the design, and read the ranking carefully before porting it.
+Three properties matter and all three transfer: the context is **bounded** by
+construction rather than by hope; joins are labelled *candidate* so the model is
+not told they are approved; and the prompt has a hard ceiling with a defined
+behaviour when it is hit. Prompt size is driven by the width of retrieved
+tables, not the size of the warehouse — worth knowing when sizing a KV cache.
+
+**This component supplies more grounding than search does.** On the fixture,
+lexical search finds only 55% of the required tables; the rest arrive because
+this step walks the selected facts' declared relationships. A reimplementation
+that dropped the graph expansion would lose half its grounding while its search
+metrics looked unchanged.
+
+**Its ranking originally assumed readable table names** — word overlap with the
+question, plus a literal comparison against `dim_date` — and against a catalog
+using bank-style abbreviations it supplied no dimensions at all. Ranking
+neighbours by join-graph degree instead is name-free and restores parity. See
+[retrieval and naming](retrieval-and-naming.md).
 
 ## 6. Response contract
 
@@ -157,7 +177,10 @@ presented as ready.
 
 **POC-specific.** It is a regex over text, not a parser. It reports `syntax`,
 `columns`, `business` and `execution` as explicitly *not verified*, which is
-honest but limited.
+honest but limited. It also carried a case-sensitivity defect that only appeared
+once it was pointed at a catalog with uppercase names — invisible against an
+all-lowercase fixture, and fatal against most real warehouses. See
+[retrieval and naming](retrieval-and-naming.md).
 
 **Verdict.** Port, and strengthen — replace the regexes with a real PostgreSQL
 parser, which removes a whole class of both false positives and evasions.

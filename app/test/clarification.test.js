@@ -43,3 +43,21 @@ test('last-month active customers uses the historical customer version at month 
   assert.equal(result.checks.tables, 'passed');
   assert.deepEqual(result.sources, ['table.bank_dwh.dim_customer']);
 });
+
+test('active customer transaction totals use catalog fields and state the missing-period assumption', async () => {
+  const hits = ['fact_account_transaction', 'dim_customer', 'fact_payment_transaction']
+    .map((table_name) => ({ table_name }));
+  const result = await generateDraft({
+    question: 'Number of active customers, and their total transaactions amount, per transaction type',
+    hits,
+  });
+  assert.equal(result.status, 'draft');
+  assert.match(result.sql, /fact_account_transaction/);
+  assert.match(result.sql, /SUM\(t\.base_amount\)/);
+  assert.match(result.sql, /COUNT\(DISTINCT historical_customer\.business_id\)/);
+  assert.match(result.sql, /GROUP BY t\.transaction_type_code/);
+  assert.doesNotMatch(result.sql, /fact_payment_transaction|fact_atm_transaction/);
+  assert.ok(result.assumptions.some((assumption) => /No period was specified/.test(assumption)));
+  assert.equal(result.checks.statement, 'passed');
+  assert.equal(result.checks.tables, 'passed');
+});

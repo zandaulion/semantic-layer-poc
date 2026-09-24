@@ -42,7 +42,7 @@ function restoreWorkspace() {
       if (draft.result.status === 'needs_clarification') {
         $('clarification-answer').placeholder = /^Which year/i.test(draft.result.clarification_question || '') ? 'e.g. 2026' : 'Add the missing detail';
         $('clarification-reply').hidden = false;
-        flash([draft.result.interpretation, draft.result.clarification_question].filter(Boolean).join(' '));
+        flash(draft.result.clarification_question || 'One more detail is needed before drafting SQL.');
       }
     }
     $('sql-editor').value = String(draft.sql || '').slice(0, 20_000);
@@ -224,8 +224,7 @@ async function generate() {
       flash('The model returned SQL, but a basic check needs review. See the draft and checks below.');
       $('draft-title').scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else if (result.status === 'needs_clarification') {
-      flash([result.interpretation, result.clarification_question].filter(Boolean).join(' ')
-        || 'The model needs one more detail before it can draft SQL.');
+      flash(result.clarification_question || 'One more detail is needed before drafting SQL.');
       $('clarification-answer').value = '';
       $('clarification-answer').placeholder = /^Which year/i.test(result.clarification_question || '') ? 'e.g. 2026' : 'Add the missing detail';
       $('clarification-reply').hidden = false;

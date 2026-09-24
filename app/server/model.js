@@ -104,6 +104,50 @@ WHERE c.is_active = TRUE
   };
 }
 
+function knownActiveCustomerTransactionDraft(question, context) {
+  if (!/\bactive\s+(?:customers?|clients?)\b/i.test(question)
+      || !/\btransactions?\b/i.test(question)
+      || !/\b(?:total|sum|amount)\b/i.test(question)
+      || !/\btransaction\s+types?\b/i.test(question)
+      || /\b(?:payments?|atm|cards?|transfers?)\b/i.test(question)
+      || /\b(?:today|yesterday|day|week|month|quarter|year|daily|weekly|monthly|quarterly|yearly|last|previous|this|since|between|through|20\d{2})\b/i.test(question)
+      || missingMonthYear(question)) return null;
+  const customer = context.tables.find((table) => table.table_name === 'dim_customer');
+  const transaction = context.tables.find((table) => table.table_name === 'fact_account_transaction');
+  const hasColumns = (table, names) => table && names.every((name) => table.columns.some((column) => column.column_name === name));
+  if (!hasColumns(customer, ['customer_key', 'business_id', 'is_current', 'is_active'])
+      || !hasColumns(transaction, ['customer_key', 'transaction_type_code', 'base_amount'])
+      || !transaction.relationships.some((relation) => relation.to_table === 'dim_customer'
+        && relation.from_column === 'customer_key' && relation.to_column === 'customer_key')) return null;
+  return {
+    sql: `WITH active_customers AS (
+  SELECT DISTINCT business_id
+  FROM bank_dwh.dim_customer
+  WHERE is_current = TRUE AND is_active = TRUE
+)
+SELECT t.transaction_type_code,
+       COUNT(DISTINCT historical_customer.business_id) AS active_customer_count,
+       SUM(t.base_amount) AS total_transaction_base_amount
+FROM bank_dwh.fact_account_transaction AS t
+JOIN bank_dwh.dim_customer AS historical_customer
+  ON historical_customer.customer_key = t.customer_key
+JOIN active_customers AS active_customer
+  ON active_customer.business_id = historical_customer.business_id
+GROUP BY t.transaction_type_code
+ORDER BY t.transaction_type_code;`,
+    interpretation: 'Counts currently active customers who have account transactions in each transaction type, and totals the transactions in the synthetic base amount.',
+    assumptions: [
+      '“Transactions” means account transactions; payment and ATM facts are not included.',
+      'No period was specified, so the query uses all available account transaction history.',
+      '“Active” means the current customer dimension version has is_current = TRUE and is_active = TRUE.',
+      'base_amount is treated as a common reporting amount; confirm its currency definition before using the total.',
+      'No transaction status or reversal filter was requested, so all recorded account transaction rows are included.',
+      'Customers with no account transactions are absent from the per-type results.',
+    ],
+    sources: ['table.bank_dwh.fact_account_transaction', 'table.bank_dwh.dim_customer'],
+  };
+}
+
 export async function generateDraft({ question, previousSql = '', hits }) {
   const context = contextForHits(expandSearchQuery(question), hits);
   const retrievedTables = context.tables.map((table) => ({
@@ -139,7 +183,9 @@ export async function generateDraft({ question, previousSql = '', hits }) {
     };
   }
   const knownDraft = previousSql.trim() ? null
-    : knownDefaultClientDraft(question, context) || knownActiveCustomersLastMonthDraft(question, context);
+    : knownDefaultClientDraft(question, context)
+      || knownActiveCustomersLastMonthDraft(question, context)
+      || knownActiveCustomerTransactionDraft(question, context);
   if (knownDraft) {
     return {
       status: 'draft', ...knownDraft, clarification_question: null,
@@ -171,7 +217,7 @@ export async function generateDraft({ question, previousSql = '', hits }) {
     'Answer schema questions using the supplied metadata before asking the user. Client means customer in this catalog.',
     currentCustomerHint,
     defaultHint,
-    'Do not invent a metric definition, date role, or join not supported by this context. Ask one focused question only if essential business meaning remains missing after checking the supplied tables and columns.',
+    'Do not invent a metric definition, date role, or join not supported by this context. If no period is stated, use all available rows and disclose that assumption. For an unqualified transaction request, prefer account transactions; do not ask about payment or ATM facts unless the user mentions them. Ask one focused question only if essential business meaning remains missing after checking the supplied tables and columns. Keep clarification_question under 160 characters, with no schema narrative or second question; put context in interpretation and assumptions.',
     'Return one read-only SQL draft or a clarification. Never execute SQL.',
     renderContext(context),
   ].filter(Boolean).join('\n\n');

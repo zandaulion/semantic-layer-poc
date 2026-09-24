@@ -1,0 +1,424 @@
+[
+  {
+    "document_id": "table.dwh-poc.sales.pd-100",
+    "document_type": "table",
+    "domain_id": "sales",
+    "connection_id": "dwh-poc",
+    "sql_dialect": "oracle",
+    "dialect_version": "19c",
+    "status": "approved",
+    "access_scope_ids": [
+      "sales-poc"
+    ],
+    "metadata_version": "poc-001",
+    "content_version": 1,
+    "source_updated_at": "2026-09-23T08:00:00Z",
+    "indexed_at": "2026-09-23T09:00:00Z",
+    "title": "Invoices — DWH.FACT_INVOICE",
+    "search_text": "Invoices sales billed revenue invoice date customer invoice amount EUR euros cancellation status. DWH.FACT_INVOICE: one row per invoice. INVOICE_ID invoice identifier; CUSTOMER_KEY customer relationship; INVOICE_DATE invoice date; AMOUNT_EUR invoice amount in EUR; INVOICE_STATUS invoice status. Consult approved revenue guidance before summing amounts.",
+    "physical_identifiers": [
+      "DWH.FACT_INVOICE",
+      "DWH.FACT_INVOICE.INVOICE_ID",
+      "DWH.FACT_INVOICE.CUSTOMER_KEY",
+      "DWH.FACT_INVOICE.INVOICE_DATE",
+      "DWH.FACT_INVOICE.AMOUNT_EUR",
+      "DWH.FACT_INVOICE.INVOICE_STATUS"
+    ],
+    "business_term_ids": [
+      "acc-invoice-date",
+      "acc-invoice-amount"
+    ],
+    "business_term_names": [
+      "Invoice date",
+      "Invoice amount"
+    ],
+    "aliases": [
+      "billing date",
+      "billed amount"
+    ],
+    "dependency_ids": [],
+    "required_for_domain": false,
+    "source_references": [
+      {
+        "system": "PowerDesigner",
+        "record_id": "pd-100"
+      },
+      {
+        "system": "Accurity",
+        "record_id": "sales"
+      }
+    ],
+    "table_metadata": {
+      "object_id": "pd-100",
+      "schema_name": "DWH",
+      "object_name": "FACT_INVOICE",
+      "object_type": "table",
+      "description": "Illustrative invoice fact. AMOUNT_EUR is already expressed in EUR.",
+      "grain": "One row per invoice.",
+      "primary_key_column_ids": [
+        "pd-101"
+      ],
+      "columns": [
+        {
+          "column_id": "pd-101",
+          "name": "INVOICE_ID",
+          "data_type": "NUMBER(18)",
+          "nullable": false,
+          "description": "Unique invoice identifier.",
+          "business_terms": []
+        },
+        {
+          "column_id": "pd-102",
+          "name": "CUSTOMER_KEY",
+          "data_type": "NUMBER(18)",
+          "nullable": false,
+          "description": "Stable customer key referencing DIM_CUSTOMER.",
+          "business_terms": []
+        },
+        {
+          "column_id": "pd-103",
+          "name": "INVOICE_DATE",
+          "data_type": "DATE",
+          "nullable": false,
+          "description": "Invoice issue date.",
+          "business_terms": [
+            {
+              "term_id": "acc-invoice-date",
+              "name": "Invoice date",
+              "definition": "Date on which the invoice is issued.",
+              "aliases": [
+                "billing date"
+              ],
+              "source_reference": {
+                "system": "Accurity",
+                "record_id": "acc-invoice-date"
+              }
+            }
+          ]
+        },
+        {
+          "column_id": "pd-104",
+          "name": "AMOUNT_EUR",
+          "data_type": "NUMBER(18,2)",
+          "nullable": false,
+          "description": "Invoice amount already converted to EUR.",
+          "business_terms": [
+            {
+              "term_id": "acc-invoice-amount",
+              "name": "Invoice amount",
+              "definition": "Amount of an invoice, expressed here in EUR.",
+              "aliases": [
+                "billed amount"
+              ],
+              "source_reference": {
+                "system": "Accurity",
+                "record_id": "acc-invoice-amount"
+              }
+            }
+          ]
+        },
+        {
+          "column_id": "pd-105",
+          "name": "INVOICE_STATUS",
+          "data_type": "VARCHAR2(20)",
+          "nullable": false,
+          "description": "Non-null invoice status; cancellation code is documented in guidance.",
+          "business_terms": []
+        }
+      ]
+    }
+  },
+  {
+    "document_id": "table.dwh-poc.sales.pd-200",
+    "document_type": "table",
+    "domain_id": "sales",
+    "connection_id": "dwh-poc",
+    "sql_dialect": "oracle",
+    "dialect_version": "19c",
+    "status": "approved",
+    "access_scope_ids": [
+      "sales-poc"
+    ],
+    "metadata_version": "poc-001",
+    "content_version": 1,
+    "source_updated_at": "2026-09-23T08:00:00Z",
+    "indexed_at": "2026-09-23T09:00:00Z",
+    "title": "Customers — DWH.DIM_CUSTOMER",
+    "search_text": "Customers customer identifier customer name client name account name. DWH.DIM_CUSTOMER: one current row per customer, no historical versions in this illustrative model. CUSTOMER_KEY unique stable warehouse key; CUSTOMER_ID unique business identifier; CUSTOMER_NAME current display name, not necessarily unique.",
+    "physical_identifiers": [
+      "DWH.DIM_CUSTOMER",
+      "DWH.DIM_CUSTOMER.CUSTOMER_KEY",
+      "DWH.DIM_CUSTOMER.CUSTOMER_ID",
+      "DWH.DIM_CUSTOMER.CUSTOMER_NAME"
+    ],
+    "business_term_ids": [
+      "acc-customer-id",
+      "acc-customer-name"
+    ],
+    "business_term_names": [
+      "Customer identifier",
+      "Customer name"
+    ],
+    "aliases": [
+      "customer number",
+      "client name",
+      "account name"
+    ],
+    "dependency_ids": [],
+    "required_for_domain": false,
+    "source_references": [
+      {
+        "system": "PowerDesigner",
+        "record_id": "pd-200"
+      },
+      {
+        "system": "Accurity",
+        "record_id": "sales"
+      }
+    ],
+    "table_metadata": {
+      "object_id": "pd-200",
+      "schema_name": "DWH",
+      "object_name": "DIM_CUSTOMER",
+      "object_type": "table",
+      "description": "Illustrative current customer dimension. CUSTOMER_KEY remains stable; there is no SCD history.",
+      "grain": "One current row per customer.",
+      "primary_key_column_ids": [
+        "pd-201"
+      ],
+      "unique_key_column_id_sets": [
+        [
+          "pd-202"
+        ]
+      ],
+      "columns": [
+        {
+          "column_id": "pd-201",
+          "name": "CUSTOMER_KEY",
+          "data_type": "NUMBER(18)",
+          "nullable": false,
+          "description": "Unique stable warehouse customer key.",
+          "business_terms": []
+        },
+        {
+          "column_id": "pd-202",
+          "name": "CUSTOMER_ID",
+          "data_type": "VARCHAR2(30)",
+          "nullable": false,
+          "description": "Unique business customer identifier.",
+          "business_terms": [
+            {
+              "term_id": "acc-customer-id",
+              "name": "Customer identifier",
+              "definition": "Business identifier distinguishing customers.",
+              "aliases": [
+                "customer number"
+              ],
+              "source_reference": {
+                "system": "Accurity",
+                "record_id": "acc-customer-id"
+              }
+            }
+          ]
+        },
+        {
+          "column_id": "pd-203",
+          "name": "CUSTOMER_NAME",
+          "data_type": "VARCHAR2(200)",
+          "nullable": false,
+          "description": "Current customer display name; not unique.",
+          "business_terms": [
+            {
+              "term_id": "acc-customer-name",
+              "name": "Customer name",
+              "definition": "Name used to display the customer.",
+              "aliases": [
+                "client name",
+                "account name"
+              ],
+              "source_reference": {
+                "system": "Accurity",
+                "record_id": "acc-customer-name"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "document_id": "guidance.dwh-poc.sales.revenue",
+    "document_type": "guidance",
+    "domain_id": "sales",
+    "connection_id": "dwh-poc",
+    "sql_dialect": "oracle",
+    "dialect_version": "19c",
+    "status": "approved",
+    "access_scope_ids": [
+      "sales-poc"
+    ],
+    "metadata_version": "poc-001",
+    "content_version": 1,
+    "source_updated_at": "2026-09-23T08:00:00Z",
+    "indexed_at": "2026-09-23T09:00:00Z",
+    "title": "Invoiced revenue: definition, customer join and invoice dates",
+    "search_text": "Invoiced revenue billed revenue sales by customer in EUR. Sum invoice AMOUNT_EUR excluding CANCELLED invoices. Join invoices to customers using CUSTOMER_KEY. Filter invoice date with inclusive start and exclusive end. Group by CUSTOMER_ID and CUSTOMER_NAME. Calendar-year reporting; current customer name.",
+    "physical_identifiers": [],
+    "business_term_ids": [
+      "acc-invoiced-revenue",
+      "acc-customer-name",
+      "acc-invoice-date"
+    ],
+    "business_term_names": [
+      "Invoiced revenue",
+      "Customer name",
+      "Invoice date"
+    ],
+    "aliases": [],
+    "dependency_ids": [
+      "table.dwh-poc.sales.pd-100",
+      "table.dwh-poc.sales.pd-200"
+    ],
+    "required_for_domain": true,
+    "source_references": [
+      {
+        "system": "Reviewed guidance",
+        "record_id": "sales-revenue-v1"
+      }
+    ],
+    "guidance": {
+      "summary": "Illustrative approved revenue rule for the two supplied tables.",
+      "table_ids": [
+        "table.dwh-poc.sales.pd-100",
+        "table.dwh-poc.sales.pd-200"
+      ],
+      "joins": [
+        {
+          "join_id": "invoice_customer",
+          "left_table_id": "table.dwh-poc.sales.pd-100",
+          "right_table_id": "table.dwh-poc.sales.pd-200",
+          "left_alias": "i",
+          "right_alias": "c",
+          "join_type": "INNER",
+          "cardinality": "many_to_one",
+          "predicate_sql": "i.CUSTOMER_KEY = c.CUSTOMER_KEY",
+          "key_pairs": [
+            {
+              "left_column_id": "pd-102",
+              "right_column_id": "pd-201"
+            }
+          ],
+          "assumptions": [
+            "DIM_CUSTOMER.CUSTOMER_KEY is unique.",
+            "Each invoice has a matching customer.",
+            "Customer keys are stable; no historical customer versions are present."
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "rule_id": "invoiced_revenue_eur",
+          "description": "Sum AMOUNT_EUR; amounts are already in EUR.",
+          "expression_sql": "SUM(i.AMOUNT_EUR)",
+          "unit": "EUR"
+        },
+        {
+          "rule_id": "exclude_cancelled",
+          "description": "Exclude cancelled invoices; status is non-null in this example.",
+          "predicate_sql": "i.INVOICE_STATUS <> 'CANCELLED'"
+        },
+        {
+          "rule_id": "invoice_period",
+          "description": "Use invoice date, inclusive start and exclusive end.",
+          "predicate_sql": "i.INVOICE_DATE >= :date_from AND i.INVOICE_DATE < :date_to"
+        },
+        {
+          "rule_id": "customer_grouping",
+          "description": "Group by customer business identifier and current name. Never group by name alone."
+        }
+      ],
+      "date_role": {
+        "column_id": "pd-103",
+        "calendar": "calendar_year",
+        "interval": "inclusive_start_exclusive_end"
+      },
+      "code_mappings": [
+        {
+          "column_id": "pd-105",
+          "code": "CANCELLED",
+          "label": "Cancelled"
+        }
+      ]
+    }
+  },
+  {
+    "document_id": "example.dwh-poc.sales.revenue-by-customer",
+    "document_type": "example",
+    "domain_id": "sales",
+    "connection_id": "dwh-poc",
+    "sql_dialect": "oracle",
+    "dialect_version": "19c",
+    "status": "approved",
+    "access_scope_ids": [
+      "sales-poc"
+    ],
+    "metadata_version": "poc-001",
+    "content_version": 1,
+    "source_updated_at": "2026-09-23T08:00:00Z",
+    "indexed_at": "2026-09-23T09:00:00Z",
+    "title": "Invoiced revenue by customer for a specified period",
+    "search_text": "Show invoiced revenue in EUR by customer between two invoice dates. Billed revenue sales per client. Exclude cancelled invoices; group by unique customer business identifier and current customer name.",
+    "physical_identifiers": [],
+    "business_term_ids": [
+      "acc-invoiced-revenue",
+      "acc-customer-name",
+      "acc-invoice-date"
+    ],
+    "business_term_names": [
+      "Invoiced revenue",
+      "Customer name",
+      "Invoice date"
+    ],
+    "aliases": [],
+    "dependency_ids": [
+      "table.dwh-poc.sales.pd-100",
+      "table.dwh-poc.sales.pd-200",
+      "guidance.dwh-poc.sales.revenue"
+    ],
+    "required_for_domain": false,
+    "source_references": [
+      {
+        "system": "Reviewed SQL",
+        "record_id": "sales-query-001"
+      }
+    ],
+    "example": {
+      "question": "Show invoiced revenue in EUR by customer for a specified invoice-date period.",
+      "sql": "SELECT c.CUSTOMER_ID,\n       c.CUSTOMER_NAME,\n       SUM(i.AMOUNT_EUR) AS INVOICED_REVENUE_EUR\nFROM DWH.FACT_INVOICE i\nJOIN DWH.DIM_CUSTOMER c\n  ON i.CUSTOMER_KEY = c.CUSTOMER_KEY\nWHERE i.INVOICE_STATUS <> 'CANCELLED'\n  AND i.INVOICE_DATE >= :date_from\n  AND i.INVOICE_DATE < :date_to\nGROUP BY c.CUSTOMER_ID, c.CUSTOMER_NAME",
+      "explanation": "Uses the documented many-to-one customer join and invoice date. Amounts are already in EUR. Customers are grouped by identifier and current name.",
+      "parameters": [
+        {
+          "name": "date_from",
+          "data_type": "DATE",
+          "description": "Inclusive invoice date."
+        },
+        {
+          "name": "date_to",
+          "data_type": "DATE",
+          "description": "Exclusive invoice date."
+        }
+      ],
+      "table_ids": [
+        "table.dwh-poc.sales.pd-100",
+        "table.dwh-poc.sales.pd-200"
+      ],
+      "guidance_ids": [
+        "guidance.dwh-poc.sales.revenue"
+      ],
+      "review": {
+        "review_reference": "illustrative-review-001",
+        "reviewed_at": "2026-09-23T08:00:00Z"
+      }
+    }
+  }
+]

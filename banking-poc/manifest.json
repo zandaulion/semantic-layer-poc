@@ -1,0 +1,25 @@
+{
+  "name": "Synthetic banking DWH SQL-assistant stress fixture",
+  "schema": "bank_dwh",
+  "dialect": "postgresql",
+  "table_count": 100,
+  "dimension_count": 42,
+  "fact_count": 58,
+  "column_count": 5000,
+  "relationship_count": 490,
+  "seed_dimension_rows": 210,
+  "seed_fact_rows": 1160,
+  "domains": {
+    "conformed": 12,
+    "deposits": 13,
+    "lending": 16,
+    "payments_cards": 7,
+    "wealth": 11,
+    "risk_compliance": 15,
+    "payments": 9,
+    "cards": 5,
+    "customer_service": 5,
+    "treasury_finance": 7
+  },
+  "status": "synthetic_fixture_not_approved_banking_logic"
+}

@@ -1,0 +1,109 @@
+{
+  "mappings": {
+    "dynamic": "strict",
+    "_meta": {
+      "purpose": "Minimal SQL assistant metadata",
+      "contract_version": "1",
+      "embedding_dimensions_note": "768 is illustrative. Set dims to the selected local encoder output dimension before index creation. Samples omit embeddings."
+    },
+    "properties": {
+      "document_id": {
+        "type": "keyword"
+      },
+      "document_type": {
+        "type": "keyword"
+      },
+      "domain_id": {
+        "type": "keyword"
+      },
+      "connection_id": {
+        "type": "keyword"
+      },
+      "sql_dialect": {
+        "type": "keyword"
+      },
+      "dialect_version": {
+        "type": "keyword"
+      },
+      "status": {
+        "type": "keyword"
+      },
+      "access_scope_ids": {
+        "type": "keyword"
+      },
+      "metadata_version": {
+        "type": "keyword"
+      },
+      "content_version": {
+        "type": "integer"
+      },
+      "source_updated_at": {
+        "type": "date"
+      },
+      "indexed_at": {
+        "type": "date"
+      },
+      "title": {
+        "type": "text",
+        "fields": {
+          "exact": {
+            "type": "keyword"
+          }
+        }
+      },
+      "search_text": {
+        "type": "text"
+      },
+      "physical_identifiers": {
+        "type": "keyword"
+      },
+      "business_term_ids": {
+        "type": "keyword"
+      },
+      "business_term_names": {
+        "type": "text"
+      },
+      "aliases": {
+        "type": "text"
+      },
+      "dependency_ids": {
+        "type": "keyword"
+      },
+      "required_for_domain": {
+        "type": "boolean"
+      },
+      "source_references": {
+        "type": "object",
+        "enabled": false
+      },
+      "table_metadata": {
+        "type": "object",
+        "enabled": false
+      },
+      "guidance": {
+        "type": "object",
+        "enabled": false
+      },
+      "example": {
+        "type": "object",
+        "enabled": false
+      },
+      "embedding_text": {
+        "type": "text",
+        "index": false
+      },
+      "embedding_model_id": {
+        "type": "keyword"
+      },
+      "embedding_pipeline_version": {
+        "type": "keyword"
+      },
+      "embedding": {
+        "type": "dense_vector",
+        "dims": 768,
+        "index": true,
+        "similarity": "cosine"
+      }
+    }
+  }
+}

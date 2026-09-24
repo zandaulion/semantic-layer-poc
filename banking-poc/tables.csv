@@ -1,0 +1,101 @@
+schema_name,table_name,table_type,domain,grain,column_count,design_status
+bank_dwh,dim_date,dimension,conformed,One row per calendar date.,32,synthetic_fixture
+bank_dwh,dim_time,dimension,conformed,One row per time-of-day member.,24,synthetic_fixture
+bank_dwh,dim_customer,dimension,conformed,One row per version of a customer member.,62,synthetic_fixture
+bank_dwh,dim_household,dimension,conformed,One row per version of a household member.,45,synthetic_fixture
+bank_dwh,dim_party,dimension,conformed,One row per version of a party member.,62,synthetic_fixture
+bank_dwh,dim_account,dimension,conformed,One row per version of an account member.,62,synthetic_fixture
+bank_dwh,dim_product,dimension,conformed,One row per version of a product member.,62,synthetic_fixture
+bank_dwh,dim_branch,dimension,conformed,One row per version of a branch member.,45,synthetic_fixture
+bank_dwh,dim_channel,dimension,conformed,One row per version of a channel member.,45,synthetic_fixture
+bank_dwh,dim_currency,dimension,conformed,One row per version of a currency member.,35,synthetic_fixture
+bank_dwh,dim_organization,dimension,conformed,One row per version of an organization member.,45,synthetic_fixture
+bank_dwh,dim_employee,dimension,conformed,One row per version of an employee member.,45,synthetic_fixture
+bank_dwh,dim_deposit_product,dimension,deposits,One row per version of a deposit product member.,45,synthetic_fixture
+bank_dwh,dim_deposit_term,dimension,deposits,One row per version of a deposit term member.,35,synthetic_fixture
+bank_dwh,dim_interest_rate_plan,dimension,deposits,One row per version of an interest rate plan member.,45,synthetic_fixture
+bank_dwh,dim_account_status,dimension,deposits,One row per version of an account status member.,35,synthetic_fixture
+bank_dwh,dim_account_relationship,dimension,deposits,One row per version of an account relationship member.,45,synthetic_fixture
+bank_dwh,dim_loan_product,dimension,lending,One row per version of a loan product member.,62,synthetic_fixture
+bank_dwh,dim_loan_purpose,dimension,lending,One row per version of a loan purpose member.,35,synthetic_fixture
+bank_dwh,dim_collateral_type,dimension,lending,One row per version of a collateral type member.,35,synthetic_fixture
+bank_dwh,dim_credit_rating,dimension,lending,One row per version of a credit rating member.,35,synthetic_fixture
+bank_dwh,dim_delinquency_band,dimension,lending,One row per version of a delinquency band member.,35,synthetic_fixture
+bank_dwh,dim_repayment_plan,dimension,lending,One row per version of a repayment plan member.,45,synthetic_fixture
+bank_dwh,dim_facility_type,dimension,lending,One row per version of a facility type member.,35,synthetic_fixture
+bank_dwh,dim_payment_type,dimension,payments_cards,One row per version of a payment type member.,35,synthetic_fixture
+bank_dwh,dim_payment_network,dimension,payments_cards,One row per version of a payment network member.,35,synthetic_fixture
+bank_dwh,dim_merchant,dimension,payments_cards,One row per version of a merchant member.,62,synthetic_fixture
+bank_dwh,dim_merchant_category,dimension,payments_cards,One row per version of a merchant category member.,35,synthetic_fixture
+bank_dwh,dim_card_product,dimension,payments_cards,One row per version of a card product member.,45,synthetic_fixture
+bank_dwh,dim_card_status,dimension,payments_cards,One row per version of a card status member.,35,synthetic_fixture
+bank_dwh,dim_terminal,dimension,payments_cards,One row per version of a terminal member.,45,synthetic_fixture
+bank_dwh,dim_security,dimension,wealth,One row per version of a security member.,62,synthetic_fixture
+bank_dwh,dim_instrument_type,dimension,wealth,One row per version of an instrument type member.,35,synthetic_fixture
+bank_dwh,dim_portfolio,dimension,wealth,One row per version of a portfolio member.,62,synthetic_fixture
+bank_dwh,dim_market,dimension,wealth,One row per version of a market member.,35,synthetic_fixture
+bank_dwh,dim_benchmark,dimension,wealth,One row per version of a benchmark member.,45,synthetic_fixture
+bank_dwh,dim_risk_model,dimension,risk_compliance,One row per version of a risk model member.,45,synthetic_fixture
+bank_dwh,dim_regulatory_report,dimension,risk_compliance,One row per version of a regulatory report member.,45,synthetic_fixture
+bank_dwh,dim_jurisdiction,dimension,risk_compliance,One row per version of a jurisdiction member.,35,synthetic_fixture
+bank_dwh,dim_fraud_rule,dimension,risk_compliance,One row per version of a fraud rule member.,45,synthetic_fixture
+bank_dwh,dim_aml_scenario,dimension,risk_compliance,One row per version of an aml scenario member.,45,synthetic_fixture
+bank_dwh,dim_complaint_category,dimension,risk_compliance,One row per version of a complaint category member.,35,synthetic_fixture
+bank_dwh,fact_account_balance_daily,fact,deposits,One row per account balance per business date.,57,synthetic_fixture
+bank_dwh,fact_account_transaction,fact,deposits,One row per recorded account transaction event or calculation.,57,synthetic_fixture
+bank_dwh,fact_deposit_balance_daily,fact,deposits,One row per deposit balance per business date.,57,synthetic_fixture
+bank_dwh,fact_deposit_interest_accrual,fact,deposits,One row per recorded deposit interest accrual event or calculation.,54,synthetic_fixture
+bank_dwh,fact_deposit_maturity,fact,deposits,One row per recorded deposit maturity event or calculation.,54,synthetic_fixture
+bank_dwh,fact_overdraft_usage_daily,fact,deposits,One row per overdraft usage per business date.,54,synthetic_fixture
+bank_dwh,fact_account_fee,fact,deposits,One row per recorded account fee event or calculation.,54,synthetic_fixture
+bank_dwh,fact_account_hold,fact,deposits,One row per recorded account hold event or calculation.,54,synthetic_fixture
+bank_dwh,fact_loan_balance_daily,fact,lending,One row per loan balance per business date.,57,synthetic_fixture
+bank_dwh,fact_loan_disbursement,fact,lending,One row per recorded loan disbursement event or calculation.,54,synthetic_fixture
+bank_dwh,fact_loan_repayment,fact,lending,One row per recorded loan repayment event or calculation.,57,synthetic_fixture
+bank_dwh,fact_loan_interest_accrual,fact,lending,One row per recorded loan interest accrual event or calculation.,54,synthetic_fixture
+bank_dwh,fact_loan_delinquency_daily,fact,lending,One row per loan delinquency per business date.,54,synthetic_fixture
+bank_dwh,fact_loan_loss_provision,fact,lending,One row per recorded loan loss provision event or calculation.,54,synthetic_fixture
+bank_dwh,fact_collateral_valuation,fact,lending,One row per recorded collateral valuation event or calculation.,54,synthetic_fixture
+bank_dwh,fact_credit_limit_usage_daily,fact,lending,One row per credit limit usage per business date.,54,synthetic_fixture
+bank_dwh,fact_loan_application,fact,lending,One row per recorded loan application event or calculation.,54,synthetic_fixture
+bank_dwh,fact_payment_transaction,fact,payments,One row per recorded payment transaction event or calculation.,57,synthetic_fixture
+bank_dwh,fact_payment_settlement,fact,payments,One row per recorded payment settlement event or calculation.,57,synthetic_fixture
+bank_dwh,fact_payment_return,fact,payments,One row per recorded payment return event or calculation.,57,synthetic_fixture
+bank_dwh,fact_wire_transfer,fact,payments,One row per recorded wire transfer event or calculation.,54,synthetic_fixture
+bank_dwh,fact_direct_debit,fact,payments,One row per recorded direct debit event or calculation.,54,synthetic_fixture
+bank_dwh,fact_standing_order_execution,fact,payments,One row per recorded standing order execution event or calculation.,54,synthetic_fixture
+bank_dwh,fact_atm_transaction,fact,payments,One row per recorded atm transaction event or calculation.,57,synthetic_fixture
+bank_dwh,fact_card_authorization,fact,payments,One row per recorded card authorization event or calculation.,54,synthetic_fixture
+bank_dwh,fact_card_clearing,fact,payments,One row per recorded card clearing event or calculation.,54,synthetic_fixture
+bank_dwh,fact_card_balance_daily,fact,cards,One row per card balance per business date.,57,synthetic_fixture
+bank_dwh,fact_card_fee,fact,cards,One row per recorded card fee event or calculation.,54,synthetic_fixture
+bank_dwh,fact_card_dispute,fact,cards,One row per recorded card dispute event or calculation.,54,synthetic_fixture
+bank_dwh,fact_card_chargeback,fact,cards,One row per recorded card chargeback event or calculation.,54,synthetic_fixture
+bank_dwh,fact_card_reward_earning,fact,cards,One row per recorded card reward earning event or calculation.,54,synthetic_fixture
+bank_dwh,fact_customer_interaction,fact,customer_service,One row per recorded customer interaction event or calculation.,54,synthetic_fixture
+bank_dwh,fact_customer_campaign_response,fact,customer_service,One row per recorded customer campaign response event or calculation.,54,synthetic_fixture
+bank_dwh,fact_complaint,fact,customer_service,One row per recorded complaint event or calculation.,54,synthetic_fixture
+bank_dwh,fact_service_case,fact,customer_service,One row per recorded service case event or calculation.,54,synthetic_fixture
+bank_dwh,fact_digital_session,fact,customer_service,One row per recorded digital session event or calculation.,54,synthetic_fixture
+bank_dwh,fact_security_position_daily,fact,wealth,One row per security position per business date.,54,synthetic_fixture
+bank_dwh,fact_security_trade,fact,wealth,One row per recorded security trade event or calculation.,57,synthetic_fixture
+bank_dwh,fact_security_price_daily,fact,wealth,One row per security price per business date.,54,synthetic_fixture
+bank_dwh,fact_portfolio_valuation_daily,fact,wealth,One row per portfolio valuation per business date.,54,synthetic_fixture
+bank_dwh,fact_investment_fee,fact,wealth,One row per recorded investment fee event or calculation.,54,synthetic_fixture
+bank_dwh,fact_corporate_action,fact,wealth,One row per recorded corporate action event or calculation.,54,synthetic_fixture
+bank_dwh,fact_fx_trade,fact,treasury_finance,One row per recorded fx trade event or calculation.,57,synthetic_fixture
+bank_dwh,fact_fx_rate_daily,fact,treasury_finance,One row per fx rate per business date.,54,synthetic_fixture
+bank_dwh,fact_liquidity_position_daily,fact,treasury_finance,One row per liquidity position per business date.,54,synthetic_fixture
+bank_dwh,fact_treasury_position_daily,fact,treasury_finance,One row per treasury position per business date.,54,synthetic_fixture
+bank_dwh,fact_general_ledger_entry,fact,treasury_finance,One row per recorded general ledger entry event or calculation.,54,synthetic_fixture
+bank_dwh,fact_gl_balance_monthly,fact,treasury_finance,One row per gl balance per accounting month.,57,synthetic_fixture
+bank_dwh,fact_cost_allocation,fact,treasury_finance,One row per recorded cost allocation event or calculation.,54,synthetic_fixture
+bank_dwh,fact_credit_risk_exposure_daily,fact,risk_compliance,One row per credit risk exposure per business date.,56,synthetic_fixture
+bank_dwh,fact_market_risk_measure_daily,fact,risk_compliance,One row per market risk measure per business date.,56,synthetic_fixture
+bank_dwh,fact_operational_loss,fact,risk_compliance,One row per recorded operational loss event or calculation.,53,synthetic_fixture
+bank_dwh,fact_fraud_alert,fact,risk_compliance,One row per recorded fraud alert event or calculation.,53,synthetic_fixture
+bank_dwh,fact_aml_alert,fact,risk_compliance,One row per recorded aml alert event or calculation.,53,synthetic_fixture
+bank_dwh,fact_kyc_review,fact,risk_compliance,One row per recorded kyc review event or calculation.,53,synthetic_fixture
+bank_dwh,fact_sanctions_screening,fact,risk_compliance,One row per recorded sanctions screening event or calculation.,53,synthetic_fixture
+bank_dwh,fact_regulatory_capital_daily,fact,risk_compliance,One row per regulatory capital per business date.,53,synthetic_fixture
+bank_dwh,fact_stress_test_result,fact,risk_compliance,One row per recorded stress test result event or calculation.,53,synthetic_fixture

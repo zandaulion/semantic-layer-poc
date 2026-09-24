@@ -48,7 +48,11 @@ podman exec banking-dwh node eval/run.mjs --compare app/eval/baselines/groq-gpt-
 
 A second backend to compare against needs no GPU: `app/deploy/quadlet/gpt-oss-local.container`
 serves the same `gpt-oss-20b` weights from CPU through llama.cpp, so the
-comparison can be run on the machine that already hosts the POC.
+comparison can be run on the machine that already hosts the POC. Both runs are
+recorded in `app/eval/baselines/`. The hosted and local backends agreed on every
+required table and neither violated the JSON schema contract, but they differed
+on which dimensions they joined and on whether a destructive request was refused
+outright or caught downstream by the SQL check.
 
 It reports table grounding, status behaviour, read-only safety, inference latency
 and prompt size, and it classifies failures — a schema violation, meaning the

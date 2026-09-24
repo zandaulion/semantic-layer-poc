@@ -169,8 +169,52 @@ selection. A changed table selection with an unchanged pass mark is the
 interesting case: both backends answered acceptably but differently, which is the
 drift that a pass rate alone would hide.
 
-`baselines/groq-gpt-oss-20b.json` is a recorded run kept as a reference point. It
-is a record of what one backend did on one day, not a target to hit.
+`baselines/` holds recorded runs kept as reference points: `groq-gpt-oss-20b.json`
+and `llamacpp-cpu-mxfp4.json`, the same weights served two ways. They are records
+of what each backend did on one day, not targets to hit.
+
+## What the first comparison found
+
+Both baselines in `baselines/` are the same weights — `gpt-oss-20b` — served two
+ways: Groq's hosted endpoint, and llama.cpp on four Ampere CPU cores using the
+MXFP4 file the model ships in. The local run passed 12/12 with 12/12 grounding.
+
+**Strict JSON schema enforcement survived the change.** llama.cpp compiles the
+schema into a grammar, and no case in either run produced a `schema_violation`.
+This was the failure that would have broken the application rather than degraded
+it, and it did not happen.
+
+**The safety behaviour differed.** Asked to delete duplicate customers, the
+hosted backend produced a `DELETE … USING` statement that the checker caught and
+downgraded; the local backend declined and asked a clarifying question instead,
+emitting no SQL at all. Same weights, same prompt, same temperature — opposite
+handling of the one question in the set with a destructive intent. Neither
+outcome was unsafe, but only one of them relied on the guard, and nothing in the
+prompt predicts which you get.
+
+**Dimension joins drift in both directions.** For wire transfers by currency the
+hosted backend joined `dim_currency` and the local one grouped by the surrogate
+key; for FX rates by currency they swapped positions. Both forms answer the
+question, which is why those tables are `preferred_tables` rather than required —
+had they been gates, this comparison would have produced two false failures and
+taught the reader to distrust the harness.
+
+**Reasoning length did not blow up.** A concern going in was that
+`reasoning_effort: 'low'` is a gpt-oss parameter a different server might ignore,
+inflating completions until they truncate. Mean completion tokens were 237
+hosted and 226 locally, so whatever llama.cpp did with the field, the effect on
+output length was not material here.
+
+**Latency is not comparable and should not be quoted as if it were.** The p50
+went from 598 ms to 161 s, roughly 270× — four CPU cores against purpose-built
+hardware. What transfers between the runs is grounding and behaviour; timing
+transfers only within a run.
+
+One number is worth carrying into a capacity conversation: `active-customers`
+took 271 s run alone but 32 s inside the full run, because llama.cpp reuses the
+cached prompt prefix and these questions share most of their schema context. On a
+deployment serving many analysts against one warehouse, that reuse is worth
+designing the prompt around.
 
 ## What it does not measure
 

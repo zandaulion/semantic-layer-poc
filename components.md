@@ -12,7 +12,7 @@ specific to this proof of concept, and a verdict. The verdicts mean:
 - **Reimplement** — POC-specific. The idea may be worth knowing; the code is not
   worth carrying.
 
-The whole application is about 1,700 lines of Node with no runtime
+The whole application is about 2,000 lines of Node with no runtime
 dependencies, which is small enough that reading it is a realistic alternative to
 trusting this document. What each component's behaviour is pinned to is listed
 under [tests](app/README.md#tests); three of those tests exist specifically
@@ -24,7 +24,7 @@ neither.
 | # | Component | Files | Verdict |
 | --- | --- | --- | --- |
 | 1 | Catalog contract and loader | `server/catalog.js` | **Reuse** the contract, **port** the loader |
-| 2 | Catalog validation | `server/catalog-schema.js` | **Reuse** |
+| 2 | Catalog validation | `server/catalog-schema.js`, `server/validate-catalog.mjs` | **Reuse** |
 | 3 | Index lifecycle | `server/ingest.js` | **Reuse** the pattern |
 | 4 | Retrieval | `server/elastic.js` | **Port** |
 | 5 | Bounded context assembly | `server/catalog.js`, `server/model.js` | **Reuse** the design |

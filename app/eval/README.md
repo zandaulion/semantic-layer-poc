@@ -39,6 +39,8 @@ From a checkout with Elasticsearch reachable, `npm run eval` does the same.
 | `--label NAME` | Names the run in the report and the result file |
 | `--out FILE` | Writes the full result file, including every generated draft |
 | `--case ID` | Runs one case; repeatable. Useful against a rate-limited account |
+| `--cases FILE` | Uses a different expectation set. A variant catalog needs its own, because the tables it describes have different names |
+| `--retrieval-only` | Measures search and context assembly without calling a model. Needs Elasticsearch, finishes in seconds |
 | `--compare A B` | Diffs two result files instead of running anything |
 
 The process exits non-zero if any case fails, so it can gate a backend change.
@@ -156,6 +158,33 @@ Two of those variables are not optional:
   provider answering in well under one; a case took about four and a half minutes
   on four Ampere cores. Leaving the default makes a slow backend look like a
   broken one, and the harness would record `timeout` for every case.
+
+## Measuring retrieval on its own
+
+`--retrieval-only` skips the model and reports two layers:
+
+- **search recall** — required tables in the BM25 results.
+- **context recall** — required tables that reach the prompt, after context
+  assembly has walked the selected facts' declared relationships.
+
+The gap between them is not noise. On the bundled fixture, search recall is
+0.550 and context recall is 1.000: roughly half the grounding comes from the
+join graph rather than from search, so a change that improved search metrics
+while dropping the graph expansion would look like progress and be a regression.
+
+`make-cryptic.mjs` builds a variant catalog whose table and column names are
+abbreviated the way a real warehouse abbreviates them, translating the
+expectations through the same map:
+
+```bash
+node eval/make-cryptic.mjs --out /tmp/cryptic
+node eval/make-cryptic.mjs --out /tmp/cryptic-bare --strip-prose
+# ingest each catalog, then
+node eval/run.mjs --retrieval-only --cases /tmp/cryptic/cases.json
+```
+
+The findings from that sweep, and the two defects it exposed, are in
+[retrieval and naming](../../retrieval-and-naming.md).
 
 ## Comparing two backends
 

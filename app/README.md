@@ -1,12 +1,16 @@
 # Banking DWH Studio PWA
 
-The app serves an installable PWA with an invite gate, synthetic catalog search, GPT-OSS SQL drafting, and an editable SQL review panel. Node 24.14+ and Elasticsearch run on the A1 host. The browser talks only to the Node server; the model key stays on that host. There are no npm runtime dependencies.
+The app serves an installable PWA with an invite gate, synthetic catalog search, GPT-OSS SQL drafting, an editable SQL review panel, and query history. Node 24.14+ and Elasticsearch run on the A1 host. The browser talks only to the Node server; the model key stays on that host. There are no npm runtime dependencies.
 
 ## Local run
 
 From this directory, run `npm test`, then `npm start`. The default listener is `127.0.0.1:4387`. Run `npm run ingest` after Elasticsearch is available. `GET /api/health` checks the Node process; `GET /api/status` behind the invite gate reports Elasticsearch and model configuration. The app needs HTTPS (or localhost) for service worker installation.
 
 The catalog is generated from [`../banking-poc/catalog.json`](../banking-poc/catalog.json). Indexing creates a new physical index and swaps `banking-poc-current` to it; it leaves any prior index for manual cleanup. Search uses Elasticsearch BM25 over 100 table documents. It does not index data rows or all 5,000 columns as separate documents. `POST /api/check` only checks a small set of read-only statement and physical table reference rules. It deliberately reports syntax, columns, business meaning, and execution as unverified.
+
+## Query history
+
+Each successful generation saves its question, subject area, and complete answer in the app's SQLite database under the registered device ID. This includes SQL drafts and clarification responses. The History button lists saved answers newest first, lets the user restore a response, and lets them delete individual entries. History survives PWA reloads and server restarts. It is available only to that registered device; deleting the device removes its history. The list loads 20 entries at a time. Earlier generations made before this feature was deployed are not backfilled, and manual edits to the SQL editor remain in the current tab's session storage rather than being added to history.
 
 ## A1 deployment
 

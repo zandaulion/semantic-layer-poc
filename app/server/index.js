@@ -155,6 +155,28 @@ export function createAppServer({ auth = new AuthStore(path.join(config.dataDir,
           return json(res, 200, { elasticsearch: await elasticHealth(), model_configured: Boolean(config.modelApiKey), model: config.modelName, tables: tables.length, metadata_status: 'synthetic_fixture' });
         }
         if (pathname === '/api/domains' && req.method === 'GET') return json(res, 200, { domains });
+        if (pathname === '/api/history' && req.method === 'GET') {
+          const limitText = url.searchParams.get('limit') || '20';
+          const beforeText = url.searchParams.get('before');
+          const limit = Number(limitText);
+          const before = beforeText === null ? null : Number(beforeText);
+          if (!/^\d+$/.test(limitText) || limit < 1 || limit > 50
+              || (beforeText !== null && (!/^\d+$/.test(beforeText) || !Number.isSafeInteger(before) || before < 1))) {
+            return json(res, 400, { error: 'invalid_history_page' });
+          }
+          return json(res, 200, auth.listHistory(device.id, limit, before));
+        }
+        const historyEntry = pathname.match(/^\/api\/history\/(\d+)$/);
+        if (historyEntry && (req.method === 'GET' || req.method === 'DELETE')) {
+          const id = Number(historyEntry[1]);
+          if (!Number.isSafeInteger(id) || id < 1) return json(res, 400, { error: 'invalid_history_id' });
+          if (req.method === 'GET') {
+            const entry = auth.getHistory(device.id, id);
+            return json(res, entry ? 200 : 404, entry || { error: 'not_found' });
+          }
+          const deleted = auth.deleteHistory(device.id, id);
+          return json(res, deleted ? 200 : 404, deleted ? { deleted: true } : { error: 'not_found' });
+        }
         if (pathname === '/api/search' && req.method === 'GET') {
           const question = (url.searchParams.get('q') || '').trim();
           const domain = url.searchParams.get('domain') || 'all';
@@ -176,7 +198,11 @@ export function createAppServer({ auth = new AuthStore(path.join(config.dataDir,
           try {
             const hits = await searchTables(question, domain);
             const result = await generateDraft({ question, previousSql, hits });
-            return json(res, result.status === 'error' ? 503 : 200, result);
+            if (result.status === 'error') return json(res, 503, result);
+            let historyId = null;
+            try { historyId = auth.saveHistory(device.id, question, domain, result); }
+            catch (error) { console.error(`Could not save query history: ${error.message}`); }
+            return json(res, 200, { ...result, history_id: historyId, history_saved: historyId !== null });
           } finally { generating = false; }
         }
         return json(res, 404, { error: 'not_found' });

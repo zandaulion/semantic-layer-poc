@@ -20,6 +20,7 @@
       <div class="topbar-right">
         <span class="environment-tag">SYNTHETIC DATA</span>
         <span id="network-indicator" class="network-indicator"><span class="status-dot"></span>Online</span>
+        <button id="history-button" class="button button-ghost" type="button" aria-controls="history-panel" aria-expanded="false" hidden>History</button>
         <button id="install-button" class="button button-ghost install-button" type="button" hidden>Install app</button>
       </div>
     </header>
@@ -74,6 +75,14 @@
           <div><span class="eyebrow">NATURAL LANGUAGE → REVIEWABLE SQL</span><h1>Draft a better query.</h1><p>Describe what you need. Review every assumption before taking SQL to your database client.</p></div>
           <span class="draft-badge">DRAFT ONLY</span>
         </div>
+
+        <section id="history-panel" class="panel history-panel" aria-labelledby="history-title" hidden>
+          <div class="panel-heading"><div><h2 id="history-title">Query history</h2></div><button id="history-close" class="button button-text" type="button">Close</button></div>
+          <p class="empty-copy">Generated answers are saved for this registered device. Manual SQL edits stay in the current tab.</p>
+          <p id="history-empty" class="empty-copy" hidden>No saved queries yet. Generate a draft to start your history.</p>
+          <div id="history-list" class="history-list" role="list"></div>
+          <button id="history-more" class="button button-secondary history-more" type="button" hidden>Load more</button>
+        </section>
 
         <section class="panel ask-panel" aria-labelledby="question-title">
           <div class="panel-heading"><div><span class="step">01</span><h2 id="question-title">Ask a question</h2></div><span class="subtle">PostgreSQL · bank_dwh</span></div>

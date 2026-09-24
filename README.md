@@ -14,7 +14,7 @@ The [portfolio gallery](portfolio/README.md) covers ten banking questions at des
 
 1. A user asks a question and can narrow the search to a banking subject area.
 2. The Node backend retrieves relevant table metadata from Elasticsearch. It sends bounded schema context to the hosted model or applies a catalog-grounded rule for supported common questions.
-3. The PWA shows the SQL draft, retrieved tables, interpretation, assumptions, and basic checks. It can ask for a missing detail, such as the year in an end-of-August question.
+3. The PWA shows the SQL draft, retrieved tables, interpretation, assumptions, and basic checks. It can ask for a missing detail, such as the year in an end-of-August question, and keeps a per-device history of generated answers.
 4. The user edits or copies the SQL for review and runs it separately in their own database client.
 
 ```mermaid

@@ -1,7 +1,7 @@
 import { installUpdates } from '/pwa-update.js';
 
 const $ = (id) => document.getElementById(id);
-const state = { working: false, dirty: false, persisted: false, restoring: false, lastResult: null, installPrompt: null };
+const state = { working: false, dirty: false, persisted: false, restoring: false, lastResult: null, lastQuestion: '', historyBefore: null, historyLoading: false, installPrompt: null };
 const DRAFT_KEY = 'banking-poc:workspace-v1';
 const fields = ['statement', 'tables', 'syntax', 'columns', 'business', 'execution'];
 const names = { statement: 'Read-only shape', tables: 'Table references', syntax: 'SQL syntax', columns: 'Column references', business: 'Business meaning', execution: 'Execution' };
@@ -64,12 +64,16 @@ function showGate(message = '') {
   $('workspace').hidden = true;
   $('gate').hidden = false;
   $('gate-message').textContent = message;
+  $('history-button').hidden = true;
+  $('history-panel').hidden = true;
+  $('history-button').setAttribute('aria-expanded', 'false');
 }
 
 function showWorkspace(device) {
   $('gate').hidden = true;
   $('workspace').hidden = false;
   $('device-name').textContent = device?.label || 'Registered device';
+  $('history-button').hidden = false;
 }
 
 async function api(path, options = {}) {
@@ -90,7 +94,7 @@ async function api(path, options = {}) {
 
 function setWorking(working) {
   state.working = working;
-  for (const id of ['find-button', 'generate-button', 'check-button', 'clarification-continue']) $(id).disabled = working;
+  for (const id of ['find-button', 'generate-button', 'check-button', 'clarification-continue', 'history-button']) $(id).disabled = working;
   $('generate-button').textContent = working ? 'Working…' : 'Generate draft ↗';
 }
 
@@ -153,6 +157,7 @@ function resultStatus(message, tone = 'neutral') {
 
 function renderDraft(result) {
   state.lastResult = result;
+  state.lastQuestion = $('question').value;
   $('sql-editor').value = result.sql || '';
   $('sql-length').textContent = `${$('sql-editor').value.length} characters`;
   state.dirty = Boolean(result.sql);
@@ -177,6 +182,92 @@ function renderDraft(result) {
   };
   resultStatus(...(statuses[result.status] || ['No draft returned', 'warn']));
   saveWorkspace();
+}
+
+function closeHistory() {
+  $('history-panel').hidden = true;
+  $('history-button').setAttribute('aria-expanded', 'false');
+}
+
+async function loadHistory(reset = false) {
+  if (state.historyLoading) return;
+  state.historyLoading = true;
+  if (reset) {
+    state.historyBefore = null;
+    $('history-list').replaceChildren();
+  }
+  $('history-more').disabled = true;
+  $('history-empty').hidden = true;
+  try {
+    const params = new URLSearchParams({ limit: '20' });
+    if (state.historyBefore) params.set('before', state.historyBefore);
+    const page = await api(`/api/history?${params}`);
+    for (const entry of page.entries) {
+      const row = document.createElement('div');
+      row.className = 'history-entry';
+      row.setAttribute('role', 'listitem');
+      const open = document.createElement('button');
+      open.type = 'button';
+      open.className = 'history-open';
+      const question = document.createElement('span');
+      question.className = 'history-question';
+      question.textContent = entry.question;
+      const summary = document.createElement('span');
+      summary.className = 'history-summary';
+      summary.textContent = entry.summary || 'No answer summary';
+      const meta = document.createElement('span');
+      meta.className = 'history-meta';
+      meta.textContent = `${new Date(entry.created_at).toLocaleString()} · ${entry.status.replaceAll('_', ' ')}`;
+      open.append(question, summary, meta);
+      open.addEventListener('click', () => openHistoryEntry(entry.id));
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'button button-text history-delete';
+      remove.textContent = 'Delete';
+      remove.setAttribute('aria-label', `Delete saved query: ${entry.question}`);
+      remove.addEventListener('click', () => deleteHistoryEntry(entry.id));
+      row.append(open, remove);
+      $('history-list').append(row);
+    }
+    state.historyBefore = page.next_before;
+    $('history-more').hidden = !page.next_before;
+    $('history-empty').hidden = $('history-list').childElementCount > 0;
+  } catch (error) {
+    flash(`Could not load history: ${error.message}`);
+  } finally {
+    $('history-more').disabled = false;
+    state.historyLoading = false;
+  }
+}
+
+async function openHistoryEntry(id) {
+  const unsavedQuestion = $('question').value.trim() && $('question').value !== state.lastQuestion;
+  const unsavedSql = $('sql-editor').value && $('sql-editor').value !== (state.lastResult?.sql || '');
+  if ((unsavedQuestion || unsavedSql) && !confirm('Replace the current question or edited SQL with this saved answer?')) return;
+  try {
+    const entry = await api(`/api/history/${id}`);
+    $('question').value = entry.question;
+    if ([...$('domain-select').options].some((option) => option.value === entry.domain)) $('domain-select').value = entry.domain;
+    renderDraft(entry.result);
+    $('clarification-reply').hidden = entry.result.status !== 'needs_clarification';
+    if (entry.result.status === 'needs_clarification') {
+      $('clarification-answer').value = '';
+      $('clarification-answer').placeholder = /^Which year/i.test(entry.result.clarification_question || '') ? 'e.g. 2026' : 'Add the missing detail';
+    }
+    flash(entry.result.status === 'needs_clarification'
+      ? entry.result.clarification_question || 'One more detail is needed before drafting SQL.'
+      : 'Saved answer loaded. Review it before using the SQL.', entry.result.status !== 'needs_clarification');
+    closeHistory();
+    $('question-title').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (error) { flash(`Could not open saved answer: ${error.message}`); }
+}
+
+async function deleteHistoryEntry(id) {
+  if (!confirm('Delete this saved question and answer?')) return;
+  try {
+    await api(`/api/history/${id}`, { method: 'DELETE' });
+    await loadHistory(true);
+  } catch (error) { flash(`Could not delete saved answer: ${error.message}`); }
 }
 
 async function loadMetadata() {
@@ -233,6 +324,8 @@ async function generate() {
     } else {
       flash('No SQL draft was returned. Try a more specific question.');
     }
+    if (result.history_saved === false) flash('Answer shown, but it could not be saved to history. Copy it before leaving this page.');
+    if (!$('history-panel').hidden) await loadHistory(true);
   } catch (error) {
     resultStatus('Draft unavailable', 'bad');
     flash(error.message);
@@ -292,6 +385,15 @@ $('invite-form').addEventListener('submit', async (event) => {
 });
 $('find-button').addEventListener('click', findTables);
 $('generate-button').addEventListener('click', generate);
+$('history-button').addEventListener('click', async () => {
+  if (!$('history-panel').hidden) return closeHistory();
+  $('history-panel').hidden = false;
+  $('history-button').setAttribute('aria-expanded', 'true');
+  await loadHistory(true);
+  $('history-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+$('history-close').addEventListener('click', closeHistory);
+$('history-more').addEventListener('click', () => loadHistory());
 $('clarification-reply').addEventListener('submit', (event) => {
   event.preventDefault();
   const answer = $('clarification-answer').value.trim();
@@ -317,6 +419,7 @@ $('clear-button').addEventListener('click', () => {
   $('clarification').hidden = true;
   $('clarification-reply').hidden = true;
   state.lastResult = null;
+  state.lastQuestion = '';
   renderContext();
   renderChecks();
   resultStatus('Waiting for a question');

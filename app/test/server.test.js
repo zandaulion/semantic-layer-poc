@@ -52,6 +52,7 @@ test('invite gate, catalog search, draft generation, and check work together', a
 
   const unauthorized = await fetch(`${base}/api/domains`);
   assert.equal(unauthorized.status, 401);
+  assert.equal((await fetch(`${base}/api/history`)).status, 401);
   const shell = await fetch(base);
   assert.equal(shell.status, 200);
   assert.match(await shell.text(), /Bank DWH Studio/);
@@ -86,7 +87,19 @@ test('invite gate, catalog search, draft generation, and check work together', a
   assert.equal(generated.status, 200);
   assert.equal(draft.status, 'draft');
   assert.equal(draft.checks.tables, 'passed');
+  assert.equal(draft.history_saved, true);
   assert.equal(modelCalls, 2);
+  const history = await fetch(`${base}/api/history`, { headers: { cookie } });
+  const saved = (await history.json()).entries[0];
+  assert.equal(saved.question, 'List customers');
+  assert.equal(saved.status, 'draft');
+  const loaded = await fetch(`${base}/api/history/${saved.id}`, { headers: { cookie } });
+  assert.equal((await loaded.json()).result.sql, draft.sql);
+  assert.equal((await fetch(`${base}/api/history?limit=0`, { headers: { cookie } })).status, 400);
+  assert.equal((await fetch(`${base}/api/history/${saved.id}`, { method: 'DELETE' })).status, 401);
+  assert.equal((await fetch(`${base}/api/history/${saved.id}`, { method: 'DELETE', headers: { cookie } })).status, 200);
+  const emptied = await fetch(`${base}/api/history`, { headers: { cookie } });
+  assert.deepEqual((await emptied.json()).entries, []);
   const bad = await fetch(`${base}/api/check`, {
     method: 'POST', headers: { cookie, 'content-type': 'application/json' },
     body: JSON.stringify({ sql: 'DELETE FROM bank_dwh.dim_customer' }),

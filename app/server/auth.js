@@ -72,6 +72,17 @@ export class AuthStore {
         device_id TEXT REFERENCES devices(id) ON DELETE SET NULL,
         revoked INTEGER NOT NULL DEFAULT 0
       );
+      CREATE TABLE IF NOT EXISTS query_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL,
+        question TEXT NOT NULL,
+        domain TEXT NOT NULL,
+        status TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        response_json TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS query_history_device_id_idx ON query_history(device_id, id DESC);
     `);
     this.failures = [];
   }
@@ -166,5 +177,40 @@ export class AuthStore {
 
   deleteDevice(id) {
     return this.db.prepare('DELETE FROM devices WHERE id=?').run(id).changes === 1;
+  }
+
+  saveHistory(deviceId, question, domain, response) {
+    const summary = response.status === 'needs_clarification'
+      ? response.clarification_question : response.interpretation;
+    const result = this.db.prepare(`
+      INSERT INTO query_history (device_id, created_at, question, domain, status, summary, response_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(deviceId, now(), question, domain, response.status, String(summary || '').slice(0, 240), JSON.stringify(response));
+    return Number(result.lastInsertRowid);
+  }
+
+  listHistory(deviceId, limit = 20, before = null) {
+    const rows = this.db.prepare(`
+      SELECT id, created_at, question, domain, status, summary
+      FROM query_history
+      WHERE device_id=? AND (? IS NULL OR id < ?)
+      ORDER BY id DESC LIMIT ?
+    `).all(deviceId, before, before, limit + 1);
+    const entries = rows.slice(0, limit);
+    return { entries, next_before: rows.length > limit ? entries.at(-1).id : null };
+  }
+
+  getHistory(deviceId, id) {
+    const row = this.db.prepare(`
+      SELECT id, created_at, question, domain, status, response_json
+      FROM query_history WHERE device_id=? AND id=?
+    `).get(deviceId, id);
+    if (!row) return null;
+    const { response_json, ...entry } = row;
+    return { ...entry, result: JSON.parse(response_json) };
+  }
+
+  deleteHistory(deviceId, id) {
+    return this.db.prepare('DELETE FROM query_history WHERE device_id=? AND id=?').run(deviceId, id).changes === 1;
   }
 }

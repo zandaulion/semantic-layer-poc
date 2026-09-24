@@ -14,7 +14,10 @@ specific to this proof of concept, and a verdict. The verdicts mean:
 
 The whole application is about 1,700 lines of Node with no runtime
 dependencies, which is small enough that reading it is a realistic alternative to
-trusting this document.
+trusting this document. What each component's behaviour is pinned to is listed
+under [tests](app/README.md#tests); three of those tests exist specifically
+because the bundled fixture is lower-case and readable, and a real warehouse is
+neither.
 
 ## Summary
 

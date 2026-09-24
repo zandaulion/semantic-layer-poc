@@ -173,6 +173,34 @@ were invisible against the fixture and would have been found on the first real
 warehouse instead — one of them silently, as drafts that looked wrong rather
 than as an error. Generating a variant catalog cost an afternoon.
 
+## What is pinned by tests
+
+Both defects are now regressions rather than findings, in tests that the bundled
+fixture could never have triggered — it is lower-case and spells every name out,
+so neither bug was reachable from it.
+
+| Test | Pins |
+| --- | --- |
+| `context-assembly.test.js` — *an abbreviated date dimension reaches the prompt too* | The same star schema built twice, as `fact_wire_transfer`/`dim_date` and as `F_WR_TRF`/`D_DT`. The date join is declared second on purpose, so relationship ordering cannot make it pass by accident |
+| `context-assembly.test.js` — *the context stays within its table budget* | The structural fallback cannot exceed the table cap or repeat a table |
+| `schema-name.test.js` — *an uppercase catalog accepts a draft written in either case* | `BANK_DWH.D_CUST`, `bank_dwh.d_cust` and `Bank_Dwh.D_Cust` all accepted, and reported under the catalog's own spelling |
+
+They run in child processes: the catalog resolves once when the module is first
+imported, so a different catalog needs a different process.
+
+`eval/make-cryptic.mjs` is kept as well, so the whole measurement can be repeated
+against any future change:
+
+```bash
+node eval/make-cryptic.mjs --out /tmp/cryptic
+node eval/make-cryptic.mjs --out /tmp/cryptic-bare --strip-prose
+# ingest each catalog, then
+node eval/run.mjs --retrieval-only --cases /tmp/cryptic/cases.json
+```
+
+`--retrieval-only` needs Elasticsearch but no model, so a full three-variant
+sweep takes seconds.
+
 ## Limits
 
 - One fixture, generated with regular naming. A real warehouse is messier in

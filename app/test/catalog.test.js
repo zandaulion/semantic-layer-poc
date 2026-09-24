@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { contextForHits } from '../server/catalog.js';
+import { expandSearchQuery } from '../server/elastic.js';
+
+test('client wording retrieves the customer dimension for an active count', () => {
+  assert.equal(expandSearchQuery('Number of active clients today'), 'Number of active customer today');
+  const hits = ['dim_customer', 'fact_customer_interaction', 'dim_account_status']
+    .map((table_name) => ({ table_name }));
+  const context = contextForHits('Number of active clients today', hits);
+  assert.ok(context.tables.some((table) => table.table_name === 'dim_customer'));
+});
 
 test('loan repayment context includes declared customer and calendar joins despite domain filtering', () => {
   const hits = [

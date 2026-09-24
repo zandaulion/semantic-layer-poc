@@ -18,7 +18,7 @@ const responseSchema = {
 
 function renderContext(context) {
   const tableText = context.tables.map((table) => {
-    const columns = table.columns.map((column) => `${column.column_name} ${column.data_type}`).join(', ');
+    const columns = table.columns.map((column) => `${column.column_name} ${column.data_type} (${column.description})`).join(', ');
     return `ID table.bank_dwh.${table.table_name}\n${table.table_type.toUpperCase()} bank_dwh.${table.table_name}\nGrain: ${table.grain}\nColumns: ${columns}`;
   }).join('\n\n');
   const joins = context.relationships.map((relation) =>
@@ -51,12 +51,19 @@ export async function generateDraft({ question, previousSql = '', hits }) {
       retrieved_tables: retrievedTables,
     };
   }
+  const customer = context.tables.find((table) => table.table_name === 'dim_customer');
+  const customerColumns = new Set(customer?.columns.map((column) => column.column_name) || []);
+  const currentCustomerHint = ['business_id', 'is_current', 'is_active'].every((column) => customerColumns.has(column))
+    ? 'For a current count of active customers, dim_customer has is_current, is_active, and business_id. Count distinct business_id to avoid counting SCD versions, and state that interpretation as an assumption.'
+    : '';
   const prompt = [
     `User question: ${question}`,
     previousSql ? `Previous draft to revise: ${previousSql}` : '',
     'Target dialect: PostgreSQL. Schema: bank_dwh.',
     'Use only the supplied physical tables and columns. The relationships are synthetic candidates for this POC.',
-    'Do not invent a metric definition, date role, or join not supported by this context. Ask one focused question if essential business meaning is missing.',
+    'Answer schema questions using the supplied metadata before asking the user. Client means customer in this catalog.',
+    currentCustomerHint,
+    'Do not invent a metric definition, date role, or join not supported by this context. Ask one focused question only if essential business meaning remains missing after checking the supplied tables and columns.',
     'Return one read-only SQL draft or a clarification. Never execute SQL.',
     renderContext(context),
   ].filter(Boolean).join('\n\n');
@@ -76,7 +83,7 @@ export async function generateDraft({ question, previousSql = '', hits }) {
     max_completion_tokens: 1600,
     reasoning_effort: 'low',
     messages: [
-      { role: 'system', content: 'You draft reviewable PostgreSQL SQL from supplied synthetic DWH metadata. Output only the requested JSON object. When a business rule is unknown, ask rather than invent.' },
+      { role: 'system', content: 'You draft reviewable PostgreSQL SQL from supplied synthetic DWH metadata. Output only the requested JSON object. Resolve table and column questions from the supplied metadata; ask only when a necessary business rule is still unknown.' },
       { role: 'user', content: prompt },
     ],
     response_format: { type: 'json_schema', json_schema: { name: 'sql_draft', strict: true, schema: responseSchema } },

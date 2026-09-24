@@ -1,5 +1,9 @@
 import { config } from './config.js';
 
+export function expandSearchQuery(question) {
+  return question.replace(/\bclients?\b/gi, 'customer');
+}
+
 export async function elasticRequest(path, { method = 'GET', body, contentType = 'application/json', timeoutMs = 15_000 } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -31,7 +35,7 @@ export async function searchTables(question, domain = 'all', size = 12) {
         bool: {
           filter,
           must: [{ multi_match: {
-            query: question,
+            query: expandSearchQuery(question),
             fields: ['table_name^6', 'title^4', 'column_names^3', 'search_text'],
             type: 'best_fields',
           } }],

@@ -29,6 +29,14 @@ function renderContext(context) {
 
 export async function generateDraft({ question, previousSql = '', hits }) {
   const context = contextForHits(question, hits);
+  const retrievedTables = context.tables.map((table) => ({
+    document_id: `table.bank_dwh.${table.table_name}`,
+    table_name: table.table_name,
+    title: table.table_name.replaceAll('_', ' '),
+    grain: table.grain,
+    domain_id: table.domain,
+    table_type: table.table_type,
+  }));
   if (!context.tables.length) {
     return {
       status: 'needs_clarification', sql: '', interpretation: '', assumptions: [],
@@ -40,7 +48,7 @@ export async function generateDraft({ question, previousSql = '', hits }) {
     return {
       status: 'error', code: 'model_unconfigured',
       message: 'The hosted model API key has not been configured on the server.',
-      retrieved_tables: hits,
+      retrieved_tables: retrievedTables,
     };
   }
   const prompt = [
@@ -56,7 +64,7 @@ export async function generateDraft({ question, previousSql = '', hits }) {
     return {
       status: 'needs_clarification', sql: '', interpretation: '', assumptions: [],
       clarification_question: 'Which subject area should I use to narrow the schema context?',
-      sources: [], checks: checkSql(''), retrieved_tables: hits,
+      sources: [], checks: checkSql(''), retrieved_tables: retrievedTables,
       metadata_status: 'synthetic_fixture',
     };
   }
@@ -90,7 +98,7 @@ export async function generateDraft({ question, previousSql = '', hits }) {
   const allowedSources = new Set(context.tables.map((table) => `table.bank_dwh.${table.table_name}`));
   const sources = (Array.isArray(result.sources) ? result.sources : []).filter((id) => allowedSources.has(id));
   const checks = checkSql(result.sql);
-  const status = result.status === 'draft' && checks.statement === 'failed' ? 'needs_revision' : result.status;
+  const status = result.status === 'draft' && (checks.statement === 'failed' || checks.tables !== 'passed') ? 'needs_revision' : result.status;
   return {
     status,
     sql: result.sql,
@@ -101,6 +109,6 @@ export async function generateDraft({ question, previousSql = '', hits }) {
     checks,
     metadata_status: 'synthetic_fixture',
     model: config.modelName,
-    retrieved_tables: hits,
+    retrieved_tables: retrievedTables,
   };
 }

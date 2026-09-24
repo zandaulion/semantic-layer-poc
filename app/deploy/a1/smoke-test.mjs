@@ -45,7 +45,7 @@ try {
       body: JSON.stringify({ question, domain }),
     });
     const result = await response.json();
-    console.log(JSON.stringify({ model_http_status: response.status, draft_status: result.status, error: result.error || result.code || null, message: result.message || null, sql_characters: result.sql?.length || 0, clarification: result.clarification_question || null, tables: result.retrieved_tables?.map((table) => table.table_name) || [] }));
+    console.log(JSON.stringify({ model_http_status: response.status, draft_status: result.status, error: result.error || result.code || null, message: result.message || null, sql_characters: result.sql?.length || 0, clarification: result.clarification_question || null, statement_check: result.checks?.statement || null, table_check: result.checks?.tables || null, tables: result.retrieved_tables?.map((table) => table.table_name) || [] }));
   }
 } finally {
   if (deviceId) {

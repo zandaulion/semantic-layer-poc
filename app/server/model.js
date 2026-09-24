@@ -18,7 +18,7 @@ const responseSchema = {
 
 function renderContext(context) {
   const tableText = context.tables.map((table) => {
-    const columns = table.columns.map((column) => `${column.column_name} ${column.data_type} (${column.description})`).join(', ');
+    const columns = table.columns.map((column) => `${column.column_name} ${column.data_type}`).join(', ');
     return `ID table.bank_dwh.${table.table_name}\n${table.table_type.toUpperCase()} bank_dwh.${table.table_name}\nGrain: ${table.grain}\nColumns: ${columns}`;
   }).join('\n\n');
   const joins = context.relationships.map((relation) =>

@@ -25,6 +25,65 @@ const mapping = {
   },
 };
 
+// One index per ingestion means that without pruning every run leaves its
+// predecessor behind holding a full copy of the catalogue.
+//
+// What may be deleted is defined positively: a name in the exact shape this
+// module generates, stamped strictly earlier than the run doing the deleting,
+// and carrying no alias. Nothing is selected by being "not the current one" --
+// an index that merely starts with the same words, or one an operator has
+// aliased for their own purposes, belongs to somebody else and is left alone.
+const GENERATION = /^banking-poc-(\d+)$/;
+
+/**
+ * Indices that `current` supersedes, given the cluster's `<index>: {aliases}`
+ * map. Pure, so the selection rule can be tested without a cluster.
+ */
+export function supersededIndices(aliasesByIndex, current) {
+  const stamp = GENERATION.exec(current);
+  if (!stamp) throw new TypeError(`Not an ingestion index name: ${current}`);
+  const cutoff = Number(stamp[1]);
+  return Object.entries(aliasesByIndex ?? {})
+    .filter(([name, entry]) => {
+      const generation = GENERATION.exec(name);
+      // Strictly older: an index newer than this run belongs to a concurrent
+      // ingestion, which is not ours to tidy up.
+      if (!generation || Number(generation[1]) >= cutoff) return false;
+      return Object.keys(entry?.aliases ?? {}).length === 0;
+    })
+    .map(([name]) => name)
+    .sort();
+}
+
+// Pruning runs after the alias has moved, so a failure here leaves a correct
+// cluster with extra indices in it -- untidy, not broken. It therefore reports
+// instead of throwing: failing the ingestion at this point would misdescribe an
+// ingestion that actually succeeded.
+async function pruneSuperseded(current) {
+  const deleted = [];
+  const failed = [];
+  let existing;
+  try {
+    existing = await elasticRequest('/banking-poc-*/_alias');
+  } catch (error) {
+    // A 404 means nothing matched. Any other failure means we cannot tell what
+    // is safe to remove, and guessing is precisely what this must not do.
+    if (!String(error.message).startsWith('Elasticsearch 404:')) {
+      failed.push({ index: 'banking-poc-*', reason: error.message });
+    }
+    return { deleted, failed };
+  }
+  for (const index of supersededIndices(existing, current)) {
+    try {
+      await elasticRequest(`/${encodeURIComponent(index)}`, { method: 'DELETE' });
+      deleted.push(index);
+    } catch (error) {
+      failed.push({ index, reason: error.message });
+    }
+  }
+  return { deleted, failed };
+}
+
 export async function ingest() {
   const physical = `banking-poc-${Date.now()}`;
   await elasticRequest(`/${physical}`, { method: 'PUT', body: mapping });
@@ -52,7 +111,16 @@ export async function ingest() {
     { add: { index: physical, alias: config.elasticIndex } },
   ];
   await elasticRequest('/_aliases', { method: 'POST', body: { actions } });
-  return { index: physical, alias: config.elasticIndex, documents: count.count, previous_indices: oldIndices };
+
+  const pruned = await pruneSuperseded(physical);
+  return {
+    index: physical,
+    alias: config.elasticIndex,
+    documents: count.count,
+    previous_indices: oldIndices,
+    deleted_indices: pruned.deleted,
+    ...(pruned.failed.length ? { delete_failures: pruned.failed } : {}),
+  };
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

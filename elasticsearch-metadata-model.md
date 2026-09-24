@@ -284,9 +284,18 @@ then moves the alias `banking-poc-current` onto it in a single `_aliases` call,
 so readers never observe a half-built index. The alias is what the server
 queries, via `ELASTICSEARCH_INDEX`.
 
-Superseded indices keep their documents and only lose the alias; nothing
-deletes them. On a long-lived deployment they accumulate and are the operator's
-to remove.
+Once the alias has moved, ingestion deletes the generations it superseded, so
+the cluster holds one copy of the catalogue rather than one per run. Selection
+is positive: a name in the exact `banking-poc-<epoch-ms>` shape ingestion
+generates, stamped earlier than the current run, and carrying no alias. A
+concurrent run's newer index and any index an operator has aliased for their own
+purposes are both left alone, and nothing is selected merely for being other
+than the current index.
+
+Deleting is the last step and reports rather than fails: at that point the alias
+already points at a complete index, so a delete that does not go through leaves
+a correct cluster with extra indices in it. Those come back as `delete_failures`
+alongside `deleted_indices`.
 
 ### The query
 

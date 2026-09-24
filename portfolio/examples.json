@@ -1,0 +1,851 @@
+[
+  {
+    "slug": "active-customers",
+    "question": "Number of active customers last month",
+    "domain": "conformed",
+    "result": {
+      "status": "draft",
+      "sql": "SELECT COUNT(DISTINCT c.business_id) AS active_customers_last_month\nFROM bank_dwh.dim_customer AS c\nWHERE c.is_active = TRUE\n  AND c.effective_from_date <= (date_trunc('month', CURRENT_DATE)::date - 1)\n  AND (c.effective_to_date IS NULL OR c.effective_to_date > (date_trunc('month', CURRENT_DATE)::date - 1));\n",
+      "interpretation": "Counts distinct customers active at the end of the previous calendar month using the historical customer dimension version valid on that date.",
+      "assumptions": [
+        "“Last month” means the previous calendar month, evaluated when the SQL runs.",
+        "Active means dim_customer.is_active = TRUE on the version valid at month end.",
+        "effective_to_date is treated as an exclusive end date; confirm this SCD convention.",
+        "business_id identifies a customer across dimension versions."
+      ],
+      "sources": [
+        "table.bank_dwh.dim_customer"
+      ],
+      "clarification_question": null,
+      "checks": {
+        "statement": "passed",
+        "tables": "passed",
+        "syntax": "not_verified",
+        "columns": "not_verified",
+        "business": "not_verified",
+        "execution": "not_run",
+        "findings": []
+      },
+      "retrieved_tables": [
+        {
+          "document_id": "table.bank_dwh.dim_customer",
+          "table_name": "dim_customer",
+          "title": "dim customer",
+          "grain": "One row per version of a customer member.",
+          "domain_id": "conformed",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_date",
+          "table_name": "dim_date",
+          "title": "dim date",
+          "grain": "One row per calendar date.",
+          "domain_id": "conformed",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_party",
+          "table_name": "dim_party",
+          "title": "dim party",
+          "grain": "One row per version of a party member.",
+          "domain_id": "conformed",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_household",
+          "table_name": "dim_household",
+          "title": "dim household",
+          "grain": "One row per version of a household member.",
+          "domain_id": "conformed",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_employee",
+          "table_name": "dim_employee",
+          "title": "dim employee",
+          "grain": "One row per version of an employee member.",
+          "domain_id": "conformed",
+          "table_type": "dimension"
+        }
+      ],
+      "metadata_status": "synthetic_fixture",
+      "model": "catalog_rule"
+    }
+  },
+  {
+    "slug": "default-clients",
+    "question": "Clients in default at end of August 2026",
+    "domain": "all",
+    "result": {
+      "status": "draft",
+      "sql": "SELECT DISTINCT c.business_id AS client_id, c.display_name AS client_name\nFROM bank_dwh.fact_loan_delinquency_daily AS f\nJOIN bank_dwh.dim_date AS d ON d.date_key = f.business_date_key\nJOIN bank_dwh.dim_customer AS c ON c.customer_key = f.customer_key\nWHERE f.default_flag = TRUE\n  AND d.calendar_date = (\n    SELECT MAX(snapshot_day.calendar_date)\n    FROM bank_dwh.fact_loan_delinquency_daily AS snapshot_fact\n    JOIN bank_dwh.dim_date AS snapshot_day ON snapshot_day.date_key = snapshot_fact.business_date_key\n    WHERE snapshot_day.calendar_year_number = 2026\n      AND snapshot_day.month_number = 8\n  )\nORDER BY client_name, client_id;\n",
+      "interpretation": "Lists clients with at least one loan delinquency row flagged as default at the latest available daily snapshot in August 2026.",
+      "assumptions": [
+        "default_flag = TRUE is a provisional POC definition of default; confirm the approved banking rule.",
+        "The latest available daily snapshot in the requested month represents month end; confirm the month is complete.",
+        "dim_customer.business_id identifies a client across customer dimension versions."
+      ],
+      "sources": [
+        "table.bank_dwh.fact_loan_delinquency_daily",
+        "table.bank_dwh.dim_date",
+        "table.bank_dwh.dim_customer"
+      ],
+      "clarification_question": null,
+      "checks": {
+        "statement": "passed",
+        "tables": "passed",
+        "syntax": "not_verified",
+        "columns": "not_verified",
+        "business": "not_verified",
+        "execution": "not_run",
+        "findings": []
+      },
+      "retrieved_tables": [
+        {
+          "document_id": "table.bank_dwh.fact_loan_delinquency_daily",
+          "table_name": "fact_loan_delinquency_daily",
+          "title": "fact loan delinquency daily",
+          "grain": "One row per loan delinquency per business date.",
+          "domain_id": "lending",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_loan_balance_daily",
+          "table_name": "fact_loan_balance_daily",
+          "title": "fact loan balance daily",
+          "grain": "One row per loan balance per business date.",
+          "domain_id": "lending",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_customer",
+          "table_name": "dim_customer",
+          "title": "dim customer",
+          "grain": "One row per version of a customer member.",
+          "domain_id": "conformed",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_delinquency_band",
+          "table_name": "dim_delinquency_band",
+          "title": "dim delinquency band",
+          "grain": "One row per version of a delinquency band member.",
+          "domain_id": "lending",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_credit_limit_usage_daily",
+          "table_name": "fact_credit_limit_usage_daily",
+          "title": "fact credit limit usage daily",
+          "grain": "One row per credit limit usage per business date.",
+          "domain_id": "lending",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_loan_product",
+          "table_name": "dim_loan_product",
+          "title": "dim loan product",
+          "grain": "One row per version of a loan product member.",
+          "domain_id": "lending",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_loan_purpose",
+          "table_name": "dim_loan_purpose",
+          "title": "dim loan purpose",
+          "grain": "One row per version of a loan purpose member.",
+          "domain_id": "lending",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_date",
+          "table_name": "dim_date",
+          "title": "dim date",
+          "grain": "One row per calendar date.",
+          "domain_id": "conformed",
+          "table_type": "dimension"
+        }
+      ],
+      "metadata_status": "synthetic_fixture",
+      "model": "catalog_rule"
+    }
+  },
+  {
+    "slug": "loan-repayments",
+    "question": "Show total actual loan repayments by customer for January 2026",
+    "domain": "lending",
+    "result": {
+      "status": "draft",
+      "sql": "SELECT\n    f.customer_key,\n    SUM(f.actual_payment_amount) AS total_actual_repayments\nFROM\n    bank_dwh.fact_loan_repayment f\nJOIN\n    bank_dwh.dim_date d\n    ON f.business_date_key = d.date_key\nWHERE\n    d.calendar_date >= DATE '2026-01-01'\n    AND d.calendar_date <= DATE '2026-01-31'\nGROUP BY\n    f.customer_key\nORDER BY\n    total_actual_repayments DESC;",
+      "interpretation": "The user requests the total actual loan repayments per customer for January 2026. The fact table bank_dwh.fact_loan_repayment contains the repayment amounts and a business_date_key that can be joined to the dim_date table to filter by calendar month. The customer dimension provides the customer_key for grouping. No additional business rules are required beyond summing the actual_payment_amount for the specified month.",
+      "assumptions": [
+        "The business_date_key in fact_loan_repayment refers to the date of the repayment event and can be joined to dim_date.calendar_date for filtering.",
+        "The metric of interest is the sum of actual_payment_amount per customer.",
+        "No currency conversion or aggregation across multiple currencies is required.",
+        "The customer dimension is used only for the key; no additional customer attributes are needed for this query."
+      ],
+      "clarification_question": null,
+      "sources": [],
+      "checks": {
+        "statement": "passed",
+        "tables": "passed",
+        "syntax": "not_verified",
+        "columns": "not_verified",
+        "business": "not_verified",
+        "execution": "not_run",
+        "findings": []
+      },
+      "metadata_status": "synthetic_fixture",
+      "model": "openai/gpt-oss-20b",
+      "retrieved_tables": [
+        {
+          "document_id": "table.bank_dwh.fact_loan_repayment",
+          "table_name": "fact_loan_repayment",
+          "title": "fact loan repayment",
+          "grain": "One row per recorded loan repayment event or calculation.",
+          "domain_id": "lending",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_loan_product",
+          "table_name": "dim_loan_product",
+          "title": "dim loan product",
+          "grain": "One row per version of a loan product member.",
+          "domain_id": "lending",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_loan_purpose",
+          "table_name": "dim_loan_purpose",
+          "title": "dim loan purpose",
+          "grain": "One row per version of a loan purpose member.",
+          "domain_id": "lending",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_loan_disbursement",
+          "table_name": "fact_loan_disbursement",
+          "title": "fact loan disbursement",
+          "grain": "One row per recorded loan disbursement event or calculation.",
+          "domain_id": "lending",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_loan_application",
+          "table_name": "fact_loan_application",
+          "title": "fact loan application",
+          "grain": "One row per recorded loan application event or calculation.",
+          "domain_id": "lending",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_customer",
+          "table_name": "dim_customer",
+          "title": "dim customer",
+          "grain": "One row per version of a customer member.",
+          "domain_id": "conformed",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_date",
+          "table_name": "dim_date",
+          "title": "dim date",
+          "grain": "One row per calendar date.",
+          "domain_id": "conformed",
+          "table_type": "dimension"
+        }
+      ]
+    }
+  },
+  {
+    "slug": "card-authorizations",
+    "question": "Count card authorizations by merchant in August 2026",
+    "domain": "payments",
+    "result": {
+      "status": "draft",
+      "sql": "SELECT\n    m.display_name AS merchant_name,\n    COUNT(*) AS authorization_count\nFROM bank_dwh.fact_card_authorization fca\nJOIN bank_dwh.dim_date dd\n  ON fca.business_date_key = dd.date_key\nJOIN bank_dwh.dim_merchant m\n  ON fca.merchant_key = m.merchant_key\nWHERE dd.calendar_date >= DATE '2026-08-01'\n  AND dd.calendar_date <= DATE '2026-08-31'\nGROUP BY m.display_name\nORDER BY authorization_count DESC;",
+      "interpretation": "Counts the number of card authorization events per merchant that occurred in August 2026, using the business_date_key to filter the month and joining to the merchant dimension for readable names.",
+      "assumptions": [
+        "Using fact_card_authorization as the source of authorization events.",
+        "Using business_date_key to represent the date of the event.",
+        "Using dim_date.calendar_date for date filtering.",
+        "Using dim_merchant.display_name as the merchant label."
+      ],
+      "clarification_question": null,
+      "sources": [],
+      "checks": {
+        "statement": "passed",
+        "tables": "passed",
+        "syntax": "not_verified",
+        "columns": "not_verified",
+        "business": "not_verified",
+        "execution": "not_run",
+        "findings": []
+      },
+      "metadata_status": "synthetic_fixture",
+      "model": "openai/gpt-oss-20b",
+      "retrieved_tables": [
+        {
+          "document_id": "table.bank_dwh.fact_card_authorization",
+          "table_name": "fact_card_authorization",
+          "title": "fact card authorization",
+          "grain": "One row per recorded card authorization event or calculation.",
+          "domain_id": "payments",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_card_clearing",
+          "table_name": "fact_card_clearing",
+          "title": "fact card clearing",
+          "grain": "One row per recorded card clearing event or calculation.",
+          "domain_id": "payments",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_payment_transaction",
+          "table_name": "fact_payment_transaction",
+          "title": "fact payment transaction",
+          "grain": "One row per recorded payment transaction event or calculation.",
+          "domain_id": "payments",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_payment_settlement",
+          "table_name": "fact_payment_settlement",
+          "title": "fact payment settlement",
+          "grain": "One row per recorded payment settlement event or calculation.",
+          "domain_id": "payments",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_payment_return",
+          "table_name": "fact_payment_return",
+          "title": "fact payment return",
+          "grain": "One row per recorded payment return event or calculation.",
+          "domain_id": "payments",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_merchant",
+          "table_name": "dim_merchant",
+          "title": "dim merchant",
+          "grain": "One row per version of a merchant member.",
+          "domain_id": "payments_cards",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_card_product",
+          "table_name": "dim_card_product",
+          "title": "dim card product",
+          "grain": "One row per version of a card product member.",
+          "domain_id": "payments_cards",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_date",
+          "table_name": "dim_date",
+          "title": "dim date",
+          "grain": "One row per calendar date.",
+          "domain_id": "conformed",
+          "table_type": "dimension"
+        }
+      ]
+    }
+  },
+  {
+    "slug": "deposit-balances",
+    "question": "Show total closing deposit balance by branch on August 31, 2026",
+    "domain": "deposits",
+    "result": {
+      "status": "draft",
+      "sql": "SELECT\n    b.display_name AS branch_name,\n    SUM(f.closing_balance_amount) AS total_closing_balance\nFROM\n    bank_dwh.fact_deposit_balance_daily f\nJOIN\n    bank_dwh.dim_branch b\n    ON f.branch_key = b.branch_key\nJOIN\n    bank_dwh.dim_date d\n    ON f.business_date_key = d.date_key\nWHERE\n    d.calendar_date = DATE '2026-08-31'\nGROUP BY\n    b.display_name\nORDER BY\n    total_closing_balance DESC;",
+      "interpretation": "This query aggregates the closing deposit balances for each branch on August 31, 2026, using the fact_deposit_balance_daily fact table and joining to the dim_branch and dim_date dimension tables to resolve branch names and the target date.",
+      "assumptions": [],
+      "clarification_question": null,
+      "sources": [],
+      "checks": {
+        "statement": "passed",
+        "tables": "passed",
+        "syntax": "not_verified",
+        "columns": "not_verified",
+        "business": "not_verified",
+        "execution": "not_run",
+        "findings": []
+      },
+      "metadata_status": "synthetic_fixture",
+      "model": "openai/gpt-oss-20b",
+      "retrieved_tables": [
+        {
+          "document_id": "table.bank_dwh.fact_deposit_balance_daily",
+          "table_name": "fact_deposit_balance_daily",
+          "title": "fact deposit balance daily",
+          "grain": "One row per deposit balance per business date.",
+          "domain_id": "deposits",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_deposit_product",
+          "table_name": "dim_deposit_product",
+          "title": "dim deposit product",
+          "grain": "One row per version of a deposit product member.",
+          "domain_id": "deposits",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_deposit_term",
+          "table_name": "dim_deposit_term",
+          "title": "dim deposit term",
+          "grain": "One row per version of a deposit term member.",
+          "domain_id": "deposits",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_deposit_maturity",
+          "table_name": "fact_deposit_maturity",
+          "title": "fact deposit maturity",
+          "grain": "One row per recorded deposit maturity event or calculation.",
+          "domain_id": "deposits",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_account_balance_daily",
+          "table_name": "fact_account_balance_daily",
+          "title": "fact account balance daily",
+          "grain": "One row per account balance per business date.",
+          "domain_id": "deposits",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_branch",
+          "table_name": "dim_branch",
+          "title": "dim branch",
+          "grain": "One row per version of a branch member.",
+          "domain_id": "conformed",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_date",
+          "table_name": "dim_date",
+          "title": "dim date",
+          "grain": "One row per calendar date.",
+          "domain_id": "conformed",
+          "table_type": "dimension"
+        }
+      ]
+    }
+  },
+  {
+    "slug": "fraud-alerts",
+    "question": "Count fraud alerts by alert_severity_code",
+    "domain": "risk_compliance",
+    "result": {
+      "status": "draft",
+      "sql": "SELECT alert_severity_code,\n       COUNT(*) AS fraud_alert_count\nFROM bank_dwh.fact_fraud_alert\nGROUP BY alert_severity_code\nORDER BY fraud_alert_count DESC;",
+      "interpretation": "Counts the number of fraud alert events per alert severity code using the fact_fraud_alert table.",
+      "assumptions": [],
+      "clarification_question": null,
+      "sources": [],
+      "checks": {
+        "statement": "passed",
+        "tables": "passed",
+        "syntax": "not_verified",
+        "columns": "not_verified",
+        "business": "not_verified",
+        "execution": "not_run",
+        "findings": []
+      },
+      "metadata_status": "synthetic_fixture",
+      "model": "openai/gpt-oss-20b",
+      "retrieved_tables": [
+        {
+          "document_id": "table.bank_dwh.fact_fraud_alert",
+          "table_name": "fact_fraud_alert",
+          "title": "fact fraud alert",
+          "grain": "One row per recorded fraud alert event or calculation.",
+          "domain_id": "risk_compliance",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_fraud_rule",
+          "table_name": "dim_fraud_rule",
+          "title": "dim fraud rule",
+          "grain": "One row per version of a fraud rule member.",
+          "domain_id": "risk_compliance",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_aml_alert",
+          "table_name": "fact_aml_alert",
+          "title": "fact aml alert",
+          "grain": "One row per recorded aml alert event or calculation.",
+          "domain_id": "risk_compliance",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_operational_loss",
+          "table_name": "fact_operational_loss",
+          "title": "fact operational loss",
+          "grain": "One row per recorded operational loss event or calculation.",
+          "domain_id": "risk_compliance",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_kyc_review",
+          "table_name": "fact_kyc_review",
+          "title": "fact kyc review",
+          "grain": "One row per recorded kyc review event or calculation.",
+          "domain_id": "risk_compliance",
+          "table_type": "fact"
+        }
+      ]
+    }
+  },
+  {
+    "slug": "credit-risk",
+    "question": "Using fact_credit_risk_exposure_daily, show average probability_of_default_rate by branch on August 31, 2026",
+    "domain": "risk_compliance",
+    "result": {
+      "status": "draft",
+      "sql": "SELECT\n    b.display_name AS branch_name,\n    AVG(f.probability_of_default_rate) AS avg_pdr\nFROM bank_dwh.fact_credit_risk_exposure_daily f\nJOIN bank_dwh.dim_date d\n    ON f.business_date_key = d.date_key\nJOIN bank_dwh.dim_branch b\n    ON f.branch_key = b.branch_key\nWHERE d.calendar_date = DATE '2026-08-31'\nGROUP BY b.display_name\nORDER BY b.display_name;",
+      "interpretation": "The user requests the average probability_of_default_rate per branch for the business date of August 31, 2026. The fact table fact_credit_risk_exposure_daily contains the probability_of_default_rate column and a foreign key to dim_date for the business date and to dim_branch for the branch. The query will join these dimensions to filter the specific date and to return a readable branch identifier (display_name).",
+      "assumptions": [
+        "The business date 2026-08-31 exists in dim_date and is represented by a date_key that can be joined to fact_credit_risk_exposure_daily.business_date_key.",
+        "The branch_key in fact_credit_risk_exposure_daily matches dim_branch.branch_key and the branch display_name is an appropriate label for the output.",
+        "No additional filters (e.g., data quality status) are required for this POC query."
+      ],
+      "clarification_question": null,
+      "sources": [],
+      "checks": {
+        "statement": "passed",
+        "tables": "passed",
+        "syntax": "not_verified",
+        "columns": "not_verified",
+        "business": "not_verified",
+        "execution": "not_run",
+        "findings": []
+      },
+      "metadata_status": "synthetic_fixture",
+      "model": "openai/gpt-oss-20b",
+      "retrieved_tables": [
+        {
+          "document_id": "table.bank_dwh.fact_credit_risk_exposure_daily",
+          "table_name": "fact_credit_risk_exposure_daily",
+          "title": "fact credit risk exposure daily",
+          "grain": "One row per credit risk exposure per business date.",
+          "domain_id": "risk_compliance",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_market_risk_measure_daily",
+          "table_name": "fact_market_risk_measure_daily",
+          "title": "fact market risk measure daily",
+          "grain": "One row per market risk measure per business date.",
+          "domain_id": "risk_compliance",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_regulatory_capital_daily",
+          "table_name": "fact_regulatory_capital_daily",
+          "title": "fact regulatory capital daily",
+          "grain": "One row per regulatory capital per business date.",
+          "domain_id": "risk_compliance",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_operational_loss",
+          "table_name": "fact_operational_loss",
+          "title": "fact operational loss",
+          "grain": "One row per recorded operational loss event or calculation.",
+          "domain_id": "risk_compliance",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_fraud_alert",
+          "table_name": "fact_fraud_alert",
+          "title": "fact fraud alert",
+          "grain": "One row per recorded fraud alert event or calculation.",
+          "domain_id": "risk_compliance",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_risk_model",
+          "table_name": "dim_risk_model",
+          "title": "dim risk model",
+          "grain": "One row per version of a risk model member.",
+          "domain_id": "risk_compliance",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_branch",
+          "table_name": "dim_branch",
+          "title": "dim branch",
+          "grain": "One row per version of a branch member.",
+          "domain_id": "conformed",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_date",
+          "table_name": "dim_date",
+          "title": "dim date",
+          "grain": "One row per calendar date.",
+          "domain_id": "conformed",
+          "table_type": "dimension"
+        }
+      ]
+    }
+  },
+  {
+    "slug": "payment-volume",
+    "question": "Using fact_payment_transaction, show total amount by currency using currency_key and dim_currency.currency_code",
+    "domain": "payments",
+    "result": {
+      "status": "draft",
+      "sql": "SELECT\n    d.currency_code,\n    SUM(f.original_amount) AS total_amount\nFROM bank_dwh.fact_payment_transaction f\nJOIN bank_dwh.dim_currency d\n    ON f.currency_key = d.currency_key\nGROUP BY d.currency_code\nORDER BY total_amount DESC;",
+      "interpretation": "The user requests a total amount per currency for payment transactions. The fact table contains a numeric amount column (`original_amount`) that can be aggregated. The currency dimension provides the human‑readable code (`currency_code`). We join on the synthetic relationship between `fact_payment_transaction.currency_key` and `dim_currency.currency_key` and sum the numeric amount.",
+      "assumptions": [
+        "Using `original_amount` as the amount to aggregate; `amount` is a varchar and not suitable for numeric aggregation.",
+        "The currency dimension is the authoritative source for the currency code.",
+        "No additional filters (date, status, etc.) are required for this draft."
+      ],
+      "clarification_question": null,
+      "sources": [],
+      "checks": {
+        "statement": "passed",
+        "tables": "passed",
+        "syntax": "not_verified",
+        "columns": "not_verified",
+        "business": "not_verified",
+        "execution": "not_run",
+        "findings": []
+      },
+      "metadata_status": "synthetic_fixture",
+      "model": "openai/gpt-oss-20b",
+      "retrieved_tables": [
+        {
+          "document_id": "table.bank_dwh.fact_payment_transaction",
+          "table_name": "fact_payment_transaction",
+          "title": "fact payment transaction",
+          "grain": "One row per recorded payment transaction event or calculation.",
+          "domain_id": "payments",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_payment_settlement",
+          "table_name": "fact_payment_settlement",
+          "title": "fact payment settlement",
+          "grain": "One row per recorded payment settlement event or calculation.",
+          "domain_id": "payments",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_payment_return",
+          "table_name": "fact_payment_return",
+          "title": "fact payment return",
+          "grain": "One row per recorded payment return event or calculation.",
+          "domain_id": "payments",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_atm_transaction",
+          "table_name": "fact_atm_transaction",
+          "title": "fact atm transaction",
+          "grain": "One row per recorded atm transaction event or calculation.",
+          "domain_id": "payments",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_wire_transfer",
+          "table_name": "fact_wire_transfer",
+          "title": "fact wire transfer",
+          "grain": "One row per recorded wire transfer event or calculation.",
+          "domain_id": "payments",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_payment_type",
+          "table_name": "dim_payment_type",
+          "title": "dim payment type",
+          "grain": "One row per version of a payment type member.",
+          "domain_id": "payments_cards",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_payment_network",
+          "table_name": "dim_payment_network",
+          "title": "dim payment network",
+          "grain": "One row per version of a payment network member.",
+          "domain_id": "payments_cards",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_currency",
+          "table_name": "dim_currency",
+          "title": "dim currency",
+          "grain": "One row per version of a currency member.",
+          "domain_id": "conformed",
+          "table_type": "dimension"
+        }
+      ]
+    }
+  },
+  {
+    "slug": "account-balances",
+    "question": "Using fact_account_balance_daily, show daily total closing_balance_amount by currency from August 1 through 7, 2026",
+    "domain": "deposits",
+    "result": {
+      "status": "draft",
+      "sql": "SELECT\n    d.calendar_date,\n    c.currency_code,\n    SUM(f.closing_balance_amount) AS total_closing_balance\nFROM bank_dwh.fact_account_balance_daily f\nJOIN bank_dwh.dim_date d\n    ON f.business_date_key = d.date_key\nJOIN bank_dwh.dim_currency c\n    ON f.currency_key = c.currency_key\nWHERE d.calendar_date BETWEEN '2026-08-01' AND '2026-08-07'\nGROUP BY d.calendar_date, c.currency_code\nORDER BY d.calendar_date, c.currency_code;",
+      "interpretation": "The user requests a daily total of closing_balance_amount by currency for the period 2026-08-01 to 2026-08-07. The fact table fact_account_balance_daily contains the closing_balance_amount and a foreign key to dim_currency for the currency code, and a foreign key to dim_date for the business date. The query aggregates by currency and business date, filtering on the date range.",
+      "assumptions": [
+        "The currency_code column in dim_currency is the desired currency identifier.",
+        "The business_date_key in fact_account_balance_daily refers to dim_date.date_key.",
+        "The date range is inclusive of both start and end dates."
+      ],
+      "clarification_question": null,
+      "sources": [],
+      "checks": {
+        "statement": "passed",
+        "tables": "passed",
+        "syntax": "not_verified",
+        "columns": "not_verified",
+        "business": "not_verified",
+        "execution": "not_run",
+        "findings": []
+      },
+      "metadata_status": "synthetic_fixture",
+      "model": "openai/gpt-oss-20b",
+      "retrieved_tables": [
+        {
+          "document_id": "table.bank_dwh.fact_account_balance_daily",
+          "table_name": "fact_account_balance_daily",
+          "title": "fact account balance daily",
+          "grain": "One row per account balance per business date.",
+          "domain_id": "deposits",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_deposit_balance_daily",
+          "table_name": "fact_deposit_balance_daily",
+          "title": "fact deposit balance daily",
+          "grain": "One row per deposit balance per business date.",
+          "domain_id": "deposits",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_overdraft_usage_daily",
+          "table_name": "fact_overdraft_usage_daily",
+          "title": "fact overdraft usage daily",
+          "grain": "One row per overdraft usage per business date.",
+          "domain_id": "deposits",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_account_status",
+          "table_name": "dim_account_status",
+          "title": "dim account status",
+          "grain": "One row per version of an account status member.",
+          "domain_id": "deposits",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_account_relationship",
+          "table_name": "dim_account_relationship",
+          "title": "dim account relationship",
+          "grain": "One row per version of an account relationship member.",
+          "domain_id": "deposits",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_account",
+          "table_name": "dim_account",
+          "title": "dim account",
+          "grain": "One row per version of an account member.",
+          "domain_id": "conformed",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_currency",
+          "table_name": "dim_currency",
+          "title": "dim currency",
+          "grain": "One row per version of a currency member.",
+          "domain_id": "conformed",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_date",
+          "table_name": "dim_date",
+          "title": "dim date",
+          "grain": "One row per calendar date.",
+          "domain_id": "conformed",
+          "table_type": "dimension"
+        }
+      ]
+    }
+  },
+  {
+    "slug": "aml-alerts",
+    "question": "Count AML alerts by investigation_status_code",
+    "domain": "risk_compliance",
+    "result": {
+      "status": "draft",
+      "sql": "SELECT investigation_status_code,\n       COUNT(*) AS alert_count\n  FROM bank_dwh.fact_aml_alert\n GROUP BY investigation_status_code\n ORDER BY alert_count DESC;",
+      "interpretation": "Counts AML alerts grouped by their investigation status code.",
+      "assumptions": [],
+      "clarification_question": null,
+      "sources": [],
+      "checks": {
+        "statement": "passed",
+        "tables": "passed",
+        "syntax": "not_verified",
+        "columns": "not_verified",
+        "business": "not_verified",
+        "execution": "not_run",
+        "findings": []
+      },
+      "metadata_status": "synthetic_fixture",
+      "model": "openai/gpt-oss-20b",
+      "retrieved_tables": [
+        {
+          "document_id": "table.bank_dwh.fact_aml_alert",
+          "table_name": "fact_aml_alert",
+          "title": "fact aml alert",
+          "grain": "One row per recorded aml alert event or calculation.",
+          "domain_id": "risk_compliance",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.dim_aml_scenario",
+          "table_name": "dim_aml_scenario",
+          "title": "dim aml scenario",
+          "grain": "One row per version of an aml scenario member.",
+          "domain_id": "risk_compliance",
+          "table_type": "dimension"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_fraud_alert",
+          "table_name": "fact_fraud_alert",
+          "title": "fact fraud alert",
+          "grain": "One row per recorded fraud alert event or calculation.",
+          "domain_id": "risk_compliance",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_operational_loss",
+          "table_name": "fact_operational_loss",
+          "title": "fact operational loss",
+          "grain": "One row per recorded operational loss event or calculation.",
+          "domain_id": "risk_compliance",
+          "table_type": "fact"
+        },
+        {
+          "document_id": "table.bank_dwh.fact_kyc_review",
+          "table_name": "fact_kyc_review",
+          "title": "fact kyc review",
+          "grain": "One row per recorded kyc review event or calculation.",
+          "domain_id": "risk_compliance",
+          "table_type": "fact"
+        }
+      ]
+    }
+  }
+]

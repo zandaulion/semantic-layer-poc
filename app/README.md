@@ -28,6 +28,8 @@ Run `node deploy/a1/smoke-test.mjs <tailnet-hostname> https://your-public-pwa.ex
 
 The default `MODEL_BASE_URL` uses Groq's OpenAI-compatible chat completions API with `openai/gpt-oss-20b`. The request uses strict JSON schema output and low reasoning effort. Other providers need support for those request fields or an adapter in `server/model.js`. Costs, limits, and availability depend on the provider account.
 
+For the POC example “clients in default at end of August,” the app resolves the default flag and date relationship from the synthetic catalog, asks for a missing year, and uses a catalog-checked SQL rule after a year is supplied. The rule treats the latest available daily snapshot in that month as month end and labels the default definition as provisional. Other requests continue through the hosted model.
+
 ## PWA framework attribution
 
 `web/sw.js`, `web/sw-update.js`, `web/pwa-update.js`, and `web/bust.html` come from [pwa-kit](https://github.com/zandaulion/pwa-kit) at commit `e2ad9dced4f471afb3d307b00af214dacd0d2e6e`, with the service worker adapted to avoid caching cross-origin requests and invite links. The invite endpoints follow [pwa-invite-console](https://github.com/zandaulion/pwa-invite-console) at commit `18b45653ff1a48d0336c61951d91821044957337`. No console files are copied into this repository.

@@ -17,3 +17,16 @@ test('an explicit or relative year resolves the date ambiguity', () => {
   assert.equal(missingMonthYear('Clients in default at end of August 2026'), null);
   assert.equal(missingMonthYear('Clients in default at end of August last year'), null);
 });
+
+test('a specified year produces a catalog-grounded client list with no invented date column', async () => {
+  const hits = ['fact_loan_delinquency_daily', 'dim_customer', 'dim_date']
+    .map((table_name) => ({ table_name }));
+  const result = await generateDraft({ question: 'Clients in default at end of August 2026', hits });
+  assert.equal(result.status, 'draft');
+  assert.match(result.sql, /SELECT DISTINCT c\.business_id AS client_id, c\.display_name AS client_name/);
+  assert.match(result.sql, /f\.default_flag = TRUE/);
+  assert.match(result.sql, /calendar_year_number = 2026/);
+  assert.doesNotMatch(result.sql, /is_business_day|current_active_customers/);
+  assert.equal(result.checks.tables, 'passed');
+  assert.equal(result.sources.length, 3);
+});

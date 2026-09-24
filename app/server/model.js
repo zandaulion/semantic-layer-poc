@@ -35,6 +35,50 @@ export function missingMonthYear(question) {
   return months.find((month) => new RegExp(`\\b${month.slice(0, 3)}(?:${month.slice(3)})?\\b`, 'i').test(question)) || null;
 }
 
+function knownDefaultClientDraft(question, context) {
+  if (!/\b(?:clients?|customers?)\b/i.test(question)
+      || !/\b(?:in default|defaulted)\b/i.test(question)
+      || !/\bend\s+of\b/i.test(question)) return null;
+  const monthIndex = months.findIndex((month) => new RegExp(`\\b${month.slice(0, 3)}(?:${month.slice(3)})?\\b`, 'i').test(question));
+  const years = [...new Set([...question.matchAll(/\b(?:19|20)\d{2}\b/g)].map((match) => Number(match[0])))];
+  if (monthIndex < 0 || years.length !== 1) return null;
+  const required = {
+    fact_loan_delinquency_daily: ['default_flag', 'customer_key', 'business_date_key'],
+    dim_date: ['date_key', 'calendar_date', 'calendar_year_number', 'month_number'],
+    dim_customer: ['customer_key', 'business_id', 'display_name'],
+  };
+  for (const [name, columns] of Object.entries(required)) {
+    const table = context.tables.find((entry) => entry.table_name === name);
+    if (!table || !columns.every((column) => table.columns.some((entry) => entry.column_name === column))) return null;
+  }
+  const count = /\b(?:count|number|how many)\b/i.test(question);
+  const sql = `${count
+    ? 'SELECT COUNT(DISTINCT c.business_id) AS clients_in_default'
+    : 'SELECT DISTINCT c.business_id AS client_id, c.display_name AS client_name'}
+FROM bank_dwh.fact_loan_delinquency_daily AS f
+JOIN bank_dwh.dim_date AS d ON d.date_key = f.business_date_key
+JOIN bank_dwh.dim_customer AS c ON c.customer_key = f.customer_key
+WHERE f.default_flag = TRUE
+  AND d.calendar_date = (
+    SELECT MAX(snapshot_day.calendar_date)
+    FROM bank_dwh.fact_loan_delinquency_daily AS snapshot_fact
+    JOIN bank_dwh.dim_date AS snapshot_day ON snapshot_day.date_key = snapshot_fact.business_date_key
+    WHERE snapshot_day.calendar_year_number = ${years[0]}
+      AND snapshot_day.month_number = ${monthIndex + 1}
+  )${count ? ';' : '\nORDER BY client_name, client_id;'}
+`;
+  return {
+    sql,
+    interpretation: `${count ? 'Counts distinct clients' : 'Lists clients'} with at least one loan delinquency row flagged as default at the latest available daily snapshot in ${months[monthIndex]} ${years[0]}.`,
+    assumptions: [
+      'default_flag = TRUE is a provisional POC definition of default; confirm the approved banking rule.',
+      'The latest available daily snapshot in the requested month represents month end; confirm the month is complete.',
+      'dim_customer.business_id identifies a client across customer dimension versions.',
+    ],
+    sources: Object.keys(required).map((name) => `table.bank_dwh.${name}`),
+  };
+}
+
 export async function generateDraft({ question, previousSql = '', hits }) {
   const context = contextForHits(expandSearchQuery(question), hits);
   const retrievedTables = context.tables.map((table) => ({
@@ -69,6 +113,14 @@ export async function generateDraft({ question, previousSql = '', hits }) {
       checks: null, retrieved_tables: retrievedTables, metadata_status: 'synthetic_fixture',
     };
   }
+  const knownDraft = previousSql.trim() ? null : knownDefaultClientDraft(question, context);
+  if (knownDraft) {
+    return {
+      status: 'draft', ...knownDraft, clarification_question: null,
+      checks: checkSql(knownDraft.sql), retrieved_tables: retrievedTables,
+      metadata_status: 'synthetic_fixture', model: 'catalog_rule',
+    };
+  }
   if (!config.modelApiKey) {
     return {
       status: 'error', code: 'model_unconfigured',
@@ -78,7 +130,8 @@ export async function generateDraft({ question, previousSql = '', hits }) {
   }
   const customer = context.tables.find((table) => table.table_name === 'dim_customer');
   const customerColumns = new Set(customer?.columns.map((column) => column.column_name) || []);
-  const currentCustomerHint = ['business_id', 'is_current', 'is_active'].every((column) => customerColumns.has(column))
+  const currentCustomerHint = /\bactive\b/i.test(question) && /\b(?:number|count|how many)\b/i.test(question)
+    && ['business_id', 'is_current', 'is_active'].every((column) => customerColumns.has(column))
     ? 'For a current count of active customers, dim_customer has is_current, is_active, and business_id. Count distinct business_id to avoid counting SCD versions, and state that interpretation as an assumption.'
     : '';
   const defaultHint = hasDefaultPath

@@ -7,7 +7,7 @@ Wants=network-online.target
 Image=docker.elastic.co/elasticsearch/elasticsearch:9.5.4
 ContainerName=banking-poc-elasticsearch
 PublishPort=127.0.0.1:9200:9200
-Volume=banking-poc-esdata:/usr/share/elasticsearch/data
+Volume=%h/.local/share/banking-sql-poc/elasticsearch:/usr/share/elasticsearch/data:Z
 Environment=discovery.type=single-node
 Environment=xpack.security.enabled=false
 Environment="ES_JAVA_OPTS=-Xms1g -Xmx1g"

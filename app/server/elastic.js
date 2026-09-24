@@ -1,7 +1,10 @@
 import { config } from './config.js';
 
 export function expandSearchQuery(question) {
-  return question.replace(/\bclients?\b/gi, 'customer');
+  const normalized = question.replace(/\bclients?\b/gi, 'customer');
+  return /\bcustomer\b/i.test(normalized) && /\bdefault(?:ed)?\b/i.test(normalized)
+    ? `${normalized} loan delinquency default_flag daily`
+    : normalized;
 }
 
 export async function elasticRequest(path, { method = 'GET', body, contentType = 'application/json', timeoutMs = 15_000 } = {}) {

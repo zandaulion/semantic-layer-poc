@@ -83,6 +83,10 @@
         </section>
 
         <div id="flash" class="flash" role="status" aria-live="polite" hidden></div>
+        <form id="clarification-reply" class="clarification-reply" hidden>
+          <label for="clarification-answer">Your answer</label>
+          <div class="button-group"><input id="clarification-answer" maxlength="300" autocomplete="off" placeholder="Add the missing detail" required><button id="clarification-continue" class="button button-primary" type="submit">Continue draft</button></div>
+        </form>
 
         <div class="result-grid">
           <section class="panel draft-panel" aria-labelledby="draft-title">

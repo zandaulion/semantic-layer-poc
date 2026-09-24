@@ -42,7 +42,7 @@ async function api(path, options = {}) {
 
 function setWorking(working) {
   state.working = working;
-  for (const id of ['find-button', 'generate-button', 'check-button']) $(id).disabled = working;
+  for (const id of ['find-button', 'generate-button', 'check-button', 'clarification-continue']) $(id).disabled = working;
   $('generate-button').textContent = working ? 'Working…' : 'Generate draft ↗';
 }
 
@@ -158,6 +158,7 @@ async function generate() {
   const question = $('question').value.trim();
   if (question.length < 5) return flash('Describe the query in at least five characters.');
   flash('');
+  $('clarification-reply').hidden = true;
   setWorking(true);
   resultStatus('Retrieving metadata and drafting…');
   try {
@@ -172,7 +173,11 @@ async function generate() {
       flash('The model returned SQL, but a basic check needs review. See the draft and checks below.');
       $('draft-title').scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else if (result.status === 'needs_clarification') {
-      flash(result.clarification_question || 'The model needs one more detail before it can draft SQL.');
+      flash([result.interpretation, result.clarification_question].filter(Boolean).join(' ')
+        || 'The model needs one more detail before it can draft SQL.');
+      $('clarification-answer').value = '';
+      $('clarification-answer').placeholder = /^Which year/i.test(result.clarification_question || '') ? 'e.g. 2026' : 'Add the missing detail';
+      $('clarification-reply').hidden = false;
     } else if (result.status === 'unsupported') {
       flash(result.interpretation || 'The synthetic catalog does not support this request.');
     } else {
@@ -236,6 +241,13 @@ $('invite-form').addEventListener('submit', async (event) => {
 });
 $('find-button').addEventListener('click', findTables);
 $('generate-button').addEventListener('click', generate);
+$('clarification-reply').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const answer = $('clarification-answer').value.trim();
+  if (!answer) return;
+  $('question').value += /^\d{4}$/.test(answer) ? ` ${answer}` : `\nClarification: ${answer}`;
+  generate();
+});
 $('check-button').addEventListener('click', checkDraft);
 $('copy-button').addEventListener('click', async () => {
   const sql = $('sql-editor').value;
@@ -251,6 +263,7 @@ $('clear-button').addEventListener('click', () => {
   $('assumptions').replaceChildren();
   $('sources').textContent = '';
   $('clarification').hidden = true;
+  $('clarification-reply').hidden = true;
   renderContext();
   renderChecks();
   resultStatus('Waiting for a question');

@@ -11,6 +11,10 @@ test('client wording retrieves the customer dimension for an active count', () =
   assert.ok(context.tables.some((table) => table.table_name === 'dim_customer'));
 });
 
+test('client default wording expands to loan delinquency metadata', () => {
+  assert.match(expandSearchQuery('Clients in default at end of August'), /customer.*loan delinquency default_flag daily/i);
+});
+
 test('loan repayment context includes declared customer and calendar joins despite domain filtering', () => {
   const hits = [
     'dim_loan_product', 'dim_loan_purpose', 'fact_loan_disbursement', 'fact_loan_repayment',

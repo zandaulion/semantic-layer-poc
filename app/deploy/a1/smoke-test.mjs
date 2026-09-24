@@ -1,5 +1,6 @@
 const tailnetHost = process.argv[2];
 const appOrigin = process.argv[3] || `https://${tailnetHost}:8443`;
+const testModel = process.argv.includes('--generate');
 if (!tailnetHost || !/^[a-z0-9.-]+$/i.test(tailnetHost) || !/^https:\/\/[a-z0-9.-]+(?::\d+)?$/i.test(appOrigin)) {
   console.error('Usage: node smoke-test.mjs <tailnet-hostname> [https-app-origin]');
   process.exit(2);
@@ -36,6 +37,14 @@ try {
     throw new Error('One or more smoke checks failed');
   }
   console.log(JSON.stringify({ invite: 'redeemed', device: 'authenticated', elasticsearch: status.elasticsearch.status, retrieved_tables: search.tables.length, statement_check: check.checks.statement, model_configured: status.model_configured }));
+  if (testModel) {
+    const response = await fetch(`${appBase}/api/generate`, {
+      method: 'POST', headers: { ...headers, origin: appBase, 'content-type': 'application/json' },
+      body: JSON.stringify({ question: 'List customer keys from the customer dimension', domain: 'conformed' }),
+    });
+    const result = await response.json();
+    console.log(JSON.stringify({ model_http_status: response.status, draft_status: result.status, error: result.error || result.code || null, message: result.message || null, sql_characters: result.sql?.length || 0, clarification: result.clarification_question || null, tables: result.retrieved_tables?.map((table) => table.table_name) || [] }));
+  }
 } finally {
   if (deviceId) {
     await request(`${privateBase}/dwh/api/admin/devices/${deviceId}`, {

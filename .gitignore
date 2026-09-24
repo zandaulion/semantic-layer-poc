@@ -24,3 +24,4 @@ Thumbs.db
 # Temporary upstream framework checkouts
 tmp/reference/
 app/data/
+.codex-remote-attachments/

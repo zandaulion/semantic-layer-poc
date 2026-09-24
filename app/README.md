@@ -20,7 +20,7 @@ The catalog is generated from [`../banking-poc/catalog.json`](../banking-poc/cat
 
 The public GitHub repository contains code and synthetic metadata only. The PWA shell is publicly reachable through Cloudflare, and its API requires a single-use invite. An invite registers one browser on one hostname; the console can revoke that device. The invite console and its admin proxy remain on the tailnet. `app/data/`, environment files, API keys, and the Elasticsearch volume are excluded from Git.
 
-Run `node deploy/a1/smoke-test.mjs <tailnet-hostname> https://your-public-pwa.example.com` on the host to check the private invite route, public HTTPS registration, Elasticsearch search, and SQL checks. It creates a labeled test invite and deletes its test device afterward. The used invite remains in the audit list.
+Run `node deploy/a1/smoke-test.mjs <tailnet-hostname> https://your-public-pwa.example.com` on the host to check the private invite route, public HTTPS registration, Elasticsearch search, and SQL checks. Add `--generate` to exercise the hosted model as well. It creates a labeled test invite and deletes its test device afterward. The used invite remains in the audit list.
 
 ## Model provider
 

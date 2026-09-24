@@ -16,6 +16,7 @@ WORKDIR /srv/app
 COPY app/package.json ./
 COPY app/server ./server
 COPY app/web ./web
+COPY app/eval ./eval
 COPY banking-poc /srv/banking-poc
 
 # No USER directive, and that is deliberate under rootless Podman.

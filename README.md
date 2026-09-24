@@ -27,6 +27,30 @@ flowchart LR
     P -->|Copy reviewed SQL| C[User's SQL client]
 ```
 
+## Portability to a different inference backend
+
+The model is reached through `MODEL_BASE_URL`, an OpenAI-compatible
+`/chat/completions` endpoint, so pointing this at an on-prem inference server
+instead of a hosted provider is a configuration change rather than a port. That
+makes it easy to assume the two behave identically. They need not: constrained
+JSON decoding, quantisation, and vendor parameters such as `reasoning_effort` all
+vary by server, and those differences surface as different SQL rather than as
+errors.
+
+[The evaluation harness](app/eval/README.md) measures that instead of assuming
+it. It runs the real pipeline over twelve questions whose correct answers the
+fixture schema determines, and writes a comparable result file per backend:
+
+```bash
+podman exec banking-dwh node eval/run.mjs --label onprem --out /tmp/onprem.json
+podman exec banking-dwh node eval/run.mjs --compare app/eval/baselines/groq-gpt-oss-20b.json /tmp/onprem.json
+```
+
+It reports table grounding, status behaviour, read-only safety, inference latency
+and prompt size, and it classifies failures — a schema violation, meaning the
+server did not honour the strict JSON schema the application depends on, is a
+different problem from a rate limit, and the report says which happened.
+
 The browser never receives the model API key. The PWA does not connect to a banking warehouse or execute generated SQL. Its automated checks cover read-only statement shape and known table references; syntax, column references, and business meaning still need human review.
 
 ## Explore the repository
@@ -41,6 +65,7 @@ codebase. The two groups below are separated for that reason.
 - [PWA and A1 deployment](app/README.md): local run, Elasticsearch ingestion, hosted model configuration, invite gate, and Cloudflare route.
 - [Portfolio gallery and capture method](portfolio/README.md): ten screenshots, questions, viewport sizes, recorded responses, and regeneration steps.
 - [Synthetic banking warehouse fixture](banking-poc/README.md): PostgreSQL DDL, catalog, relationships, and a small seed for 100 tables and 5,000 columns.
+- [Backend evaluation harness](app/eval/README.md): twelve schema-grounded questions, the scoring rules, and how to compare two inference backends.
 
 **Designs for a possible full implementation**
 

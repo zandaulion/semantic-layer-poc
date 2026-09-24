@@ -1,0 +1,192 @@
+{
+  "notes": [
+    "Ground truth for backend comparison. Each case names tables the fixture schema forces a correct answer to use.",
+    "required_tables gate the result: without them the draft cannot be answering the question asked.",
+    "preferred_tables are reported but do not fail a case -- grouping by a surrogate key instead of joining its dimension is a defensible alternative, not a defect.",
+    "forbidden_tables encode instructions the system prompt actually gives, so instruction-following is measured rather than assumed."
+  ],
+  "cases": [
+    {
+      "id": "active-customers",
+      "question": "How many active customers are there?",
+      "domain": "all",
+      "expect": {
+        "status": "draft",
+        "required_tables": [
+          "dim_customer"
+        ]
+      },
+      "why": "The simplest grounded aggregate. dim_customer is versioned, so a correct answer counts distinct business_id rather than rows."
+    },
+    {
+      "id": "clients-in-default-month-end",
+      "question": "How many clients were in default at the end of August 2025?",
+      "domain": "all",
+      "expect": {
+        "status": "draft",
+        "required_tables": [
+          "fact_loan_delinquency_daily",
+          "dim_date"
+        ],
+        "preferred_tables": [
+          "dim_customer"
+        ]
+      },
+      "why": "Answered by a deterministic catalog rule rather than the model. It is the control case: any backend difference here is a defect in the harness, not in inference."
+    },
+    {
+      "id": "default-missing-year",
+      "question": "How many clients were in default at the end of August?",
+      "domain": "all",
+      "expect": {
+        "status": "needs_clarification",
+        "required_tables": []
+      },
+      "why": "No year is stated and the month is ambiguous across snapshots. Asking beats guessing, and whether a backend still asks is a real behavioural difference."
+    },
+    {
+      "id": "wire-transfers-by-currency",
+      "question": "Total wire transfer volume by currency in 2025",
+      "domain": "all",
+      "expect": {
+        "status": "draft",
+        "required_tables": [
+          "fact_wire_transfer",
+          "dim_date"
+        ],
+        "preferred_tables": [
+          "dim_currency"
+        ]
+      },
+      "why": "The fact carries only business_date_key, so filtering to a year forces the dim_date join. That is schema-derived ground truth, not a stylistic preference."
+    },
+    {
+      "id": "aml-alerts-by-jurisdiction",
+      "question": "How many AML alerts were raised per jurisdiction in 2025?",
+      "domain": "all",
+      "expect": {
+        "status": "draft",
+        "required_tables": [
+          "fact_aml_alert",
+          "dim_date"
+        ],
+        "preferred_tables": [
+          "dim_jurisdiction"
+        ]
+      },
+      "why": "Retrieval has to reach risk_compliance rather than settling for a customer or payments fact."
+    },
+    {
+      "id": "complaints-by-category",
+      "question": "Count complaints by complaint category in 2025",
+      "domain": "all",
+      "expect": {
+        "status": "draft",
+        "required_tables": [
+          "fact_complaint",
+          "dim_date"
+        ],
+        "preferred_tables": [
+          "dim_complaint_category"
+        ]
+      },
+      "why": "Two plausible category dimensions exist in the catalog; picking the complaint one is a retrieval result, not luck."
+    },
+    {
+      "id": "account-transactions-by-channel",
+      "question": "Number of account transactions per channel in 2025",
+      "domain": "all",
+      "expect": {
+        "status": "draft",
+        "required_tables": [
+          "fact_account_transaction",
+          "dim_date"
+        ],
+        "preferred_tables": [
+          "dim_channel"
+        ],
+        "forbidden_tables": [
+          "fact_payment_transaction",
+          "fact_atm_transaction",
+          "fact_card_authorization"
+        ]
+      },
+      "why": "The system prompt says an unqualified transaction request means account transactions. The forbidden list is that instruction, measured."
+    },
+    {
+      "id": "portfolio-valuations-by-market",
+      "question": "Portfolio valuations per market in 2025",
+      "domain": "all",
+      "expect": {
+        "status": "draft",
+        "required_tables": [
+          "fact_portfolio_valuation_daily",
+          "dim_date"
+        ],
+        "preferred_tables": [
+          "dim_market"
+        ]
+      },
+      "why": "Wealth is the smallest domain in the fixture, so it is the one retrieval is most likely to miss."
+    },
+    {
+      "id": "atm-by-branch",
+      "question": "ATM transaction counts by branch in 2025",
+      "domain": "all",
+      "expect": {
+        "status": "draft",
+        "required_tables": [
+          "fact_atm_transaction",
+          "dim_date"
+        ],
+        "preferred_tables": [
+          "dim_branch"
+        ]
+      },
+      "why": "Here ATM is stated explicitly, so the fact the previous case forbids is the one this case requires."
+    },
+    {
+      "id": "card-disputes",
+      "question": "How many card disputes were recorded in 2025?",
+      "domain": "cards",
+      "expect": {
+        "status": "draft",
+        "required_tables": [
+          "fact_card_dispute",
+          "dim_date"
+        ]
+      },
+      "why": "The only case that narrows the domain filter, so it also exercises the domain_id term in the search."
+    },
+    {
+      "id": "fx-rates-by-currency",
+      "question": "Average daily FX rate by currency in 2025",
+      "domain": "all",
+      "expect": {
+        "status": "draft",
+        "required_tables": [
+          "fact_fx_rate_daily",
+          "dim_date"
+        ],
+        "preferred_tables": [
+          "dim_currency"
+        ]
+      },
+      "why": "Treasury vocabulary shares little wording with the question, which is what makes it a retrieval test."
+    },
+    {
+      "id": "refuse-write",
+      "question": "Delete duplicate customer records from the warehouse",
+      "domain": "all",
+      "expect": {
+        "status": [
+          "unsupported",
+          "needs_clarification",
+          "needs_revision"
+        ],
+        "required_tables": []
+      },
+      "why": "The POC drafts read-only SQL and never executes anything. The case passes when no write reaches the user as a draft; whether the model emitted one at all is reported separately as model_emitted_write, because that is the part a backend change moves."
+    }
+  ]
+}

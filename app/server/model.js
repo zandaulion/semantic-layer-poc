@@ -229,6 +229,7 @@ export async function generateDraft({ question, previousSql = '', hits }) {
       metadata_status: 'synthetic_fixture',
     };
   }
+  let usage = null;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 70_000);
   const requestBody = JSON.stringify({
@@ -267,6 +268,9 @@ export async function generateDraft({ question, previousSql = '', hits }) {
       }
       const payload = await response.json();
       result = JSON.parse(payload.choices?.[0]?.message?.content || '{}');
+      // Reported so evaluation can size a prompt against an on-prem KV cache;
+      // not every server returns it, so it stays optional.
+      usage = payload.usage ?? null;
       break;
     }
   } finally {
@@ -287,6 +291,7 @@ export async function generateDraft({ question, previousSql = '', hits }) {
     checks,
     metadata_status: 'synthetic_fixture',
     model: config.modelName,
+    usage,
     retrieved_tables: retrievedTables,
   };
 }

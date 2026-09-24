@@ -1,7 +1,7 @@
 import { installUpdates } from '/pwa-update.js';
 
 const $ = (id) => document.getElementById(id);
-const state = { working: false, dirty: false, persisted: false, installPrompt: null };
+const state = { working: false, dirty: false, persisted: false, restoring: false, lastResult: null, installPrompt: null };
 const DRAFT_KEY = 'banking-poc:workspace-v1';
 const fields = ['statement', 'tables', 'syntax', 'columns', 'business', 'execution'];
 const names = { statement: 'Read-only shape', tables: 'Table references', syntax: 'SQL syntax', columns: 'Column references', business: 'Business meaning', execution: 'Execution' };
@@ -14,11 +14,13 @@ function flash(message, good = false) {
 }
 
 function saveWorkspace() {
+  if (state.restoring) return;
   try {
     const draft = {
       question: $('question').value,
       sql: $('sql-editor').value,
       domain: $('domain-select').value,
+      result: state.lastResult,
     };
     if (draft.question || draft.sql) sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
     else sessionStorage.removeItem(DRAFT_KEY);
@@ -32,16 +34,30 @@ function restoreWorkspace() {
   try {
     const draft = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || 'null');
     if (!draft || typeof draft !== 'object') return;
+    state.restoring = true;
     $('question').value = String(draft.question || '').slice(0, 1000);
-    $('sql-editor').value = String(draft.sql || '').slice(0, 20_000);
     if ([...$('domain-select').options].some((option) => option.value === draft.domain)) $('domain-select').value = draft.domain;
+    if (draft.result && typeof draft.result.status === 'string') {
+      renderDraft(draft.result);
+      if (draft.result.status === 'needs_clarification') {
+        $('clarification-answer').placeholder = /^Which year/i.test(draft.result.clarification_question || '') ? 'e.g. 2026' : 'Add the missing detail';
+        $('clarification-reply').hidden = false;
+        flash([draft.result.interpretation, draft.result.clarification_question].filter(Boolean).join(' '));
+      }
+    }
+    $('sql-editor').value = String(draft.sql || '').slice(0, 20_000);
     $('sql-length').textContent = `${$('sql-editor').value.length} characters`;
     state.dirty = Boolean($('sql-editor').value);
-    if (state.dirty) resultStatus('Restored draft · check again', 'warn');
-    state.persisted = true;
+    if (state.dirty && $('sql-editor').value !== (draft.result?.sql || '')) {
+      renderChecks();
+      resultStatus('Restored edited draft · check again', 'warn');
+    }
   } catch {
     state.persisted = false;
+  } finally {
+    state.restoring = false;
   }
+  saveWorkspace();
 }
 
 function showGate(message = '') {
@@ -136,6 +152,7 @@ function resultStatus(message, tone = 'neutral') {
 }
 
 function renderDraft(result) {
+  state.lastResult = result;
   $('sql-editor').value = result.sql || '';
   $('sql-length').textContent = `${$('sql-editor').value.length} characters`;
   state.dirty = Boolean(result.sql);
@@ -300,6 +317,7 @@ $('clear-button').addEventListener('click', () => {
   $('sources').textContent = '';
   $('clarification').hidden = true;
   $('clarification-reply').hidden = true;
+  state.lastResult = null;
   renderContext();
   renderChecks();
   resultStatus('Waiting for a question');

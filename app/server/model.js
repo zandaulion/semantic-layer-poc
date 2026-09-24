@@ -231,7 +231,7 @@ export async function generateDraft({ question, previousSql = '', hits }) {
   }
   let usage = null;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 70_000);
+  const timer = setTimeout(() => controller.abort(), config.modelTimeoutMs);
   const requestBody = JSON.stringify({
     model: config.modelName,
     temperature: 0.1,

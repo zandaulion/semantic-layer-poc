@@ -20,4 +20,8 @@ export const config = {
   modelBaseUrl: (process.env.MODEL_BASE_URL || 'https://api.groq.com/openai/v1').replace(/\/+$/, ''),
   modelName: process.env.MODEL_NAME || 'openai/gpt-oss-20b',
   modelApiKey: process.env.MODEL_API_KEY || process.env.GROQ_API_KEY || '',
+  // A hosted provider answers in under a second; a model served from CPU on
+  // modest hardware can take minutes for the same prompt. The budget has to
+  // move with the backend, or a slow server is misreported as a broken one.
+  modelTimeoutMs: Number(process.env.MODEL_TIMEOUT_MS) > 0 ? Number(process.env.MODEL_TIMEOUT_MS) : 70_000,
 };

@@ -1,0 +1,49 @@
+# A locally served gpt-oss-20b, for comparing this POC's hosted backend against
+# one it runs itself.
+#
+# Not part of the application: the PWA never points here by default. It exists
+# so `eval/run.mjs` can be aimed at a second backend and the two results
+# compared. Start it when you want that comparison, stop it when you do not --
+# it is the largest thing on this host by memory.
+#
+# No PublishPort, for the same reason Elasticsearch has none: the only client is
+# on the private network, so the port has no business being on the host.
+[Unit]
+Description=Local gpt-oss-20b served by llama.cpp, for backend comparison
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=ghcr.io/ggml-org/llama.cpp:server
+ContainerName=gpt-oss-local
+Network=banking-dwh.network
+Volume=%h/models:/models:z
+
+# -c 8192: the evaluation prompt runs around 2,600 tokens and the reply adds a
+#   few hundred, so this leaves room without reserving a KV cache this host
+#   cannot spare.
+# -t 4: one thread per core. More threads on four cores costs more than it wins.
+# --jinja: gpt-oss needs its own chat template applied; without this the harmony
+#   format is not built and the model answers as if mid-conversation.
+# --parallel 1: the server defaults to four slots and reserves a KV cache for
+#   each. The harness asks one question at a time, so three of those were
+#   pure memory cost on a host that was already swapping -- and swapping is
+#   what makes CPU inference unusable rather than merely slow.
+Exec=-m /models/gpt-oss-20b-MXFP4.gguf --host 0.0.0.0 --port 8080 -c 8192 --parallel 1 -t 4 --jinja --metrics
+
+# The model file is about 12 GB and llama.cpp maps it rather than reading it in.
+# The cap is what keeps a long run from pushing Elasticsearch out of memory on a
+# 22 GB host that has been squeezed before.
+Memory=16g
+
+NoNewPrivileges=true
+
+[Service]
+Restart=on-failure
+RestartSec=10
+# Loading 12 GB from disk on first start takes a while; systemd should not
+# conclude it has hung.
+TimeoutStartSec=600
+
+# Deliberately not WantedBy=default.target: this does not come back on reboot
+# unless asked for. It is a tool, not part of the service.

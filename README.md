@@ -46,6 +46,10 @@ podman exec banking-dwh node eval/run.mjs --label onprem --out /tmp/onprem.json
 podman exec banking-dwh node eval/run.mjs --compare app/eval/baselines/groq-gpt-oss-20b.json /tmp/onprem.json
 ```
 
+A second backend to compare against needs no GPU: `app/deploy/quadlet/gpt-oss-local.container`
+serves the same `gpt-oss-20b` weights from CPU through llama.cpp, so the
+comparison can be run on the machine that already hosts the POC.
+
 It reports table grounding, status behaviour, read-only safety, inference latency
 and prompt size, and it classifies failures — a schema violation, meaning the
 server did not honour the strict JSON schema the application depends on, is a

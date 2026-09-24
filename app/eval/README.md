@@ -112,6 +112,51 @@ moves, the harness is wrong, not the model.
 To add a case, name the question and the tables the schema forces. Prefer
 questions where a wrong answer is wrong for a reason you can state.
 
+## Serving a model locally
+
+A second backend to compare against does not need a GPU. `gpt-oss-20b` is a
+mixture-of-experts model with roughly 3.6B active parameters, which is the shape
+that survives CPU inference, and the deployment includes a quadlet for it:
+
+```bash
+# ~12 GB, onto a filesystem with room -- not a small cache volume
+mkdir -p ~/models && curl -fL --retry 5 -C - -o ~/models/gpt-oss-20b-MXFP4.gguf \
+  https://huggingface.co/ggml-org/gpt-oss-20b-GGUF/resolve/main/gpt-oss-20b-MXFP4.gguf
+
+install -m 0644 app/deploy/quadlet/gpt-oss-local.container ~/.config/containers/systemd/
+systemctl --user daemon-reload && systemctl --user start gpt-oss-local.service
+```
+
+MXFP4 is the quantisation gpt-oss ships in, so this is the model as released
+rather than a further-compressed version of it — one fewer difference between
+the two runs.
+
+The unit deliberately has no `[Install]` section: it does not return after a
+reboot unless asked for, because it is a tool rather than part of the service.
+Stop it with `systemctl --user stop gpt-oss-local.service` when the comparison is
+done; it is the largest thing on the host by memory.
+
+Point a run at it without changing any stored configuration:
+
+```bash
+podman exec \
+  -e MODEL_BASE_URL=http://gpt-oss-local:8080/v1 \
+  -e MODEL_NAME=gpt-oss-20b \
+  -e MODEL_API_KEY=local \
+  -e MODEL_TIMEOUT_MS=900000 \
+  banking-dwh node eval/run.mjs --label llamacpp-cpu --out /tmp/local.json
+```
+
+Two of those variables are not optional:
+
+- `MODEL_API_KEY` must be non-empty. The server short-circuits without one and
+  never makes the call, so a local endpoint that needs no key still needs a
+  placeholder here.
+- `MODEL_TIMEOUT_MS` has to be raised. The default 70 seconds was set against a
+  provider answering in well under one; a case took about four and a half minutes
+  on four Ampere cores. Leaving the default makes a slow backend look like a
+  broken one, and the harness would record `timeout` for every case.
+
 ## Comparing two backends
 
 ```bash

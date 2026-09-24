@@ -1,6 +1,6 @@
 # Banking DWH Studio PWA
 
-The app serves an installable PWA with an invite gate, synthetic catalog search, GPT-OSS SQL drafting, an editable SQL review panel, and query history. Node 24.14+ and Elasticsearch run on the A1 host. The browser talks only to the Node server; the model key stays on that host. There are no npm runtime dependencies.
+The app serves an installable PWA with an invite gate, synthetic catalog search, GPT-OSS SQL drafting, an editable SQL review panel, and query history. Node and Elasticsearch each run as a rootless container on the A1 host, on a private network between them. The browser talks only to the Node server; the model key stays on that host. There are no npm runtime dependencies.
 
 ## Local run
 
@@ -14,19 +14,46 @@ Each successful generation saves its question, subject area, and complete answer
 
 ## A1 deployment
 
-1. Ensure Node 24.14+, rootless Podman, and enough RAM are available. Elasticsearch recommends `vm.max_map_count=1048576`. On Oracle Linux, set this persistently in `/etc/sysctl.d/99-banking-poc.conf` and load it with `sudo sysctl --system`.
-2. Install the provided [`deploy/a1/banking-poc-elasticsearch.container`](deploy/a1/banking-poc-elasticsearch.container) as an unprivileged-user Quadlet. It pins an ARM64-capable Elasticsearch image, persists its data under `$HOME/.local/share/banking-sql-poc/elasticsearch` on the root filesystem, and publishes port 9200 only on `127.0.0.1`. The `:Z` mount option gives the container a private SELinux label. Elasticsearch runs without its own HTTP authentication, which is only acceptable while the port stays bound to loopback: it must never be published on a public or tailnet address. It uses a 1 GiB JVM heap and 3 GiB container limit for this small metadata catalog.
-3. Clone this repository under an unprivileged account. Run `npm run ingest` from `app` after Elasticsearch reports ready. Re-run it after changing the catalog.
-4. Run `node deploy/a1/create-env.mjs https://your-public-pwa.example.com` from `app` to create a private environment file owned by that account, mode `0600`, with a random `ADMIN_TOKEN`. Add the hosted model API key to that file when available. Do not put secrets in Git, shell history, or the PWA.
-5. Install the provided [`deploy/a1/banking-sql-poc.service`](deploy/a1/banking-sql-poc.service) as an unprivileged-user systemd service. It binds Node to loopback and restarts on failure.
-6. Publish a dedicated Cloudflare application route for the PWA hostname at path `/`, with HTTP service URL `http://127.0.0.1:4387`. On this instance the public hostname is `https://your-public-pwa.example.com/`. The app also has a separate tailnet HTTPS route on port 8443 (`tailscale serve --bg --https=8443 http://127.0.0.1:4387`). Keep the existing tailnet port 443 route for the other PWAs. Set `PUBLIC_BASE_URL` to the public HTTPS origin so new invite URLs use it.
-7. Run `sudo python3 deploy/a1/install-console-route.py` from `app` to add the `/dwh/api/*` route to the existing private Caddy listener and a Bank DWH Studio entry to the invite console. The script reads the private admin token, validates Caddy, creates backups, and reloads it. The console's route remains tailnet-only; the public app's admin endpoints return 404 without the token.
+Both halves run as rootless Podman containers managed by Quadlet. `./deploy.sh`
+from the repository root does the whole cycle: run the tests, build the image,
+install the units, start Elasticsearch, wait for it, then start the app and
+check its health.
+
+1. Ensure rootless Podman and enough RAM are available. Elasticsearch recommends `vm.max_map_count=1048576`. On Oracle Linux, set this persistently in `/etc/sysctl.d/99-banking-poc.conf` and load it with `sudo sysctl --system`.
+2. Run `node app/deploy/a1/create-env.mjs https://your-public-pwa.example.com` to create a private environment file, mode `0600`, with a random `ADMIN_TOKEN`. Add the hosted model API key to that file when available. Do not put secrets in Git, shell history, or the PWA.
+3. Run `./deploy.sh`. It installs three units from [`app/deploy/quadlet/`](deploy/quadlet): a private network, Elasticsearch, and the app.
+4. Populate the index with `podman exec banking-dwh node server/ingest.js`. Re-run it after changing the catalog. The catalogue ships inside the image, so this needs no checkout on the host.
+5. Publish a dedicated Cloudflare application route for the PWA hostname at path `/`, with HTTP service URL `http://127.0.0.1:4387`. The app also has a separate tailnet HTTPS route on port 8443 (`tailscale serve --bg --https=8443 http://127.0.0.1:4387`). Keep the existing tailnet port 443 route for the other PWAs. Set `PUBLIC_BASE_URL` to the public HTTPS origin so new invite URLs use it.
+6. Run `sudo python3 app/deploy/a1/install-console-route.py` to add the `/dwh/api/*` route to the existing private Caddy listener and a Bank DWH Studio entry to the invite console. The script reads the private admin token, validates Caddy, creates backups, and reloads it. The console's route remains tailnet-only; the public app's admin endpoints return 404 without the token.
+
+### Why the containers are arranged this way
+
+**Elasticsearch publishes no port.** It runs with its own HTTP authentication
+disabled, which is only defensible while nothing can reach it. Rather than bind
+it to loopback and trust that, it is bound to nothing at all: the app container
+reaches it by name over the private network, and the host cannot.
+
+**The two data directories are siblings, never nested.** `:Z` gives a bind mount
+a private SELinux label, so two containers relabelling overlapping paths take
+the files from each other. With the index under the app's data directory,
+mounting that directory into the app relabelled the index too and Elasticsearch
+came back with a broken node lock and no master. The app keeps
+`$HOME/.local/share/banking-sql-poc`; the index keeps
+`$HOME/.local/share/banking-dwh-elasticsearch`.
+
+**The app binds `0.0.0.0` inside its container.** The default of `127.0.0.1` is
+right for a host process and wrong here: `PublishPort` forwards to the
+container's external address, so a server on its private loopback is reachable
+by nothing. The isolation is the network namespace, not the bind address.
+
+**No in-image user.** Under rootless Podman, container-root is already the
+unprivileged account that started the service. Dropping to a second uid inside
+the image would map to a subordinate id that does not own the existing SQLite
+database on the bind mount.
 
 The public GitHub repository contains code and synthetic metadata only. The PWA shell is publicly reachable through Cloudflare, and its API requires a single-use invite. An invite registers one browser on one hostname; the console can revoke that device. The invite console and its admin proxy remain on the tailnet. `app/data/`, environment files, API keys, and the Elasticsearch volume are excluded from Git.
 
-The host has a small Podman storage mount at `$HOME/.local/share/containers/storage` on a separate volume. Elasticsearch index data uses the bind directory on `/` above, leaving the shared Podman image layers on the existing mount. The app's SQLite auth database and repository are also on `/`.
-
-Run `node deploy/a1/smoke-test.mjs <tailnet-hostname> https://your-public-pwa.example.com` on the host to check the private invite route, public HTTPS registration, Elasticsearch search, and SQL checks. Add `--generate` to exercise the hosted model as well. It creates a labeled test invite and deletes its test device afterward. The used invite remains in the audit list.
+Run `node app/deploy/a1/smoke-test.mjs <tailnet-hostname> https://your-public-pwa.example.com` on the host to check the private invite route, public HTTPS registration, Elasticsearch search, and SQL checks. Add `--generate` to exercise the hosted model as well. It creates a labeled test invite and deletes its test device afterward. The used invite remains in the audit list.
 
 ## Model provider
 

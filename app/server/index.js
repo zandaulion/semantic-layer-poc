@@ -186,7 +186,7 @@ export function createAppServer({ auth = new AuthStore(path.join(config.dataDir,
     } catch (error) {
       const status = error.status || 503;
       console.error(`${req.method} ${pathname}: ${error.message}`);
-      return json(res, status, { error: status === 503 ? 'service_unavailable' : 'request_error', message: status === 503 ? 'The service is temporarily unavailable.' : error.message });
+      return json(res, status, { error: error.publicCode || (status === 503 ? 'service_unavailable' : 'request_error'), message: error.publicMessage || (status === 503 ? 'The service is temporarily unavailable.' : error.message) });
     }
   });
   server.on('close', () => auth.close());

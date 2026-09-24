@@ -15,6 +15,7 @@ async function listen(server) {
 
 test('invite gate, catalog search, draft generation, and check work together', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'banking-server-'));
+  let modelCalls = 0;
   const fake = http.createServer(async (req, res) => {
     res.setHeader('content-type', 'application/json');
     if (req.url === '/_cluster/health') return res.end(JSON.stringify({ status: 'green' }));
@@ -22,11 +23,18 @@ test('invite gate, catalog search, draft generation, and check work together', a
       document_id: 'table.bank_dwh.dim_customer', table_name: 'dim_customer', title: 'Customer',
       grain: 'one row per customer', domain_id: 'conformed', table_type: 'dimension',
     } }] } }));
-    if (req.url === '/chat/completions') return res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+    if (req.url === '/chat/completions') {
+      modelCalls++;
+      if (modelCalls === 1) {
+        res.statusCode = 400;
+        return res.end(JSON.stringify({ error: { code: 'json_validate_failed', message: 'Transient output validation failure' } }));
+      }
+      return res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
       status: 'draft', sql: 'SELECT customer_key FROM bank_dwh.dim_customer',
       interpretation: 'Customer keys', assumptions: [], clarification_question: null,
       sources: ['table.bank_dwh.dim_customer'],
-    }) } }] }));
+      }) } }] }));
+    }
     res.statusCode = 404; res.end('{}');
   });
   const fakeUrl = await listen(fake);
@@ -73,6 +81,7 @@ test('invite gate, catalog search, draft generation, and check work together', a
   assert.equal(generated.status, 200);
   assert.equal(draft.status, 'draft');
   assert.equal(draft.checks.tables, 'passed');
+  assert.equal(modelCalls, 2);
   const bad = await fetch(`${base}/api/check`, {
     method: 'POST', headers: { cookie, 'content-type': 'application/json' },
     body: JSON.stringify({ sql: 'DELETE FROM bank_dwh.dim_customer' }),

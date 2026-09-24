@@ -70,32 +70,44 @@ export async function generateDraft({ question, previousSql = '', hits }) {
   }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 70_000);
+  const requestBody = JSON.stringify({
+    model: config.modelName,
+    temperature: 0.1,
+    max_completion_tokens: 1600,
+    reasoning_effort: 'low',
+    messages: [
+      { role: 'system', content: 'You draft reviewable PostgreSQL SQL from supplied synthetic DWH metadata. Output only the requested JSON object. When a business rule is unknown, ask rather than invent.' },
+      { role: 'user', content: prompt },
+    ],
+    response_format: { type: 'json_schema', json_schema: { name: 'sql_draft', strict: true, schema: responseSchema } },
+  });
   let result;
   try {
-    const response = await fetch(`${config.modelBaseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${config.modelApiKey}`, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: config.modelName,
-        temperature: 0.1,
-        max_completion_tokens: 1600,
-        reasoning_effort: 'low',
-        messages: [
-          { role: 'system', content: 'You draft reviewable PostgreSQL SQL from supplied synthetic DWH metadata. Output only the requested JSON object. When a business rule is unknown, ask rather than invent.' },
-          { role: 'user', content: prompt },
-        ],
-        response_format: { type: 'json_schema', json_schema: { name: 'sql_draft', strict: true, schema: responseSchema } },
-      }),
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      const failure = await response.json().catch(() => ({}));
-      const code = failure.error?.code || failure.error?.type || 'unknown';
-      const reason = String(failure.error?.message || failure.message || 'request failed').slice(0, 300);
-      throw new Error(`Model API returned ${response.status} (${code}): ${reason}`);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const response = await fetch(`${config.modelBaseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${config.modelApiKey}`, 'content-type': 'application/json' },
+        body: requestBody,
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const failure = await response.json().catch(() => ({}));
+        const code = failure.error?.code || failure.error?.type || 'unknown';
+        const reason = String(failure.error?.message || failure.message || 'request failed').slice(0, 300);
+        if (response.status === 400 && attempt === 0) continue;
+        const error = new Error(`Model API returned ${response.status} (${code}): ${reason}`);
+        error.publicCode = 'model_provider_error';
+        error.publicMessage = response.status === 429
+          ? 'The model rate limit was reached. Wait a moment and try again.'
+          : response.status === 401 || response.status === 403
+            ? 'The hosted model key was rejected. Check the key on the server.'
+            : 'The hosted model could not produce a draft for this request. Try a more specific question.';
+        throw error;
+      }
+      const payload = await response.json();
+      result = JSON.parse(payload.choices?.[0]?.message?.content || '{}');
+      break;
     }
-    const payload = await response.json();
-    result = JSON.parse(payload.choices?.[0]?.message?.content || '{}');
   } finally {
     clearTimeout(timer);
   }

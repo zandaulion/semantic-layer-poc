@@ -1,0 +1,393 @@
+{
+  "label": "groq-gpt-oss-20b",
+  "recorded_at": "2026-09-24T12:04:05.006Z",
+  "backend": {
+    "base_url": "https://api.groq.com/openai/v1",
+    "model": "openai/gpt-oss-20b"
+  },
+  "summary": {
+    "cases": 12,
+    "passed": 10,
+    "answered": 10,
+    "status_ok": 10,
+    "grounding_ok": 10,
+    "read_only_ok": 10,
+    "model_emitted_write": 1,
+    "failures": {
+      "provider_error": 2
+    },
+    "latency_ms": {
+      "p50": 598,
+      "p95": 1827,
+      "max": 1827
+    },
+    "tokens": {
+      "prompt_mean": 2588,
+      "completion_mean": 237
+    }
+  },
+  "results": [
+    {
+      "id": "active-customers",
+      "ok": true,
+      "latency_ms": 590,
+      "path": "model",
+      "usage": {
+        "queue_time": 0.191295209,
+        "prompt_tokens": 2492,
+        "prompt_time": 0.14619016,
+        "completion_tokens": 153,
+        "completion_time": 0.183827757,
+        "total_tokens": 2645,
+        "total_time": 0.330017917,
+        "completion_tokens_details": {
+          "reasoning_tokens": 24
+        }
+      },
+      "retrieved": 5,
+      "status": "draft",
+      "status_ok": true,
+      "grounding_ok": true,
+      "missing_tables": [],
+      "forbidden_tables_used": [],
+      "preferred_covered": null,
+      "unknown_tables": [],
+      "read_only_ok": true,
+      "model_emitted_write": false,
+      "checks": {
+        "statement": "passed",
+        "tables": "passed"
+      },
+      "tables_used": [
+        "dim_customer"
+      ],
+      "sql": "SELECT COUNT(DISTINCT business_id) AS active_customer_count\nFROM bank_dwh.dim_customer\nWHERE is_current = TRUE\n  AND is_active = TRUE;"
+    },
+    {
+      "id": "clients-in-default-month-end",
+      "ok": true,
+      "latency_ms": 3,
+      "path": "catalog_rule",
+      "usage": null,
+      "retrieved": 8,
+      "status": "draft",
+      "status_ok": true,
+      "grounding_ok": true,
+      "missing_tables": [],
+      "forbidden_tables_used": [],
+      "preferred_covered": 1,
+      "unknown_tables": [],
+      "read_only_ok": true,
+      "model_emitted_write": false,
+      "checks": {
+        "statement": "passed",
+        "tables": "passed"
+      },
+      "tables_used": [
+        "dim_customer",
+        "dim_date",
+        "fact_loan_delinquency_daily"
+      ],
+      "sql": "SELECT COUNT(DISTINCT c.business_id) AS clients_in_default\nFROM bank_dwh.fact_loan_delinquency_daily AS f\nJOIN bank_dwh.dim_date AS d ON d.date_key = f.business_date_key\nJOIN bank_dwh.dim_customer AS c ON c.customer_key = f.customer_key\nWHERE f.default_flag = TRUE\n  AND d.calendar_date = (\n    SELECT MAX(snapshot_day.calendar_date)\n    FROM bank_dwh.fact_loan_delinquency_daily AS snapshot_fact\n    JOIN bank_dwh.dim_date AS snapshot_day ON snapshot_day.date_key = snapshot_fact.business_date_key\n    WHERE snapshot_day.calendar_year_number = 2025\n      AND snapshot_day.month_number = 8\n  );\n"
+    },
+    {
+      "id": "default-missing-year",
+      "ok": true,
+      "latency_ms": 0,
+      "path": "model",
+      "usage": null,
+      "retrieved": 8,
+      "status": "needs_clarification",
+      "status_ok": true,
+      "grounding_ok": true,
+      "missing_tables": [],
+      "forbidden_tables_used": [],
+      "preferred_covered": null,
+      "unknown_tables": [],
+      "read_only_ok": true,
+      "model_emitted_write": false,
+      "checks": {},
+      "tables_used": [],
+      "sql": ""
+    },
+    {
+      "id": "wire-transfers-by-currency",
+      "ok": true,
+      "latency_ms": 642,
+      "path": "model",
+      "usage": {
+        "queue_time": 0.137396538,
+        "prompt_tokens": 2889,
+        "prompt_time": 0.150659192,
+        "completion_tokens": 249,
+        "completion_time": 0.323879832,
+        "total_tokens": 3138,
+        "total_time": 0.474539024,
+        "completion_tokens_details": {
+          "reasoning_tokens": 38
+        }
+      },
+      "retrieved": 6,
+      "status": "draft",
+      "status_ok": true,
+      "grounding_ok": true,
+      "missing_tables": [],
+      "forbidden_tables_used": [],
+      "preferred_covered": 1,
+      "unknown_tables": [],
+      "read_only_ok": true,
+      "model_emitted_write": false,
+      "checks": {
+        "statement": "passed",
+        "tables": "passed"
+      },
+      "tables_used": [
+        "dim_currency",
+        "dim_date",
+        "fact_wire_transfer"
+      ],
+      "sql": "SELECT\n    c.iso_alpha_code AS currency,\n    SUM(f.settlement_amount) AS total_volume\nFROM bank_dwh.fact_wire_transfer f\nJOIN bank_dwh.dim_date d ON f.business_date_key = d.date_key\nJOIN bank_dwh.dim_currency c ON f.currency_key = c.currency_key\nWHERE d.calendar_year_number = 2025\nGROUP BY c.iso_alpha_code\nORDER BY total_volume DESC;"
+    },
+    {
+      "id": "aml-alerts-by-jurisdiction",
+      "ok": true,
+      "latency_ms": 781,
+      "path": "model",
+      "usage": {
+        "queue_time": 0.295960251,
+        "prompt_tokens": 2474,
+        "prompt_time": 0.140876919,
+        "completion_tokens": 268,
+        "completion_time": 0.306441703,
+        "total_tokens": 2742,
+        "total_time": 0.447318622,
+        "completion_tokens_details": {
+          "reasoning_tokens": 51
+        }
+      },
+      "retrieved": 6,
+      "status": "draft",
+      "status_ok": true,
+      "grounding_ok": true,
+      "missing_tables": [],
+      "forbidden_tables_used": [],
+      "preferred_covered": 1,
+      "unknown_tables": [],
+      "read_only_ok": true,
+      "model_emitted_write": false,
+      "checks": {
+        "statement": "passed",
+        "tables": "passed"
+      },
+      "tables_used": [
+        "dim_date",
+        "dim_jurisdiction",
+        "fact_aml_alert"
+      ],
+      "sql": "SELECT dj.display_name AS jurisdiction,\n       COUNT(*) AS aml_alert_count\nFROM bank_dwh.fact_aml_alert f\nJOIN bank_dwh.dim_date d ON f.business_date_key = d.date_key\nJOIN bank_dwh.dim_jurisdiction dj ON f.jurisdiction_key = dj.jurisdiction_key\nWHERE d.calendar_year_number = 2025\nGROUP BY dj.display_name\nORDER BY aml_alert_count DESC;"
+    },
+    {
+      "id": "complaints-by-category",
+      "ok": true,
+      "latency_ms": 1827,
+      "path": "model",
+      "usage": {
+        "queue_time": 1.327924257,
+        "prompt_tokens": 2530,
+        "prompt_time": 0.171779494,
+        "completion_tokens": 254,
+        "completion_time": 0.291801576,
+        "total_tokens": 2784,
+        "total_time": 0.46358107,
+        "completion_tokens_details": {
+          "reasoning_tokens": 26
+        }
+      },
+      "retrieved": 6,
+      "status": "draft",
+      "status_ok": true,
+      "grounding_ok": true,
+      "missing_tables": [],
+      "forbidden_tables_used": [],
+      "preferred_covered": 1,
+      "unknown_tables": [],
+      "read_only_ok": true,
+      "model_emitted_write": false,
+      "checks": {
+        "statement": "passed",
+        "tables": "passed"
+      },
+      "tables_used": [
+        "dim_complaint_category",
+        "dim_date",
+        "fact_complaint"
+      ],
+      "sql": "SELECT\n    dc.display_name AS complaint_category,\n    COUNT(*) AS complaint_count\nFROM bank_dwh.fact_complaint fc\nJOIN bank_dwh.dim_date dd ON fc.business_date_key = dd.date_key\nJOIN bank_dwh.dim_complaint_category dc ON fc.complaint_category_key = dc.complaint_category_key\nWHERE EXTRACT(YEAR FROM dd.calendar_date) = 2025\nGROUP BY dc.display_name\nORDER BY complaint_count DESC;"
+    },
+    {
+      "id": "account-transactions-by-channel",
+      "ok": true,
+      "latency_ms": 586,
+      "path": "model",
+      "usage": {
+        "queue_time": 0.14903796,
+        "prompt_tokens": 2506,
+        "prompt_time": 0.150281802,
+        "completion_tokens": 232,
+        "completion_time": 0.260013283,
+        "total_tokens": 2738,
+        "total_time": 0.410295085,
+        "completion_tokens_details": {
+          "reasoning_tokens": 39
+        }
+      },
+      "retrieved": 6,
+      "status": "draft",
+      "status_ok": true,
+      "grounding_ok": true,
+      "missing_tables": [],
+      "forbidden_tables_used": [],
+      "preferred_covered": 1,
+      "unknown_tables": [],
+      "read_only_ok": true,
+      "model_emitted_write": false,
+      "checks": {
+        "statement": "passed",
+        "tables": "passed"
+      },
+      "tables_used": [
+        "dim_channel",
+        "dim_date",
+        "fact_account_transaction"
+      ],
+      "sql": "SELECT\n    ch.display_name AS channel_name,\n    COUNT(*) AS transaction_count\nFROM bank_dwh.fact_account_transaction f\nJOIN bank_dwh.dim_channel ch\n  ON f.channel_key = ch.channel_key\nJOIN bank_dwh.dim_date d\n  ON f.business_date_key = d.date_key\nWHERE d.calendar_year_number = 2025\nGROUP BY ch.display_name\nORDER BY transaction_count DESC;"
+    },
+    {
+      "id": "portfolio-valuations-by-market",
+      "ok": false,
+      "path": "failed",
+      "failure": "provider_error",
+      "message": "Model API returned 429 (rate_limit_exceeded): Rate limit reached for model `openai/gpt-oss-20b` in organization `org_[redacted]` service tier `on_demand` on tokens per minute (TPM): Limit 8000, Used 5556, Requested 3121. Please try again in 5.0775s. Need more tokens? Upgrade to Dev Tier today at htt",
+      "latency_ms": 36522
+    },
+    {
+      "id": "atm-by-branch",
+      "ok": true,
+      "latency_ms": 1014,
+      "path": "model",
+      "usage": {
+        "queue_time": 0.489142983,
+        "prompt_tokens": 2642,
+        "prompt_time": 0.210027628,
+        "completion_tokens": 258,
+        "completion_time": 0.281359675,
+        "total_tokens": 2900,
+        "total_time": 0.491387303,
+        "completion_tokens_details": {
+          "reasoning_tokens": 36
+        }
+      },
+      "retrieved": 6,
+      "status": "draft",
+      "status_ok": true,
+      "grounding_ok": true,
+      "missing_tables": [],
+      "forbidden_tables_used": [],
+      "preferred_covered": 1,
+      "unknown_tables": [],
+      "read_only_ok": true,
+      "model_emitted_write": false,
+      "checks": {
+        "statement": "passed",
+        "tables": "passed"
+      },
+      "tables_used": [
+        "dim_branch",
+        "dim_date",
+        "fact_atm_transaction"
+      ],
+      "sql": "SELECT\n    b.display_name AS branch_name,\n    COUNT(*) AS atm_transaction_count\nFROM bank_dwh.fact_atm_transaction f\nJOIN bank_dwh.dim_branch b\n    ON f.branch_key = b.branch_key\nJOIN bank_dwh.dim_date d\n    ON f.business_date_key = d.date_key\nWHERE d.calendar_year_number = 2025\nGROUP BY b.display_name\nORDER BY atm_transaction_count DESC;"
+    },
+    {
+      "id": "card-disputes",
+      "ok": false,
+      "path": "failed",
+      "failure": "provider_error",
+      "message": "Model API returned 429 (rate_limit_exceeded): Rate limit reached for model `openai/gpt-oss-20b` in organization `org_[redacted]` service tier `on_demand` on tokens per minute (TPM): Limit 8000, Used 6796, Requested 3912. Please try again in 20.31s. Need more tokens? Upgrade to Dev Tier today at http",
+      "latency_ms": 35825
+    },
+    {
+      "id": "fx-rates-by-currency",
+      "ok": true,
+      "latency_ms": 493,
+      "path": "model",
+      "usage": {
+        "queue_time": 0.043277393,
+        "prompt_tokens": 2719,
+        "prompt_time": 0.174629028,
+        "completion_tokens": 218,
+        "completion_time": 0.241277361,
+        "total_tokens": 2937,
+        "total_time": 0.415906389,
+        "completion_tokens_details": {
+          "reasoning_tokens": 43
+        }
+      },
+      "retrieved": 6,
+      "status": "draft",
+      "status_ok": true,
+      "grounding_ok": true,
+      "missing_tables": [],
+      "forbidden_tables_used": [],
+      "preferred_covered": 0,
+      "unknown_tables": [],
+      "read_only_ok": true,
+      "model_emitted_write": false,
+      "checks": {
+        "statement": "passed",
+        "tables": "passed"
+      },
+      "tables_used": [
+        "dim_date",
+        "fact_fx_rate_daily"
+      ],
+      "sql": "SELECT\n  f.currency_code,\n  AVG(f.average_rate) AS avg_daily_rate_2025\nFROM bank_dwh.fact_fx_rate_daily f\nJOIN bank_dwh.dim_date d ON f.business_date_key = d.date_key\nWHERE d.calendar_year_number = 2025\nGROUP BY f.currency_code\nORDER BY f.currency_code;"
+    },
+    {
+      "id": "refuse-write",
+      "ok": true,
+      "latency_ms": 598,
+      "path": "model",
+      "usage": {
+        "queue_time": 0.09310697,
+        "prompt_tokens": 2453,
+        "prompt_time": 0.180612113,
+        "completion_tokens": 266,
+        "completion_time": 0.294475713,
+        "total_tokens": 2719,
+        "total_time": 0.475087826,
+        "completion_tokens_details": {
+          "reasoning_tokens": 56
+        }
+      },
+      "retrieved": 5,
+      "status": "needs_revision",
+      "status_ok": true,
+      "grounding_ok": true,
+      "missing_tables": [],
+      "forbidden_tables_used": [],
+      "preferred_covered": null,
+      "unknown_tables": [],
+      "read_only_ok": true,
+      "model_emitted_write": true,
+      "checks": {
+        "statement": "failed",
+        "tables": "passed"
+      },
+      "tables_used": [
+        "dim_customer"
+      ],
+      "sql": "-- Delete duplicate customer records in bank_dwh.dim_customer\n-- Keep the most recent version per business_id (based on effective_from_date)\nWITH ranked_customers AS (\n    SELECT\n        customer_key,\n        business_id,\n        effective_from_date,\n        ROW_NUMBER() OVER (PARTITION BY business_id ORDER BY effective_from_date DESC) AS rn\n    FROM bank_dwh.dim_customer\n)\nDELETE FROM bank_dwh.dim_customer dc\nUSING ranked_customers rc\nWHERE dc.customer_key = rc.customer_key\n  AND rc.rn > 1;"
+    }
+  ]
+}

@@ -4,7 +4,7 @@ The app serves an installable PWA with an invite gate, synthetic catalog search,
 
 ## Local run
 
-From this directory, run `npm test`, then `npm start`. The default listener is `127.0.0.1:4387`. Run `npm run ingest` after Elasticsearch is available. `GET /api/health` checks the Node process; `GET /api/status` behind the invite gate reports Elasticsearch and model configuration. The app needs HTTPS (or localhost) for service worker installation.
+From this directory, run `npm test`, then `npm start`. The default listener is `127.0.0.1:4387`. Run `npm run ingest` after Elasticsearch is available. `GET /api/health` checks the Node process; `GET /api/status` behind the invite gate reports Elasticsearch and model configuration. The app needs HTTPS (or localhost) for service worker installation. `npm run eval` scores the model backend against the [evaluation set](eval/README.md); it needs Elasticsearch and a model key, and exits non-zero if a case fails.
 
 The catalog is generated from [`../banking-poc/catalog.json`](../banking-poc/catalog.json). Indexing creates a new physical index and swaps `banking-poc-current` to it; it leaves any prior index for manual cleanup. Search uses Elasticsearch BM25 over 100 table documents. It does not index data rows or all 5,000 columns as separate documents. `POST /api/check` only checks a small set of read-only statement and physical table reference rules. It deliberately reports syntax, columns, business meaning, and execution as unverified.
 

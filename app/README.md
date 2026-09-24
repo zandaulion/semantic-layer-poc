@@ -26,6 +26,7 @@ rather than a provider.
 | `context-assembly.test.js` | That a fact's dimensions reach the prompt whether or not their names are readable, and that the table budget holds |
 | `sql-check.test.js` | Read-only enforcement, and that valid SQL is not reported as unsafe |
 | `clarification.test.js` | Asking rather than guessing when a period is missing |
+| `catalog-rules.test.js` | That a deterministic rule answers when the catalog has the columns it names, and stands down when it does not |
 | `ingest.test.js` | Which index generations an ingestion may delete |
 | `auth.test.js`, `server.test.js` | Invite gate, and the endpoints working together |
 
@@ -52,6 +53,16 @@ reported under the catalog's own spelling. SQL identifiers are case-insensitive
 unless quoted, so a model may return any casing; the check used to lower-case
 references while the catalog was keyed by its own spelling, which rejected every
 correct draft against an uppercase warehouse.
+
+**Cryptic column names make the deterministic rules stand down.**
+`catalog-rules.test.js` drafts the same question against the same three tables
+twice, with columns readable and then abbreviated — `default_flag` becomes
+`DFLT_FLG`, `business_date_key` becomes `BUS_DT_K`. The rule answers in the
+first case and declines in the second, falling through to the model rather than
+throwing or emitting SQL for columns that do not exist. Every such rule will be
+in that position on a real catalog, so the graceful part is the behaviour worth
+pinning. It needs no model: with no key configured, a rule that fires is visible
+as `model: "catalog_rule"` and a fall-through as `model_unconfigured`.
 
 **The schema name is the catalog's, not a literal.** The same file points
 `CATALOG_PATH` at a catalog declaring `risk_mart` and asserts that documents,

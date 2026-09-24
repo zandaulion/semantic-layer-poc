@@ -88,7 +88,12 @@ export async function generateDraft({ question, previousSql = '', hits }) {
       }),
       signal: controller.signal,
     });
-    if (!response.ok) throw new Error(`Model API returned ${response.status}`);
+    if (!response.ok) {
+      const failure = await response.json().catch(() => ({}));
+      const code = failure.error?.code || failure.error?.type || 'unknown';
+      const reason = String(failure.error?.message || failure.message || 'request failed').slice(0, 300);
+      throw new Error(`Model API returned ${response.status} (${code}): ${reason}`);
+    }
     const payload = await response.json();
     result = JSON.parse(payload.choices?.[0]?.message?.content || '{}');
   } finally {

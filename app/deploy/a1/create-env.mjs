@@ -3,9 +3,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const hostname = process.argv[2];
-if (!hostname || !/^[a-z0-9.-]+$/i.test(hostname)) {
-  console.error('Usage: node create-env.mjs <tailnet-hostname>');
+let publicOrigin;
+try {
+  const parsed = new URL(process.argv[2]);
+  if (parsed.protocol !== 'https:' || parsed.pathname !== '/' || parsed.search || parsed.hash || parsed.username || parsed.password) throw new Error('Invalid origin');
+  publicOrigin = parsed.origin;
+} catch {
+  console.error('Usage: node create-env.mjs <https-public-origin>');
   process.exit(2);
 }
 const directory = path.join(os.homedir(), '.config', 'banking-sql-poc');
@@ -19,7 +23,7 @@ if (fs.existsSync(filename)) {
 const lines = [
   'HOST=127.0.0.1',
   'PORT=4387',
-  `PUBLIC_BASE_URL=https://${hostname}:8443`,
+  `PUBLIC_BASE_URL=${publicOrigin}`,
   `DATA_DIR=${path.join(os.homedir(), '.local', 'share', 'banking-sql-poc')}`,
   'ELASTICSEARCH_URL=http://127.0.0.1:9200',
   'ELASTICSEARCH_INDEX=banking-poc-current',

@@ -1,10 +1,11 @@
 const tailnetHost = process.argv[2];
-if (!tailnetHost || !/^[a-z0-9.-]+$/i.test(tailnetHost)) {
-  console.error('Usage: node smoke-test.mjs <tailnet-hostname>');
+const appOrigin = process.argv[3] || `https://${tailnetHost}:8443`;
+if (!tailnetHost || !/^[a-z0-9.-]+$/i.test(tailnetHost) || !/^https:\/\/[a-z0-9.-]+(?::\d+)?$/i.test(appOrigin)) {
+  console.error('Usage: node smoke-test.mjs <tailnet-hostname> [https-app-origin]');
   process.exit(2);
 }
 const privateBase = `https://${tailnetHost}`;
-const appBase = `https://${tailnetHost}:8443`;
+const appBase = appOrigin;
 const request = async (url, options = {}) => {
   const response = await fetch(url, options);
   const body = await response.json();

@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { contextForHits } from './catalog.js';
+import { contextForHits, schemaName, DOCUMENT_STATUS } from './catalog.js';
 import { expandSearchQuery } from './elastic.js';
 import { checkSql } from './sql-check.js';
 
@@ -20,10 +20,10 @@ const responseSchema = {
 function renderContext(context) {
   const tableText = context.tables.map((table) => {
     const columns = table.columns.map((column) => `${column.column_name} ${column.data_type}`).join(', ');
-    return `ID table.bank_dwh.${table.table_name}\n${table.table_type.toUpperCase()} bank_dwh.${table.table_name}\nGrain: ${table.grain}\nColumns: ${columns}`;
+    return `ID table.${schemaName}.${table.table_name}\n${table.table_type.toUpperCase()} ${schemaName}.${table.table_name}\nGrain: ${table.grain}\nColumns: ${columns}`;
   }).join('\n\n');
   const joins = context.relationships.map((relation) =>
-    `CANDIDATE: bank_dwh.${relation.from_table}.${relation.from_column} = bank_dwh.${relation.to_table}.${relation.to_column}`,
+    `CANDIDATE: ${schemaName}.${relation.from_table}.${relation.from_column} = ${schemaName}.${relation.to_table}.${relation.to_column}`,
   ).join('\n');
   return `${tableText}\n\nCandidate relationships (synthetic, not business-approved):\n${joins || '(none)'}`;
 }
@@ -55,14 +55,14 @@ function knownDefaultClientDraft(question, context) {
   const sql = `${count
     ? 'SELECT COUNT(DISTINCT c.business_id) AS clients_in_default'
     : 'SELECT DISTINCT c.business_id AS client_id, c.display_name AS client_name'}
-FROM bank_dwh.fact_loan_delinquency_daily AS f
-JOIN bank_dwh.dim_date AS d ON d.date_key = f.business_date_key
-JOIN bank_dwh.dim_customer AS c ON c.customer_key = f.customer_key
+FROM ${schemaName}.fact_loan_delinquency_daily AS f
+JOIN ${schemaName}.dim_date AS d ON d.date_key = f.business_date_key
+JOIN ${schemaName}.dim_customer AS c ON c.customer_key = f.customer_key
 WHERE f.default_flag = TRUE
   AND d.calendar_date = (
     SELECT MAX(snapshot_day.calendar_date)
-    FROM bank_dwh.fact_loan_delinquency_daily AS snapshot_fact
-    JOIN bank_dwh.dim_date AS snapshot_day ON snapshot_day.date_key = snapshot_fact.business_date_key
+    FROM ${schemaName}.fact_loan_delinquency_daily AS snapshot_fact
+    JOIN ${schemaName}.dim_date AS snapshot_day ON snapshot_day.date_key = snapshot_fact.business_date_key
     WHERE snapshot_day.calendar_year_number = ${years[0]}
       AND snapshot_day.month_number = ${monthIndex + 1}
   )${count ? ';' : '\nORDER BY client_name, client_id;'}
@@ -75,7 +75,7 @@ WHERE f.default_flag = TRUE
       'The latest available daily snapshot in the requested month represents month end; confirm the month is complete.',
       'dim_customer.business_id identifies a client across customer dimension versions.',
     ],
-    sources: Object.keys(required).map((name) => `table.bank_dwh.${name}`),
+    sources: Object.keys(required).map((name) => `table.${schemaName}.${name}`),
   };
 }
 
@@ -86,7 +86,7 @@ function knownActiveCustomersLastMonthDraft(question, context) {
   if (!customer || !required.every((column) => customer.columns.some((entry) => entry.column_name === column))) return null;
   const monthEnd = "(date_trunc('month', CURRENT_DATE)::date - 1)";
   const sql = `SELECT COUNT(DISTINCT c.business_id) AS active_customers_last_month
-FROM bank_dwh.dim_customer AS c
+FROM ${schemaName}.dim_customer AS c
 WHERE c.is_active = TRUE
   AND c.effective_from_date <= ${monthEnd}
   AND (c.effective_to_date IS NULL OR c.effective_to_date > ${monthEnd});
@@ -100,7 +100,7 @@ WHERE c.is_active = TRUE
       'effective_to_date is treated as an exclusive end date; confirm this SCD convention.',
       'business_id identifies a customer across dimension versions.',
     ],
-    sources: ['table.bank_dwh.dim_customer'],
+    sources: [`table.${schemaName}.dim_customer`],
   };
 }
 
@@ -122,14 +122,14 @@ function knownActiveCustomerTransactionDraft(question, context) {
   return {
     sql: `WITH active_customers AS (
   SELECT DISTINCT business_id
-  FROM bank_dwh.dim_customer
+  FROM ${schemaName}.dim_customer
   WHERE is_current = TRUE AND is_active = TRUE
 )
 SELECT t.transaction_type_code,
        COUNT(DISTINCT historical_customer.business_id) AS active_customer_count,
        SUM(t.base_amount) AS total_transaction_base_amount
-FROM bank_dwh.fact_account_transaction AS t
-JOIN bank_dwh.dim_customer AS historical_customer
+FROM ${schemaName}.fact_account_transaction AS t
+JOIN ${schemaName}.dim_customer AS historical_customer
   ON historical_customer.customer_key = t.customer_key
 JOIN active_customers AS active_customer
   ON active_customer.business_id = historical_customer.business_id
@@ -144,14 +144,14 @@ ORDER BY t.transaction_type_code;`,
       'No transaction status or reversal filter was requested, so all recorded account transaction rows are included.',
       'Customers with no account transactions are absent from the per-type results.',
     ],
-    sources: ['table.bank_dwh.fact_account_transaction', 'table.bank_dwh.dim_customer'],
+    sources: [`table.${schemaName}.fact_account_transaction`, `table.${schemaName}.dim_customer`],
   };
 }
 
 export async function generateDraft({ question, previousSql = '', hits }) {
   const context = contextForHits(expandSearchQuery(question), hits);
   const retrievedTables = context.tables.map((table) => ({
-    document_id: `table.bank_dwh.${table.table_name}`,
+    document_id: `table.${schemaName}.${table.table_name}`,
     table_name: table.table_name,
     title: table.table_name.replaceAll('_', ' '),
     grain: table.grain,
@@ -162,7 +162,7 @@ export async function generateDraft({ question, previousSql = '', hits }) {
     return {
       status: 'needs_clarification', sql: '', interpretation: '', assumptions: [],
       clarification_question: 'Which banking area or physical table should I use?',
-      sources: [], checks: checkSql(''), metadata_status: 'synthetic_fixture',
+      sources: [], checks: checkSql(''), metadata_status: DOCUMENT_STATUS,
     };
   }
   const defaultFact = context.tables.find((table) => table.table_name === 'fact_loan_delinquency_daily');
@@ -178,8 +178,8 @@ export async function generateDraft({ question, previousSql = '', hits }) {
         : 'The requested month needs a year before its date can be used in a SQL draft.',
       assumptions: hasDefaultPath ? ['Treat a client as in default when a loan delinquency row at month end has default_flag = TRUE; confirm this POC definition before production use.'] : [],
       clarification_question: `Which year do you mean for ${/\bend of\b/i.test(question) ? 'the end of ' : ''}${monthWithoutYear}?`,
-      sources: hasDefaultPath ? ['table.bank_dwh.fact_loan_delinquency_daily'] : [],
-      checks: null, retrieved_tables: retrievedTables, metadata_status: 'synthetic_fixture',
+      sources: hasDefaultPath ? [`table.${schemaName}.fact_loan_delinquency_daily`] : [],
+      checks: null, retrieved_tables: retrievedTables, metadata_status: DOCUMENT_STATUS,
     };
   }
   const knownDraft = previousSql.trim() ? null
@@ -190,7 +190,7 @@ export async function generateDraft({ question, previousSql = '', hits }) {
     return {
       status: 'draft', ...knownDraft, clarification_question: null,
       checks: checkSql(knownDraft.sql), retrieved_tables: retrievedTables,
-      metadata_status: 'synthetic_fixture', model: 'catalog_rule',
+      metadata_status: DOCUMENT_STATUS, model: 'catalog_rule',
     };
   }
   if (!config.modelApiKey) {
@@ -212,7 +212,7 @@ export async function generateDraft({ question, previousSql = '', hits }) {
   const prompt = [
     `User question: ${question}`,
     previousSql ? `Previous draft to revise: ${previousSql}` : '',
-    'Target dialect: PostgreSQL. Schema: bank_dwh.',
+    `Target dialect: PostgreSQL. Schema: ${schemaName}.`,
     'Use only the supplied physical tables and columns. The relationships are synthetic candidates for this POC.',
     'Answer schema questions using the supplied metadata before asking the user. Client means customer in this catalog.',
     currentCustomerHint,
@@ -226,7 +226,7 @@ export async function generateDraft({ question, previousSql = '', hits }) {
       status: 'needs_clarification', sql: '', interpretation: '', assumptions: [],
       clarification_question: 'Which subject area should I use to narrow the schema context?',
       sources: [], checks: checkSql(''), retrieved_tables: retrievedTables,
-      metadata_status: 'synthetic_fixture',
+      metadata_status: DOCUMENT_STATUS,
     };
   }
   let usage = null;
@@ -277,7 +277,7 @@ export async function generateDraft({ question, previousSql = '', hits }) {
     clearTimeout(timer);
   }
   if (!['draft', 'needs_clarification', 'unsupported'].includes(result.status)) throw new Error('Model response status is invalid');
-  const allowedSources = new Set(context.tables.map((table) => `table.bank_dwh.${table.table_name}`));
+  const allowedSources = new Set(context.tables.map((table) => `table.${schemaName}.${table.table_name}`));
   const sources = (Array.isArray(result.sources) ? result.sources : []).filter((id) => allowedSources.has(id));
   const checks = checkSql(result.sql);
   const status = result.status === 'draft' && (checks.statement === 'failed' || checks.tables !== 'passed') ? 'needs_revision' : result.status;
@@ -289,7 +289,7 @@ export async function generateDraft({ question, previousSql = '', hits }) {
     clarification_question: result.clarification_question,
     sources,
     checks,
-    metadata_status: 'synthetic_fixture',
+    metadata_status: DOCUMENT_STATUS,
     model: config.modelName,
     usage,
     retrieved_tables: retrievedTables,

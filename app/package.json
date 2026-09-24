@@ -12,7 +12,8 @@
     "ingest": "node server/ingest.js",
     "test": "node --test test/*.test.js",
     "eval": "node eval/run.mjs",
-    "eval:results": "node eval/build-results.mjs"
+    "eval:results": "node eval/build-results.mjs",
+    "validate:catalog": "node server/validate-catalog.mjs"
   },
   "license": "GPL-3.0-only"
 }

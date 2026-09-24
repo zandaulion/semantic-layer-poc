@@ -1,4 +1,5 @@
 import { config } from './config.js';
+import { DOCUMENT_STATUS } from './catalog.js';
 
 export function expandSearchQuery(question) {
   const normalized = question.replace(/\b(?:clients?|customers?)\b/gi, 'customer');
@@ -27,7 +28,7 @@ export async function elasticRequest(path, { method = 'GET', body, contentType =
 }
 
 export async function searchTables(question, domain = 'all', size = 12) {
-  const filter = [{ term: { status: 'synthetic_fixture' } }];
+  const filter = [{ term: { status: DOCUMENT_STATUS } }];
   if (domain !== 'all') filter.push({ term: { domain_id: domain } });
   const result = await elasticRequest(`/${encodeURIComponent(config.elasticIndex)}/_search`, {
     method: 'POST',

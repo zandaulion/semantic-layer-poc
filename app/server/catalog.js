@@ -3,15 +3,26 @@ import { config } from './config.js';
 
 const raw = JSON.parse(fs.readFileSync(config.catalogPath, 'utf8'));
 export const tables = raw.tables;
+
+// The SQL schema every draft is written against. Read from the catalog so that
+// pointing CATALOG_PATH at a different warehouse does not also require a code
+// change; the bundled fixture declares bank_dwh, which stays the fallback for a
+// catalog that omits it.
+export const schemaName = raw.schema_name || 'bank_dwh';
+
+// Stamped onto every indexed document and required by every search. Defined
+// once because a writer and a filter that disagree do not raise an error --
+// they return an empty result set, which reads as "nothing matched".
+export const DOCUMENT_STATUS = 'synthetic_fixture';
 export const tableByName = new Map(tables.map((table) => [table.table_name, table]));
 export const domains = [...new Set(tables.map((table) => table.domain))].sort();
 
 export function tableDocument(table) {
-  const physicalName = `bank_dwh.${table.table_name}`;
+  const physicalName = `${schemaName}.${table.table_name}`;
   const columnSummary = table.columns.map((column) => `${column.column_name} ${column.description}`).join(' ');
   return {
-    document_id: `table.bank_dwh.${table.table_name}`,
-    status: 'synthetic_fixture',
+    document_id: `table.${schemaName}.${table.table_name}`,
+    status: DOCUMENT_STATUS,
     domain_id: table.domain,
     document_type: 'table',
     table_name: table.table_name,

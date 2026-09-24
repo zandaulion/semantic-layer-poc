@@ -49,7 +49,8 @@ podman exec banking-dwh node eval/run.mjs --compare app/eval/baselines/groq-gpt-
 A second backend to compare against needs no GPU: `app/deploy/quadlet/gpt-oss-local.container`
 serves the same `gpt-oss-20b` weights from CPU through llama.cpp, so the
 comparison can be run on the machine that already hosts the POC. Both runs are
-recorded in `app/eval/baselines/`. The hosted and local backends agreed on every
+recorded in `app/eval/baselines/` and compared in
+[app/eval/RESULTS.md](app/eval/RESULTS.md). The hosted and local backends agreed on every
 required table and neither violated the JSON schema contract, but they differed
 on which dimensions they joined and on whether a destructive request was refused
 outright or caught downstream by the SQL check.
@@ -74,6 +75,7 @@ codebase. The two groups below are separated for that reason.
 - [Portfolio gallery and capture method](portfolio/README.md): ten screenshots, questions, viewport sizes, recorded responses, and regeneration steps.
 - [Synthetic banking warehouse fixture](banking-poc/README.md): PostgreSQL DDL, catalog, relationships, and a small seed for 100 tables and 5,000 columns.
 - [Backend evaluation harness](app/eval/README.md): twelve schema-grounded questions, the scoring rules, and how to compare two inference backends.
+- [Backend comparison results](app/eval/RESULTS.md): the same model served hosted and locally, what agreed, what did not, and what it does not settle.
 
 **Designs for a possible full implementation**
 

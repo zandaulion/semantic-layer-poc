@@ -11,7 +11,8 @@
     "dev": "node --watch server/index.js",
     "ingest": "node server/ingest.js",
     "test": "node --test test/*.test.js",
-    "eval": "node eval/run.mjs"
+    "eval": "node eval/run.mjs",
+    "eval:results": "node eval/build-results.mjs"
   },
   "license": "GPL-3.0-only"
 }

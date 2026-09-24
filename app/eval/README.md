@@ -173,48 +173,18 @@ drift that a pass rate alone would hide.
 and `llamacpp-cpu-mxfp4.json`, the same weights served two ways. They are records
 of what each backend did on one day, not targets to hit.
 
-## What the first comparison found
+## Results
 
-Both baselines in `baselines/` are the same weights — `gpt-oss-20b` — served two
-ways: Groq's hosted endpoint, and llama.cpp on four Ampere CPU cores using the
-MXFP4 file the model ships in. The local run passed 12/12 with 12/12 grounding.
+[RESULTS.md](RESULTS.md) holds the recorded comparison: the same `gpt-oss-20b`
+weights served by a hosted provider and by llama.cpp on four CPU cores. Its
+tables are generated from the files in `baselines/` by `node eval/build-results.mjs`,
+so no figure there is retyped; the reading of those figures is written by hand
+underneath, in `results-discussion.md`.
 
-**Strict JSON schema enforcement survived the change.** llama.cpp compiles the
-schema into a grammar, and no case in either run produced a `schema_violation`.
-This was the failure that would have broken the application rather than degraded
-it, and it did not happen.
-
-**The safety behaviour differed.** Asked to delete duplicate customers, the
-hosted backend produced a `DELETE … USING` statement that the checker caught and
-downgraded; the local backend declined and asked a clarifying question instead,
-emitting no SQL at all. Same weights, same prompt, same temperature — opposite
-handling of the one question in the set with a destructive intent. Neither
-outcome was unsafe, but only one of them relied on the guard, and nothing in the
-prompt predicts which you get.
-
-**Dimension joins drift in both directions.** For wire transfers by currency the
-hosted backend joined `dim_currency` and the local one grouped by the surrogate
-key; for FX rates by currency they swapped positions. Both forms answer the
-question, which is why those tables are `preferred_tables` rather than required —
-had they been gates, this comparison would have produced two false failures and
-taught the reader to distrust the harness.
-
-**Reasoning length did not blow up.** A concern going in was that
-`reasoning_effort: 'low'` is a gpt-oss parameter a different server might ignore,
-inflating completions until they truncate. Mean completion tokens were 237
-hosted and 226 locally, so whatever llama.cpp did with the field, the effect on
-output length was not material here.
-
-**Latency is not comparable and should not be quoted as if it were.** The p50
-went from 598 ms to 161 s, roughly 270× — four CPU cores against purpose-built
-hardware. What transfers between the runs is grounding and behaviour; timing
-transfers only within a run.
-
-One number is worth carrying into a capacity conversation: `active-customers`
-took 271 s run alone but 32 s inside the full run, because llama.cpp reuses the
-cached prompt prefix and these questions share most of their schema context. On a
-deployment serving many analysts against one warehouse, that reuse is worth
-designing the prompt around.
+In short: neither backend violated the JSON schema contract, both grounded every
+answered case in the right tables, and they differed on which descriptive
+dimensions they joined and on whether a destructive request was declined outright
+or caught downstream by the SQL check.
 
 ## What it does not measure
 
@@ -231,9 +201,10 @@ Honest limits, so the numbers are not read for more than they carry:
 - **Twelve questions.** Enough to detect a backend that behaves differently, not
   enough to certify one that behaves well.
 
-## What it found on its first run
+## Defects it found in the POC itself
 
-Both defects were in production code, not in the harness:
+Separately from the backend comparison, the harness's first run surfaced two
+problems in production code:
 
 1. `checkSql` read the column after `EXTRACT(YEAR FROM …)` as a table name, so a
    correct year filter was reported as touching an unknown table and downgraded
@@ -241,8 +212,11 @@ Both defects were in production code, not in the harness:
    year against this schema, so the false positive was reachable by a plain
    question. Fixed, with regression tests covering `SUBSTRING`, `TRIM`, and
    `POSITION`, which borrow `FROM` and `IN` the same way.
-2. Asked to delete duplicate customers, the model produced a `DELETE … USING`
-   statement behind a CTE. The statement check caught it and the status was
-   downgraded, so nothing unsafe reached the user — but the model did not refuse,
-   and on a backend where that check behaves differently it is the only thing
-   standing between the request and executable DML.
+2. The model did not refuse a request to delete duplicate customers; it wrote the
+   `DELETE` and the statement check caught it. Nothing unsafe reached the user,
+   but the guard was what made that true — and [RESULTS.md](RESULTS.md) shows the
+   other backend declining the same request outright, which is why that guard
+   should be read as production-critical rather than as a formality.
+
+Neither was visible from the PWA, and neither would have been found by asking
+whether the application "works".

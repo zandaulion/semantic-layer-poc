@@ -13,7 +13,7 @@ All names, fields, relationships, and rows are **synthetic**. They are designed 
 | `tables.csv` | Subject area, grain, table type, and column count. |
 | `columns.csv` | All 5,000 columns, types, nullability, descriptions, and design origin. |
 | `relationships.csv` | Candidate fact-to-dimension foreign keys. |
-| `catalog.json` | Machine-readable nested version of the metadata for POC ingestion. |
+| `catalog.json` | Machine-readable nested version of the metadata for POC ingestion. Its format is a contract documented in [catalog-contract.md](../catalog-contract.md); replace this file to describe a different warehouse. |
 | `manifest.json` | Counts and generation status. |
 
 The source of truth for regeneration is [`generate_banking_warehouse.py`](../generate_banking_warehouse.py). It uses Python's standard library:

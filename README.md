@@ -71,6 +71,9 @@ codebase. The two groups below are separated for that reason.
 
 **What is built and deployed**
 
+- [Component inventory](components.md): every architectural piece, its contract, and whether to reuse, port or reimplement it for an on-premise deployment.
+- [Catalog contract](catalog-contract.md): the metadata input format — required fields, ignored fields, and what decides retrieval quality.
+- [Configuration](configuration.md): every environment variable, every command, and the order things must start in.
 - [PWA and A1 deployment](app/README.md): local run, Elasticsearch ingestion, hosted model configuration, invite gate, and Cloudflare route.
 - [Portfolio gallery and capture method](portfolio/README.md): ten screenshots, questions, viewport sizes, recorded responses, and regeneration steps.
 - [Synthetic banking warehouse fixture](banking-poc/README.md): PostgreSQL DDL, catalog, relationships, and a small seed for 100 tables and 5,000 columns.

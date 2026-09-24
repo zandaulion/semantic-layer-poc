@@ -55,6 +55,11 @@ test('invite gate, catalog search, draft generation, and check work together', a
   const shell = await fetch(base);
   assert.equal(shell.status, 200);
   assert.match(await shell.text(), /Bank DWH Studio/);
+  const worker = await fetch(`${base}/sw.js`);
+  assert.match(await worker.text(), /const CACHE_NAME = 'APP-[a-f0-9]{12}'/);
+  assert.match(worker.headers.get('cache-control'), /no-store/);
+  const bust = await fetch(`${base}/bust`);
+  assert.equal(bust.headers.get('clear-site-data'), '"cache"');
   const adminDenied = await fetch(`${base}/api/admin/invites`);
   assert.equal(adminDenied.status, 404);
   const created = await fetch(`${base}/api/admin/invites`, {

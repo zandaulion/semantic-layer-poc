@@ -1,7 +1,8 @@
 import { installUpdates } from '/pwa-update.js';
 
 const $ = (id) => document.getElementById(id);
-const state = { working: false, dirty: false, installPrompt: null };
+const state = { working: false, dirty: false, persisted: false, installPrompt: null };
+const DRAFT_KEY = 'banking-poc:workspace-v1';
 const fields = ['statement', 'tables', 'syntax', 'columns', 'business', 'execution'];
 const names = { statement: 'Read-only shape', tables: 'Table references', syntax: 'SQL syntax', columns: 'Column references', business: 'Business meaning', execution: 'Execution' };
 
@@ -10,6 +11,37 @@ function flash(message, good = false) {
   node.textContent = message;
   node.classList.toggle('good', good);
   node.hidden = !message;
+}
+
+function saveWorkspace() {
+  try {
+    const draft = {
+      question: $('question').value,
+      sql: $('sql-editor').value,
+      domain: $('domain-select').value,
+    };
+    if (draft.question || draft.sql) sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    else sessionStorage.removeItem(DRAFT_KEY);
+    state.persisted = true;
+  } catch {
+    state.persisted = false;
+  }
+}
+
+function restoreWorkspace() {
+  try {
+    const draft = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || 'null');
+    if (!draft || typeof draft !== 'object') return;
+    $('question').value = String(draft.question || '').slice(0, 1000);
+    $('sql-editor').value = String(draft.sql || '').slice(0, 20_000);
+    if ([...$('domain-select').options].some((option) => option.value === draft.domain)) $('domain-select').value = draft.domain;
+    $('sql-length').textContent = `${$('sql-editor').value.length} characters`;
+    state.dirty = Boolean($('sql-editor').value);
+    if (state.dirty) resultStatus('Restored draft · check again', 'warn');
+    state.persisted = true;
+  } catch {
+    state.persisted = false;
+  }
 }
 
 function showGate(message = '') {
@@ -127,6 +159,7 @@ function renderDraft(result) {
     unsupported: ['Request unsupported by this catalog', 'warn'],
   };
   resultStatus(...(statuses[result.status] || ['No draft returned', 'warn']));
+  saveWorkspace();
 }
 
 async function loadMetadata() {
@@ -159,6 +192,7 @@ async function generate() {
   if (question.length < 5) return flash('Describe the query in at least five characters.');
   flash('');
   $('clarification-reply').hidden = true;
+  saveWorkspace();
   setWorking(true);
   resultStatus('Retrieving metadata and drafting…');
   try {
@@ -218,10 +252,10 @@ async function boot() {
   updateNetwork();
   addEventListener('online', updateNetwork);
   addEventListener('offline', updateNetwork);
-  installUpdates({ appName: 'Bank DWH Studio', isBusy: () => state.working || state.dirty || Boolean($('question').value.trim()) });
+  installUpdates({ appName: 'Bank DWH Studio', isBusy: () => state.working || ((state.dirty || Boolean($('question').value.trim())) && !state.persisted) });
   try {
     const session = await api('/api/auth/session');
-    if (session.authenticated) { showWorkspace(session.device); await loadMetadata(); }
+    if (session.authenticated) { showWorkspace(session.device); await loadMetadata(); restoreWorkspace(); }
     else showGate(invite ? 'Invite code ready. Activate this device to continue.' : '');
   } catch (error) { showGate('Cannot reach the server. Reconnect and reload this page.'); }
 }
@@ -236,6 +270,7 @@ $('invite-form').addEventListener('submit', async (event) => {
     $('invite-code').value = '';
     showWorkspace(result.device);
     await loadMetadata();
+    restoreWorkspace();
   } catch (error) { $('gate-message').textContent = error.message; }
   finally { button.disabled = false; }
 });
@@ -246,6 +281,7 @@ $('clarification-reply').addEventListener('submit', (event) => {
   const answer = $('clarification-answer').value.trim();
   if (!answer) return;
   $('question').value += /^\d{4}$/.test(answer) ? ` ${answer}` : `\nClarification: ${answer}`;
+  saveWorkspace();
   generate();
 });
 $('check-button').addEventListener('click', checkDraft);
@@ -269,16 +305,21 @@ $('clear-button').addEventListener('click', () => {
   resultStatus('Waiting for a question');
   flash('');
   state.dirty = false;
+  saveWorkspace();
 });
+$('question').addEventListener('input', saveWorkspace);
+$('domain-select').addEventListener('change', saveWorkspace);
 $('sql-editor').addEventListener('input', () => {
   state.dirty = Boolean($('sql-editor').value);
   $('sql-length').textContent = `${$('sql-editor').value.length} characters`;
   renderChecks();
   resultStatus('Edited draft · check again', 'warn');
+  saveWorkspace();
 });
 for (const button of document.querySelectorAll('.sample-question')) button.addEventListener('click', () => {
   $('question').value = button.dataset.question;
   $('domain-select').value = button.dataset.domain || 'all';
+  saveWorkspace();
   $('question').focus();
 });
 addEventListener('beforeinstallprompt', (event) => {

@@ -103,6 +103,11 @@ export function installUpdates({
 
     registration.update().catch(() => {});
 
+    // Foreground PWAs can stay open for hours without another visibility event.
+    setInterval(() => {
+      if (document.visibilityState === 'visible' && navigator.onLine) registration.update().catch(() => {});
+    }, 60_000);
+
     // An installed PWA is often never closed, so the reliable moment to look
     // for a new version is when it comes back to the foreground.
     document.addEventListener('visibilitychange', () => {

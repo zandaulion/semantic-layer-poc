@@ -76,6 +76,7 @@ function staticFile(req, res, pathname, webHash) {
     'cache-control': isWorker || decoded === '/bust.html' ? 'no-cache, no-store, must-revalidate' : 'no-cache, must-revalidate',
     'x-content-type-options': 'nosniff',
     ...(isWorker ? { 'service-worker-allowed': '/' } : {}),
+    ...(decoded === '/bust.html' ? { 'clear-site-data': '"cache"' } : {}),
   });
   res.end(req.method === 'HEAD' ? undefined : body);
   return true;

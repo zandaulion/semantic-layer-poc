@@ -20,6 +20,8 @@ The catalog is generated from [`../banking-poc/catalog.json`](../banking-poc/cat
 
 The public GitHub repository contains code and synthetic metadata only. The PWA is reachable only by devices on the tailnet and then requires a single-use invite. An invite registers one browser; the console can revoke that device. `app/data/`, environment files, API keys, and the Elasticsearch volume are excluded from Git.
 
+Run `node deploy/a1/smoke-test.mjs <tailnet-hostname>` on the host to check the HTTPS invite route, device registration, Elasticsearch search, and SQL checks. It creates a labeled test invite and deletes its test device afterward. The used invite remains in the audit list.
+
 ## Model provider
 
 The default `MODEL_BASE_URL` uses Groq's OpenAI-compatible chat completions API with `openai/gpt-oss-20b`. The request uses strict JSON schema output and low reasoning effort. Other providers need support for those request fields or an adapter in `server/model.js`. Costs, limits, and availability depend on the provider account.

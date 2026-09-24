@@ -17,8 +17,15 @@ unusually readable names?
 
 [`eval/make-cryptic.mjs`](app/eval/make-cryptic.mjs) rewrites the fixture's table
 and column names through a consistent abbreviation map — `dim_customer` becomes
-`D_CUST`, `fact_loan_delinquency_daily` becomes `F_LN_DLQ_D` — and refuses to
-run if two names collide. It translates the evaluation's expected tables through
+`D_CUST`, `fact_loan_delinquency_daily` becomes `F_LN_DLQ_D`, and every column
+with them, so `business_date_key` becomes `BUS_DT_K` and `is_active` becomes
+`IS_ACTV` — and refuses to run if two names collide. Foreign key columns inside
+relationships are rewritten too, so the join graph still resolves.
+
+Columns matter separately from tables here. They are indexed as `column_names`
+with a boost of three, they are rendered into the prompt beside their types, and
+they are named as literals by the deterministic catalog rules. All three of
+those are affected. It translates the evaluation's expected tables through
 the same map, so each case still asserts the same thing about the same tables.
 The questions stay in business English, which is the point.
 
@@ -67,9 +74,17 @@ layer:
 
 ### Abbreviating names cost search nothing
 
-A and B have **identical** search recall. Curated grain and column descriptions
-carry lexical retrieval entirely; the question's vocabulary meets the catalog
-through `search_text`, and `search_text` was still in English.
+A and B have **identical** search recall, with *both* table and column names
+abbreviated. Curated grain and column descriptions carry lexical retrieval
+entirely; the question's vocabulary meets the catalog through `search_text`, and
+`search_text` was still in English.
+
+Abbreviating columns does have one further consequence, invisible to retrieval:
+the deterministic catalog rules name their columns as literals — `default_flag`,
+`business_date_key`, `is_active` — so none of them can apply to a catalog like
+this. That is the designed behaviour rather than a defect, and it is pinned by a
+test, but it means a real warehouse gets no deterministic answers until those
+rules are rewritten against its own column names.
 
 This is the most useful result here. Cryptic physical names are survivable, and
 what makes them survivable is metadata you can write without touching the
@@ -184,6 +199,7 @@ so neither bug was reachable from it.
 | `context-assembly.test.js` — *an abbreviated date dimension reaches the prompt too* | The same star schema built twice, as `fact_wire_transfer`/`dim_date` and as `F_WR_TRF`/`D_DT`. The date join is declared second on purpose, so relationship ordering cannot make it pass by accident |
 | `context-assembly.test.js` — *the context stays within its table budget* | The structural fallback cannot exceed the table cap or repeat a table |
 | `schema-name.test.js` — *an uppercase catalog accepts a draft written in either case* | `BANK_DWH.D_CUST`, `bank_dwh.d_cust` and `Bank_Dwh.D_Cust` all accepted, and reported under the catalog's own spelling |
+| `catalog-rules.test.js` — *cryptic column names make the rule stand down* | The same three tables with the same question, columns readable and then abbreviated. The rule answers in the first case and declines in the second, letting the model try, rather than throwing or emitting SQL for columns that do not exist |
 
 They run in child processes: the catalog resolves once when the module is first
 imported, so a different catalog needs a different process.

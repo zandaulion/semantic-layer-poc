@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101b2c">
+  <meta name="description" content="Reviewable SQL drafts from a synthetic banking warehouse catalog.">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/app.css">
+  <title>Bank DWH Studio</title>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Bank DWH Studio home">
+        <img src="/icons/icon.svg" width="40" height="40" alt="">
+        <span><strong>Bank DWH Studio</strong><small>SQL drafting POC</small></span>
+      </a>
+      <div class="topbar-right">
+        <span class="environment-tag">SYNTHETIC DATA</span>
+        <span id="network-indicator" class="network-indicator"><span class="status-dot"></span>Online</span>
+        <button id="install-button" class="button button-ghost install-button" type="button" hidden>Install app</button>
+      </div>
+    </header>
+
+    <main id="gate" class="gate" hidden>
+      <div class="gate-art" aria-hidden="true"><div class="gate-orbit orbit-one"></div><div class="gate-orbit orbit-two"></div><div class="gate-symbol">&lt;/&gt;</div></div>
+      <div class="gate-card">
+        <span class="eyebrow">PRIVATE POC ACCESS</span>
+        <h1>Your warehouse workspace, on this device.</h1>
+        <p>Enter the single-use invite code to register this browser. Your SQL drafts stay under your control and are never run against a database here.</p>
+        <form id="invite-form">
+          <label for="invite-code">Invite code</label>
+          <input id="invite-code" name="code" type="text" inputmode="text" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" placeholder="ABCDE-23456" required>
+          <label for="device-label">Device label</label>
+          <input id="device-label" name="label" type="text" maxlength="60" placeholder="My laptop" autocomplete="off">
+          <button class="button button-primary full-width" type="submit">Activate this device <span aria-hidden="true">→</span></button>
+        </form>
+        <p id="gate-message" class="form-message" role="status" aria-live="polite"></p>
+        <div class="gate-footnote"><span class="tiny-lock" aria-hidden="true">◆</span> One invite registers one device. Access can be revoked from the invite console.</div>
+      </div>
+    </main>
+
+    <main id="workspace" class="workspace" hidden>
+      <aside class="sidebar" aria-label="Workspace controls">
+        <div class="sidebar-top">
+          <span class="eyebrow">WORKSPACE</span>
+          <h2>Banking sandbox</h2>
+          <p>Explore a synthetic DWH with 100 tables and 5,000 columns.</p>
+        </div>
+        <div class="sidebar-section">
+          <label for="domain-select">Subject area</label>
+          <select id="domain-select"><option value="all">All banking domains</option></select>
+          <span class="input-hint">Limits retrieval to one part of the catalog.</span>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">TRY A QUESTION</div>
+          <button class="sample-question" type="button" data-question="Show loan repayments by customer for the first week of January 2026" data-domain="lending">Loan repayments by customer <span>↗</span></button>
+          <button class="sample-question" type="button" data-question="Count card authorizations by merchant category" data-domain="cards">Card activity by merchant <span>↗</span></button>
+          <button class="sample-question" type="button" data-question="List customers and their current risk band" data-domain="conformed">Customer risk bands <span>↗</span></button>
+        </div>
+        <div class="sidebar-section compact">
+          <div class="sidebar-section-title">SYSTEM</div>
+          <div class="system-row"><span>Elasticsearch</span><span id="elastic-status" class="system-value">Checking…</span></div>
+          <div class="system-row"><span>Model API</span><span id="model-status" class="system-value">Checking…</span></div>
+          <div class="system-row"><span>Metadata</span><span class="system-value amber">Synthetic</span></div>
+        </div>
+        <div class="sidebar-bottom"><span id="device-name">Registered device</span><span>Private POC</span></div>
+      </aside>
+
+      <div class="content">
+        <div class="page-heading">
+          <div><span class="eyebrow">NATURAL LANGUAGE → REVIEWABLE SQL</span><h1>Draft a better query.</h1><p>Describe what you need. Review every assumption before taking SQL to your database client.</p></div>
+          <span class="draft-badge">DRAFT ONLY</span>
+        </div>
+
+        <section class="panel ask-panel" aria-labelledby="question-title">
+          <div class="panel-heading"><div><span class="step">01</span><h2 id="question-title">Ask a question</h2></div><span class="subtle">PostgreSQL · bank_dwh</span></div>
+          <label for="question" class="sr-only">Question or revision instruction</label>
+          <textarea id="question" rows="4" maxlength="1000" placeholder="Example: Show total loan repayments by customer for January 2026…"></textarea>
+          <div class="ask-actions"><span class="input-hint">The model sees the retrieved synthetic schema, not DWH data rows.</span><div class="button-group"><button id="find-button" class="button button-secondary" type="button">Find tables</button><button id="generate-button" class="button button-primary" type="button">Generate draft <span aria-hidden="true">↗</span></button></div></div>
+        </section>
+
+        <div id="flash" class="flash" role="status" aria-live="polite" hidden></div>
+
+        <div class="result-grid">
+          <section class="panel draft-panel" aria-labelledby="draft-title">
+            <div class="panel-heading"><div><span class="step">02</span><h2 id="draft-title">SQL draft</h2></div><div class="button-group"><button id="check-button" class="button button-text" type="button">Check draft</button><button id="copy-button" class="button button-text" type="button">Copy SQL</button><button id="clear-button" class="button button-text" type="button">Clear</button></div></div>
+            <div id="result-status" class="result-status neutral">Waiting for a question</div>
+            <label for="sql-editor" class="sr-only">Editable SQL draft</label>
+            <textarea id="sql-editor" class="sql-editor" spellcheck="false" placeholder="Your editable SQL will appear here. The app will never execute it."></textarea>
+            <div class="editor-foot"><span>Editable draft · no automatic execution</span><span id="sql-length">0 characters</span></div>
+          </section>
+
+          <aside class="insight-column">
+            <section class="panel insight-panel" aria-labelledby="context-title">
+              <div class="panel-heading"><div><span class="step">A</span><h2 id="context-title">Retrieved context</h2></div></div>
+              <p id="context-empty" class="empty-copy">Relevant tables will appear here after a search.</p>
+              <div id="context-list" class="context-list"></div>
+            </section>
+            <section class="panel insight-panel" aria-labelledby="review-title">
+              <div class="panel-heading"><div><span class="step">B</span><h2 id="review-title">Review notes</h2></div></div>
+              <p id="interpretation" class="empty-copy">Interpretation and assumptions will appear here.</p>
+              <ul id="assumptions" class="note-list"></ul>
+              <div id="clarification" class="clarification" hidden></div>
+              <div id="sources" class="sources"></div>
+            </section>
+            <section class="panel insight-panel" aria-labelledby="checks-title">
+              <div class="panel-heading"><div><span class="step">C</span><h2 id="checks-title">Checks</h2></div></div>
+              <div id="checks-list" class="checks-list"><span class="empty-copy">Generate or check a draft to see findings.</span></div>
+            </section>
+          </aside>
+        </div>
+
+        <footer class="page-footer">Synthetic banking metadata for a personal proof of concept. Confirm joins, metrics, and results with a domain expert before use.</footer>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

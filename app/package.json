@@ -1,0 +1,16 @@
+{
+  "name": "banking-sql-assistant-poc",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24.14.0"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "ingest": "node server/ingest.js",
+    "test": "node --test test/*.test.js"
+  },
+  "license": "GPL-3.0-only"
+}

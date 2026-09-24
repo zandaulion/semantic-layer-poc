@@ -165,7 +165,19 @@ async function generate() {
       method: 'POST', body: JSON.stringify({ question, domain: $('domain-select').value, previous_sql: $('sql-editor').value }),
     });
     renderDraft(result);
-    if (result.status === 'draft') flash('Review the SQL and all assumptions before using it.', true);
+    if (result.status === 'draft') {
+      flash('SQL draft ready. Review the SQL and assumptions before using it.', true);
+      $('draft-title').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (result.status === 'needs_revision') {
+      flash('The model returned SQL, but a basic check needs review. See the draft and checks below.');
+      $('draft-title').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (result.status === 'needs_clarification') {
+      flash(result.clarification_question || 'The model needs one more detail before it can draft SQL.');
+    } else if (result.status === 'unsupported') {
+      flash(result.interpretation || 'The synthetic catalog does not support this request.');
+    } else {
+      flash('No SQL draft was returned. Try a more specific question.');
+    }
   } catch (error) {
     resultStatus('Draft unavailable', 'bad');
     flash(error.message);

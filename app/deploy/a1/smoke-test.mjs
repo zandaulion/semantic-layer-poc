@@ -38,9 +38,11 @@ try {
   }
   console.log(JSON.stringify({ invite: 'redeemed', device: 'authenticated', elasticsearch: status.elasticsearch.status, retrieved_tables: search.tables.length, statement_check: check.checks.statement, model_configured: status.model_configured }));
   if (testModel) {
+    const question = process.env.SMOKE_QUESTION || 'List customer keys from the customer dimension';
+    const domain = process.env.SMOKE_DOMAIN || 'conformed';
     const response = await fetch(`${appBase}/api/generate`, {
       method: 'POST', headers: { ...headers, origin: appBase, 'content-type': 'application/json' },
-      body: JSON.stringify({ question: 'List customer keys from the customer dimension', domain: 'conformed' }),
+      body: JSON.stringify({ question, domain }),
     });
     const result = await response.json();
     console.log(JSON.stringify({ model_http_status: response.status, draft_status: result.status, error: result.error || result.code || null, message: result.message || null, sql_characters: result.sql?.length || 0, clarification: result.clarification_question || null, tables: result.retrieved_tables?.map((table) => table.table_name) || [] }));

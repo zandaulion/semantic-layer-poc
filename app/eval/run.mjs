@@ -25,6 +25,7 @@ import { fileURLToPath } from 'node:url';
 
 import { config } from '../server/config.js';
 import { searchTables, elasticHealth } from '../server/elastic.js';
+import { contextForHits } from '../server/catalog.js';
 import { generateDraft } from '../server/model.js';
 import { referencedTables } from '../server/sql-check.js';
 
@@ -118,6 +119,63 @@ async function withRateLimitRetry(work, attempts = 4) {
   }
 }
 
+/**
+ * Retrieval measured on its own, without calling a model.
+ *
+ * The claim worth testing about metadata quality is that a table retrieval
+ * never returns cannot be recovered downstream, however good the model is.
+ * That claim is about the search, so measuring the search directly is both the
+ * sharper experiment and the one that finishes in seconds rather than hours --
+ * and it removes the model's own variance from the answer.
+ */
+async function runRetrievalCase(testCase) {
+  const started = Date.now();
+  const required = testCase.expect?.required_tables ?? [];
+  const preferred = testCase.expect?.preferred_tables ?? [];
+  try {
+    const hits = await searchTables(testCase.question, testCase.domain ?? 'all');
+    const searched = hits.map((hit) => hit.table_name);
+    // What actually reaches the prompt. Search finds facts lexically; context
+    // assembly then walks their declared relationships to pull in dimensions,
+    // so a table absent from the search results is not necessarily absent from
+    // the model's view -- and measuring only the search would overstate the
+    // damage that poor naming does.
+    const context = contextForHits(testCase.question, hits).tables.map((table) => table.table_name);
+
+    const rankIn = (list, table) => {
+      const index = list.indexOf(table);
+      return index === -1 ? null : index + 1;
+    };
+    const ranks = Object.fromEntries(required.map((table) => [table, rankIn(searched, table)]));
+    const inContext = required.filter((table) => context.includes(table));
+    const foundBySearch = required.filter((table) => ranks[table] !== null);
+
+    return {
+      id: testCase.id,
+      ok: inContext.length === required.length,
+      path: 'retrieval',
+      latency_ms: Date.now() - started,
+      required,
+      search_recall: required.length ? foundBySearch.length / required.length : 1,
+      context_recall: required.length ? inContext.length / required.length : 1,
+      // Tables the graph expansion supplied that lexical search did not.
+      recovered_by_relationships: required.filter(
+        (table) => ranks[table] === null && context.includes(table),
+      ),
+      missing_tables: required.filter((table) => !context.includes(table)),
+      ranks,
+      preferred_found: preferred.filter((table) => context.includes(table)).length,
+      preferred_total: preferred.length,
+      context_size: context.length,
+      searched,
+      context,
+    };
+  } catch (error) {
+    return { id: testCase.id, ok: false, path: 'failed', failure: classifyFailure(error),
+      message: redact(error?.message || error).slice(0, 300), latency_ms: Date.now() - started };
+  }
+}
+
 async function runCase(testCase) {
   const started = Date.now();
   try {
@@ -186,9 +244,54 @@ function summarise(results) {
   };
 }
 
+function summariseRetrieval(results) {
+  const answered = results.filter((r) => r.path === 'retrieval');
+  const withRequirements = answered.filter((r) => r.required?.length);
+  const mean = (values) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : null);
+  return {
+    cases: results.length,
+    complete: answered.filter((r) => r.ok).length,
+    mean_search_recall: mean(withRequirements.map((r) => r.search_recall)),
+    mean_context_recall: mean(withRequirements.map((r) => r.context_recall)),
+    tables_required: withRequirements.reduce((sum, r) => sum + r.required.length, 0),
+    tables_missed: withRequirements.reduce((sum, r) => sum + r.missing_tables.length, 0),
+    tables_recovered_by_relationships: withRequirements.reduce(
+      (sum, r) => sum + r.recovered_by_relationships.length, 0),
+    preferred_found: answered.reduce((sum, r) => sum + (r.preferred_found ?? 0), 0),
+    preferred_total: answered.reduce((sum, r) => sum + (r.preferred_total ?? 0), 0),
+  };
+}
+
+function printRetrievalReport(run) {
+  const pad = (text, width) => String(text).padEnd(width);
+  console.log(`\n${run.label}  retrieval only`);
+  console.log(`  catalog ${run.catalog.path}\n`);
+  console.log(`  ${pad('case', 36)}${pad('search', 9)}${pad('context', 9)}notes`);
+  console.log(`  ${'-'.repeat(88)}`);
+  for (const r of run.results) {
+    if (r.path === 'failed') {
+      console.log(`  ✗ ${pad(r.id, 34)}${pad('-', 9)}${pad('-', 9)}${r.failure}`);
+      continue;
+    }
+    const notes = [];
+    if (r.missing_tables?.length) notes.push(`MISSING ${r.missing_tables.join(',')}`);
+    if (r.recovered_by_relationships?.length) notes.push(`via joins: ${r.recovered_by_relationships.join(',')}`);
+    console.log(`  ${r.ok ? '✓' : '✗'} ${pad(r.id, 34)}${pad(r.search_recall.toFixed(2), 9)}`
+      + `${pad(r.context_recall.toFixed(2), 9)}${notes.join('; ')}`);
+  }
+  const s = run.summary;
+  console.log(`\n  ${s.complete}/${s.cases} cases had every required table in the prompt`);
+  console.log(`  mean recall — search ${s.mean_search_recall?.toFixed(3)} · context ${s.mean_context_recall?.toFixed(3)}`);
+  console.log(`  ${s.tables_missed}/${s.tables_required} required tables missing · `
+    + `${s.tables_recovered_by_relationships} recovered by declared relationships`);
+  console.log(`  preferred found ${s.preferred_found}/${s.preferred_total}\n`);
+}
+
 function printReport(run) {
   const pad = (text, width) => String(text).padEnd(width);
-  console.log(`\n${run.label}  ${run.backend.base_url}  ${run.backend.model}\n`);
+  console.log(`\n${run.label}  ${run.backend.base_url}  ${run.backend.model}`);
+  if (run.catalog) console.log(`  catalog ${run.catalog.path}`);
+  console.log();
   console.log(`  ${pad('case', 36)}${pad('status', 20)}${pad('ms', 8)}notes`);
   console.log(`  ${'-'.repeat(88)}`);
   for (const result of run.results) {
@@ -262,7 +365,10 @@ async function main() {
     return;
   }
 
-  const { cases } = JSON.parse(await readFile(path.join(here, 'cases.json'), 'utf8'));
+  // A variant catalog needs its own expectations, because the tables it
+  // describes have different names. See make-cryptic.mjs.
+  const casesFile = flag('--cases') ?? path.join(here, 'cases.json');
+  const { cases } = JSON.parse(await readFile(casesFile, 'utf8'));
   const only = argv.reduce((ids, value, index) => (argv[index - 1] === '--case' ? [...ids, value] : ids), []);
   const selected = only.length ? cases.filter((c) => only.includes(c.id)) : cases;
   if (!selected.length) {
@@ -274,11 +380,12 @@ async function main() {
   // Sequential on purpose: these latencies are the ones quoted when sizing an
   // on-prem deployment, and running concurrently would measure the provider's
   // batching instead of a single request.
+  const retrievalOnly = argv.includes('--retrieval-only');
   const results = [];
   for (const testCase of selected) {
     process.stderr.write(`  ${testCase.id} ... `);
-    const result = await runCase(testCase);
-    process.stderr.write(`${result.ok ? 'ok' : (result.failure ?? 'failed')} (${result.latency_ms} ms)\n`);
+    const result = retrievalOnly ? await runRetrievalCase(testCase) : await runCase(testCase);
+    process.stderr.write(`${result.ok ? 'ok' : (result.failure ?? 'missed')} (${result.latency_ms} ms)\n`);
     results.push(result);
   }
 
@@ -286,18 +393,25 @@ async function main() {
     label: flag('--label') ?? 'run',
     recorded_at: new Date().toISOString(),
     backend: { base_url: config.modelBaseUrl, model: config.modelName },
-    summary: summarise(results),
+    // Recorded so a result file says which metadata produced it; two runs that
+    // differ only by catalog are otherwise indistinguishable after the fact.
+    catalog: { path: config.catalogPath, cases: casesFile },
+    summary: retrievalOnly ? summariseRetrieval(results) : summarise(results),
+    mode: retrievalOnly ? 'retrieval' : 'full',
     results,
   };
 
-  printReport(run);
+  if (retrievalOnly) printRetrievalReport(run); else printReport(run);
   const out = flag('--out');
   if (out) {
     await writeFile(out, `${JSON.stringify(run, null, 2)}\n`);
     console.log(`  wrote ${out}\n`);
   }
   // Non-zero when anything failed, so this can gate a backend change.
-  if (run.summary.passed !== run.summary.cases) process.exitCode = 1;
+  const failed = retrievalOnly
+    ? run.summary.complete !== run.summary.cases
+    : run.summary.passed !== run.summary.cases;
+  if (failed) process.exitCode = 1;
 }
 
 main().catch((error) => {

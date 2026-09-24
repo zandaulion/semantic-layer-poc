@@ -1,4 +1,4 @@
-import { tableByName, schemaName } from './catalog.js';
+import { tableByLowerName, schemaName } from './catalog.js';
 
 function withoutQuotedContent(sql) {
   return sql
@@ -54,8 +54,11 @@ export function referencedTables(sql) {
   const unknown = [];
   for (const reference of [...body.matchAll(/\b(?:FROM|JOIN)\s+([a-z_][\w.]*)/gi)].map((match) => match[1].toLowerCase())) {
     if (cteNames.has(reference)) continue;
-    const [schema, table] = reference.includes('.') ? reference.split('.', 2) : [schemaName, reference];
-    if (schema === schemaName && tableByName.has(table)) known.push(table);
+    const [schema, table] = reference.includes('.') ? reference.split('.', 2) : [schemaName.toLowerCase(), reference];
+    const match = schema === schemaName.toLowerCase() ? tableByLowerName.get(table) : undefined;
+    // Reported under the catalog's own spelling, so downstream comparisons see
+    // one name per table rather than whichever case the draft happened to use.
+    if (match) known.push(match.table_name);
     else unknown.push(reference);
   }
   return { known: [...new Set(known)], unknown: [...new Set(unknown)] };

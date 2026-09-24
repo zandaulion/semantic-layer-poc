@@ -79,6 +79,7 @@ codebase. The two groups below are separated for that reason.
 - [Synthetic banking warehouse fixture](banking-poc/README.md): PostgreSQL DDL, catalog, relationships, and a small seed for 100 tables and 5,000 columns.
 - [Backend evaluation harness](app/eval/README.md): twelve schema-grounded questions, the scoring rules, and how to compare two inference backends.
 - [Backend comparison results](app/eval/RESULTS.md): the same model served hosted and locally, what agreed, what did not, and what it does not settle.
+- [Retrieval and naming](retrieval-and-naming.md): what happens to retrieval when the warehouse has bank-style abbreviated names instead of readable ones, and which metadata recovers it.
 
 **Designs for a possible full implementation**
 

@@ -81,6 +81,7 @@ podman exec \
 
 | Command | Purpose |
 | --- | --- |
+| `npm start` | Runs the server. `npm run dev` does the same with file watching |
 | `npm test` | Unit and integration tests. No Elasticsearch or model needed |
 | `npm run validate:catalog` | Checks the catalog before it is indexed |
 | `npm run ingest` | Builds a new index, swaps the alias, prunes superseded generations |

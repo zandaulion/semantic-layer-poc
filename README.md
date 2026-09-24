@@ -31,10 +31,20 @@ The browser never receives the model API key. The PWA does not connect to a bank
 
 ## Explore the repository
 
+The code here is a small proof of concept. The architecture documents describe a
+possible full implementation and are deliberately wider in scope than anything
+that runs on the A1 instance — they are a target, not a description of this
+codebase. The two groups below are separated for that reason.
+
+**What is built and deployed**
+
 - [PWA and A1 deployment](app/README.md): local run, Elasticsearch ingestion, hosted model configuration, invite gate, and Cloudflare route.
 - [Portfolio gallery and capture method](portfolio/README.md): ten screenshots, questions, viewport sizes, recorded responses, and regeneration steps.
 - [Synthetic banking warehouse fixture](banking-poc/README.md): PostgreSQL DDL, catalog, relationships, and a small seed for 100 tables and 5,000 columns.
-- [Elasticsearch metadata model](elasticsearch-metadata-model.md): indexing contract, mapping, and sample documents.
+
+**Designs for a possible full implementation**
+
+- [Elasticsearch metadata model](elasticsearch-metadata-model.md): the target indexing model, mapping, and sample documents. Its [section 9](elasticsearch-metadata-model.md#9-what-the-deployed-poc-actually-implements) records the much smaller subset the POC actually indexes — one document type, twelve fields, BM25 and no embeddings.
 - [Minimal architecture proposal](minimal-logical-architecture.md) and [broader design](logical-architecture.md): reference designs for a later corporate implementation; these describe a different scope from this deployed A1 POC.
 
 To regenerate and validate the warehouse fixture with Python's standard library:

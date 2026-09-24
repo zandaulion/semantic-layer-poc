@@ -4,6 +4,11 @@ This model extends the minimal POC/MVP architecture. It uses **one index, three 
 
 The index is a retrieval copy of selected Oracle metadata plus expert-reviewed guidance/examples. Oracle and the reviewed source files remain authoritative.
 
+> **Scope.** This document is a design for a full implementation; it is not a
+> description of the code in this repository. The deployed POC implements a
+> strict subset — one document type, twelve fields, BM25 and no embeddings —
+> which is set out in [section 9](#9-what-the-deployed-poc-actually-implements).
+
 ## 1. Deliverables and assumptions
 
 - [Index creation body](elasticsearch-index-mapping.json) — explicit Elasticsearch field mappings.
@@ -237,3 +242,66 @@ Before publication, the preparation script must check:
 Example physical index: `sql-assistant-metadata-poc-001`; application alias: `sql-assistant-metadata-current`. Use the mapping JSON as the body of index creation after selecting the encoder dimension. Load each object from the sample/data array as a separate document with its `document_id` as `_id`. The sample file is a JSON array, **not a Bulk API NDJSON request**.
 
 Build a complete candidate index, check it, then switch the alias. Readers pin the physical index for all lookups in a request. This preserves the simple full-rebuild approach of the minimal architecture. Do not issue index creation/loading calls against a live cluster until connection, version, model and source metadata have been configured.
+
+## 9. What the deployed POC actually implements
+
+Sections 1–8 describe the target model. This section describes the code in this
+repository, which is a deliberately smaller thing: **one document type, no
+vectors, and twelve fields**. It is written separately rather than folded into
+the sections above so that the gap stays visible instead of being smoothed over.
+
+### Fields
+
+`app/server/ingest.js` creates the index with `dynamic: "strict"`, so this list
+is exhaustive — an unexpected field fails ingestion rather than being added.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `document_id` | keyword | Also the `_id`, so re-ingestion is idempotent |
+| `document_type` | keyword | Always `table` |
+| `status` | keyword | Always `synthetic_fixture`; the search filters on it |
+| `domain_id` | keyword | Ten values across the 100 fixture tables |
+| `table_name` | text + `.exact` keyword | Highest-weighted search field |
+| `title` | text | |
+| `grain` | text | |
+| `table_type` | keyword | |
+| `column_names` | text | Flattened column names, for retrieval |
+| `search_text` | text | Concatenated retrieval text |
+| `columns` | object, `enabled: false` | Kept in `_source`, never indexed or searchable |
+| `relationships` | object, `enabled: false` | Kept in `_source`, never indexed or searchable |
+
+Six of these — `document_id`, `document_type`, `domain_id`, `search_text`,
+`status`, `title` — also appear in the model above. The other six are specific
+to the table fixture. Conversely, the fields the model adds for a full
+implementation are all absent here: no `embedding` or embedding provenance, no
+`access_scope_ids`, no `business_term_ids`, no `connection_id` or
+`sql_dialect`, and no `guidance` or `example` documents.
+
+### Index lifecycle
+
+Ingestion writes to a fresh physical index named `banking-poc-<epoch-ms>` and
+then moves the alias `banking-poc-current` onto it in a single `_aliases` call,
+so readers never observe a half-built index. The alias is what the server
+queries, via `ELASTICSEARCH_INDEX`.
+
+Superseded indices keep their documents and only lose the alias; nothing
+deletes them. On a long-lived deployment they accumulate and are the operator's
+to remove.
+
+### The query
+
+`searchTables()` in `app/server/elastic.js` issues one `multi_match` of type
+`best_fields` over four fields with fixed boosts:
+
+```
+table_name^6   title^4   column_names^3   search_text
+```
+
+filtered to `status: synthetic_fixture`, and to `domain_id` when the caller
+selects a single domain. It requests twelve hits and returns six source fields
+plus `_score`. Before matching, the question passes through a small synonym
+expansion that folds `client`/`customer` together and appends delinquency terms
+to questions about defaulting customers.
+
+This is BM25 only. The hybrid lexical-plus-vector retrieval described in
+section 6 is not implemented, and no part of the POC calls an encoder.

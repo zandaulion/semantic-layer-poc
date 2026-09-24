@@ -1,0 +1,37 @@
+[Unit]
+Description=Banking POC Elasticsearch metadata index
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=docker.elastic.co/elasticsearch/elasticsearch:9.5.4
+ContainerName=banking-poc-elasticsearch
+Network=banking-dwh.network
+# No PublishPort, and that is the point of this file.
+#
+# This node runs with its own HTTP authentication disabled, which was only ever
+# defensible because the port was bound to loopback. Now it is not bound to the
+# host at all: the only thing that can reach it is the app container on the
+# private network. The weakest link stopped being reachable rather than staying
+# reachable and trusted.
+# Deliberately NOT inside the app's data directory.
+#
+# `:Z` gives a mount a private SELinux label, so two containers relabelling
+# overlapping paths take the files away from each other. When the index lived
+# under the app's directory, mounting the parent into the app relabelled the
+# index too, and Elasticsearch came back with a broken node lock and no master.
+# Sibling directories, not nested ones.
+Volume=%h/.local/share/banking-dwh-elasticsearch:/usr/share/elasticsearch/data:Z
+Environment=discovery.type=single-node
+Environment=xpack.security.enabled=false
+Environment="ES_JAVA_OPTS=-Xms1g -Xmx1g"
+Memory=3g
+PodmanArgs=--ulimit=nofile=65535:65535
+NoNewPrivileges=true
+
+[Service]
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

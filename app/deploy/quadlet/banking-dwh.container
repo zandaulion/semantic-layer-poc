@@ -1,0 +1,36 @@
+[Unit]
+Description=Bank DWH Studio PWA and API
+After=network-online.target banking-poc-elasticsearch.service
+Wants=network-online.target banking-poc-elasticsearch.service
+
+[Container]
+Image=localhost/banking-dwh:latest
+ContainerName=banking-dwh
+Network=banking-dwh.network
+# Caddy is the only public path, over the outbound tunnel; nothing on the LAN
+# reaches this directly.
+PublishPort=127.0.0.1:4387:4387
+# The same directory the host service used, so registered devices and issued
+# invites survive the move into a container.
+Volume=%h/.local/share/banking-sql-poc:/data:Z
+EnvironmentFile=%h/.config/banking-sql-poc/server.env
+# Bind to every interface *inside the container*, which is not the same as
+# exposing it. The default of 127.0.0.1 is right for a host process and wrong
+# here: PublishPort forwards to the container's external address, so a server
+# on the container's own loopback is reachable by nothing at all. The isolation
+# is the network namespace, not the bind address.
+Environment=HOST=0.0.0.0
+Environment=DATA_DIR=/data
+Environment=CATALOG_PATH=/srv/banking-poc/catalog.json
+# Reached by container name on the private network. Overrides whatever the
+# environment file still says about loopback.
+Environment=ELASTICSEARCH_URL=http://banking-poc-elasticsearch:9200
+NoNewPrivileges=true
+DropCapability=all
+
+[Service]
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

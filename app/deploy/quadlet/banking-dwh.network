@@ -1,0 +1,8 @@
+[Unit]
+Description=Private network between Bank DWH Studio and its Elasticsearch
+
+[Network]
+NetworkName=banking-dwh
+
+[Install]
+WantedBy=default.target

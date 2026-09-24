@@ -1,5 +1,7 @@
 import { config } from './config.js';
 import { tables, tableDocument } from './catalog.js';
+import { validateCatalog } from './catalog-schema.js';
+import fs from 'node:fs';
 import { elasticRequest } from './elastic.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -85,6 +87,14 @@ async function pruneSuperseded(current) {
 }
 
 export async function ingest() {
+  // Checked here rather than only in the CLI, because this is the last point at
+  // which a bad catalog is still a file on disk instead of an index that
+  // answers questions badly.
+  const { errors } = validateCatalog(JSON.parse(fs.readFileSync(config.catalogPath, 'utf8')));
+  if (errors.length) {
+    throw new Error(`The catalog at ${config.catalogPath} is not valid:\n  - ${errors.join('\n  - ')}`);
+  }
+
   const physical = `banking-poc-${Date.now()}`;
   await elasticRequest(`/${physical}`, { method: 'PUT', body: mapping });
   const lines = [];

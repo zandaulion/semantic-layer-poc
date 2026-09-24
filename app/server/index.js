@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AuthStore, clearCookie, constantTimeTokenMatch, cookieForToken, tokenFromCookie } from './auth.js';
 import { config } from './config.js';
-import { domains, tables } from './catalog.js';
+import { domains, tables, DOCUMENT_STATUS } from './catalog.js';
 import { elasticHealth, searchTables } from './elastic.js';
 import { generateDraft } from './model.js';
 import { checkSql } from './sql-check.js';
@@ -152,7 +152,7 @@ export function createAppServer({ auth = new AuthStore(path.join(config.dataDir,
         const device = auth.deviceForToken(tokenFromCookie(req.headers.cookie));
         if (!device) return json(res, 401, { error: 'not_registered', message: 'Enter an invite code to use this device.' });
         if (pathname === '/api/status' && req.method === 'GET') {
-          return json(res, 200, { elasticsearch: await elasticHealth(), model_configured: Boolean(config.modelApiKey), model: config.modelName, tables: tables.length, metadata_status: 'synthetic_fixture' });
+          return json(res, 200, { elasticsearch: await elasticHealth(), model_configured: Boolean(config.modelApiKey), model: config.modelName, tables: tables.length, metadata_status: DOCUMENT_STATUS });
         }
         if (pathname === '/api/domains' && req.method === 'GET') return json(res, 200, { domains });
         if (pathname === '/api/history' && req.method === 'GET') {
@@ -181,7 +181,7 @@ export function createAppServer({ auth = new AuthStore(path.join(config.dataDir,
           const question = (url.searchParams.get('q') || '').trim();
           const domain = url.searchParams.get('domain') || 'all';
           if (question.length < 2 || question.length > 1000 || (domain !== 'all' && !domains.includes(domain))) return json(res, 400, { error: 'invalid_search' });
-          return json(res, 200, { tables: await searchTables(question, domain), metadata_status: 'synthetic_fixture' });
+          return json(res, 200, { tables: await searchTables(question, domain), metadata_status: DOCUMENT_STATUS });
         }
         if (pathname === '/api/check' && req.method === 'POST') {
           const body = await readJson(req);

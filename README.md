@@ -2,7 +2,7 @@
 
 An invite-only PWA that turns natural-language banking questions into **editable, reviewable PostgreSQL SQL drafts**. This personal proof of concept runs on an Oracle Ampere A1 instance and searches a synthetic banking warehouse catalog with **100 tables and 5,000 columns**. It uses Elasticsearch for schema retrieval and a hosted GPT-OSS model for SQL drafting.
 
-**[Open the PWA](https://your-public-pwa.example.com/)** (invite required) · **[Browse all 10 portfolio screenshots](portfolio/README.md)**
+**[Open the PWA](https://semantic-layer-poc.zandaulion.com/)** (invite required) · **[Browse all 10 portfolio screenshots](portfolio/README.md)**
 
 | Desktop | Phone |
 |---|---|

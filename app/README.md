@@ -12,6 +12,56 @@ The catalog is generated from [`../banking-poc/catalog.json`](../banking-poc/cat
 
 Each successful generation saves its question, subject area, and complete answer in the app's SQLite database under the registered device ID. This includes SQL drafts and clarification responses. The History button lists saved answers newest first, lets the user restore a response, and lets them delete individual entries. History survives PWA reloads and server restarts. It is available only to that registered device; deleting the device removes its history. The list loads 20 entries at a time. Earlier generations made before this feature was deployed are not backfilled, and manual edits to the SQL editor remain in the current tab's session storage rather than being added to history.
 
+## Tests
+
+`npm test` runs everything. No Elasticsearch, no model, and no network: the
+model-facing tests exercise the request-building and response-handling code
+rather than a provider.
+
+| File | What it pins |
+| --- | --- |
+| `catalog.test.js` | Retrieval context for known question shapes |
+| `catalog-schema.test.js` | Catalog validation: required fields, duplicate table names, relationships pointing outside the catalog, descriptions warning rather than failing |
+| `schema-name.test.js` | That the SQL schema comes from the catalog, and that identifier case does not decide whether a draft is accepted |
+| `context-assembly.test.js` | That a fact's dimensions reach the prompt whether or not their names are readable, and that the table budget holds |
+| `sql-check.test.js` | Read-only enforcement, and that valid SQL is not reported as unsafe |
+| `clarification.test.js` | Asking rather than guessing when a period is missing |
+| `ingest.test.js` | Which index generations an ingestion may delete |
+| `auth.test.js`, `server.test.js` | Invite gate, and the endpoints working together |
+
+### The tests that exist because of a real catalog
+
+Three of these pin behaviour that the bundled fixture cannot exercise, because
+the fixture is lower-case and spells every name out. They were written after
+[the naming experiment](../retrieval-and-naming.md) found the corresponding
+defects, and they are the ones to keep if this code is ported.
+
+**Names the catalog uses are not assumed to be readable.** `context-assembly.test.js`
+builds the same small star schema twice — once as `fact_wire_transfer` joined to
+`dim_date`, once as `F_WR_TRF` joined to `D_DT` — and asserts the date dimension
+reaches the prompt in both. Selection used to score dimensions by word overlap
+with the question plus a literal comparison against `dim_date`, so an
+abbreviated catalog got no dimensions at all and drafts silently lost their
+joins. The date join is declared *second* in the fixture on purpose, so
+relationship ordering cannot make the test pass by accident.
+
+**Identifier case does not decide correctness.** `schema-name.test.js` loads a
+catalog declaring `BANK_DWH.D_CUST` and asserts that `BANK_DWH.D_CUST`,
+`bank_dwh.d_cust` and `Bank_Dwh.D_Cust` are all accepted, and that the match is
+reported under the catalog's own spelling. SQL identifiers are case-insensitive
+unless quoted, so a model may return any casing; the check used to lower-case
+references while the catalog was keyed by its own spelling, which rejected every
+correct draft against an uppercase warehouse.
+
+**The schema name is the catalog's, not a literal.** The same file points
+`CATALOG_PATH` at a catalog declaring `risk_mart` and asserts that documents,
+titles and the known-table check all follow it, while a catalog omitting
+`schema_name` still falls back to `bank_dwh`.
+
+These three run in child processes, because the catalog resolves once when the
+module is first imported and a different catalog therefore needs a different
+process rather than a reload.
+
 ## A1 deployment
 
 Both halves run as rootless Podman containers managed by Quadlet. `./deploy.sh`

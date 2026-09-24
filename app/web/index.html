@@ -56,7 +56,7 @@
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-title">TRY A QUESTION</div>
-          <button class="sample-question" type="button" data-question="Show loan repayments by customer for the first week of January 2026" data-domain="lending">Loan repayments by customer <span>↗</span></button>
+          <button class="sample-question" type="button" data-question="Show total actual payment amount by customer for loan repayments on business dates January 1 through 7, 2026" data-domain="lending">Loan repayments by customer <span>↗</span></button>
           <button class="sample-question" type="button" data-question="Count card authorizations by merchant category" data-domain="cards">Card activity by merchant <span>↗</span></button>
           <button class="sample-question" type="button" data-question="List customers and their current risk band" data-domain="conformed">Customer risk bands <span>↗</span></button>
         </div>
@@ -78,7 +78,7 @@
         <section class="panel ask-panel" aria-labelledby="question-title">
           <div class="panel-heading"><div><span class="step">01</span><h2 id="question-title">Ask a question</h2></div><span class="subtle">PostgreSQL · bank_dwh</span></div>
           <label for="question" class="sr-only">Question or revision instruction</label>
-          <textarea id="question" rows="4" maxlength="1000" placeholder="Example: Show total loan repayments by customer for January 2026…"></textarea>
+          <textarea id="question" rows="4" maxlength="1000" placeholder="Example: Show total actual payment amount by customer for loan repayments in January 2026…"></textarea>
           <div class="ask-actions"><span class="input-hint">The model sees the retrieved synthetic schema, not DWH data rows.</span><div class="button-group"><button id="find-button" class="button button-secondary" type="button">Find tables</button><button id="generate-button" class="button button-primary" type="button">Generate draft <span aria-hidden="true">↗</span></button></div></div>
         </section>
 

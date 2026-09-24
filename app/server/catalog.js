@@ -26,21 +26,39 @@ export function tableDocument(table) {
 }
 
 export function contextForHits(question, hits, maxTables = 8) {
+  const words = (value) => new Set((String(value).toLowerCase().match(/[a-z0-9]+/g) || [])
+    .map((word) => word.endsWith('ies') && word.length > 4 ? `${word.slice(0, -3)}y` : word.endsWith('s') && word.length > 3 ? word.slice(0, -1) : word));
+  const questionWords = words(question);
+  const overlap = (table) => [...words(table.table_name.replace(/^(fact|dim)_/, ''))]
+    .filter((word) => questionWords.has(word)).length;
+  const dateIntent = /\b(date|daily|day|week|month|year|quarter|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|20\d\d)\b/i.test(question);
+  const ranked = hits.map((hit, index) => ({ table: tableByName.get(hit.table_name), index }))
+    .filter(({ table }) => table)
+    .sort((a, b) => overlap(b.table) - overlap(a.table) || a.index - b.index);
   const selected = new Map();
-  for (const hit of hits) {
-    const table = tableByName.get(hit.table_name);
-    if (table) selected.set(table.table_name, table);
-    if (selected.size >= maxTables) break;
+  const directLimit = Math.max(1, maxTables - 3);
+  for (const { table } of ranked) {
+    selected.set(table.table_name, table);
+    if (selected.size >= directLimit) break;
   }
-  const questionWords = question.toLowerCase().replace(/[^a-z0-9]+/g, ' ');
+  const candidateDimensions = new Map();
   for (const table of [...selected.values()]) {
     if (table.table_type !== 'fact') continue;
     for (const relation of table.relationships) {
-      if (selected.size >= maxTables) break;
       const dim = tableByName.get(relation.to_table);
-      if (dim && questionWords.includes(dim.table_name.slice(4).replaceAll('_', ' '))) {
-        selected.set(dim.table_name, dim);
-      }
+      if (!dim || selected.has(dim.table_name)) continue;
+      const relevance = overlap(dim) * 10 + (dim.table_name === 'dim_date' && dateIntent ? 8 : 0);
+      if (relevance > 0) candidateDimensions.set(dim.table_name, { table: dim, relevance: Math.max(relevance, candidateDimensions.get(dim.table_name)?.relevance || 0) });
+    }
+  }
+  for (const { table } of [...candidateDimensions.values()].sort((a, b) => b.relevance - a.relevance)) {
+    if (selected.size >= maxTables) break;
+    selected.set(table.table_name, table);
+  }
+  if (selected.size < directLimit) {
+    for (const { table } of ranked) {
+      selected.set(table.table_name, table);
+      if (selected.size >= directLimit) break;
     }
   }
   const selectedNames = new Set(selected.keys());

@@ -30,6 +30,8 @@ The default `MODEL_BASE_URL` uses Groq's OpenAI-compatible chat completions API 
 
 For the POC example “clients in default at end of August,” the app resolves the default flag and date relationship from the synthetic catalog, asks for a missing year, and uses a catalog-checked SQL rule after a year is supplied. The rule treats the latest available daily snapshot in that month as month end and labels the default definition as provisional. Other requests continue through the hosted model.
 
+The example “number of active customers last month” also uses a catalog-checked rule. It counts distinct business IDs in the customer dimension version valid at the end of the previous calendar month, with `is_active = TRUE`. Review notes state the month-end and exclusive effective-to-date assumptions. This rule uses the dimension's historical effective dates; it does not infer customer activity from account relationships.
+
 ## PWA framework attribution
 
 `web/sw.js`, `web/sw-update.js`, `web/pwa-update.js`, and `web/bust.html` come from [pwa-kit](https://github.com/zandaulion/pwa-kit) at commit `e2ad9dced4f471afb3d307b00af214dacd0d2e6e`, with the service worker adapted to avoid caching cross-origin requests and invite links and the page updater adapted to check while the app stays open. The invite endpoints follow [pwa-invite-console](https://github.com/zandaulion/pwa-invite-console) at commit `18b45653ff1a48d0336c61951d91821044957337`. No console files are copied into this repository.

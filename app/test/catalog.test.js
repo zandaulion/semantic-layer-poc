@@ -5,6 +5,7 @@ import { expandSearchQuery } from '../server/elastic.js';
 
 test('client wording retrieves the customer dimension for an active count', () => {
   assert.equal(expandSearchQuery('Number of active clients today'), 'Number of active customer today');
+  assert.equal(expandSearchQuery('Number of active customers last month'), 'Number of active customer last month');
   const hits = ['dim_customer', 'fact_customer_interaction', 'dim_account_status']
     .map((table_name) => ({ table_name }));
   const context = contextForHits('Number of active clients today', hits);

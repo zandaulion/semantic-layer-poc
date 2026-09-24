@@ -30,3 +30,16 @@ test('a specified year produces a catalog-grounded client list with no invented 
   assert.equal(result.checks.tables, 'passed');
   assert.equal(result.sources.length, 3);
 });
+
+test('last-month active customers uses the historical customer version at month end', async () => {
+  const hits = ['dim_customer', 'dim_date', 'dim_account_relationship']
+    .map((table_name) => ({ table_name }));
+  const result = await generateDraft({ question: 'Number of active customers last month', hits });
+  assert.equal(result.status, 'draft');
+  assert.match(result.sql, /COUNT\(DISTINCT c\.business_id\)/);
+  assert.match(result.sql, /c\.effective_from_date <= \(date_trunc\('month', CURRENT_DATE\)::date - 1\)/);
+  assert.match(result.sql, /c\.effective_to_date > \(date_trunc\('month', CURRENT_DATE\)::date - 1\)/);
+  assert.doesNotMatch(result.sql, /is_current|date_key|dim_account_relationship/);
+  assert.equal(result.checks.tables, 'passed');
+  assert.deepEqual(result.sources, ['table.bank_dwh.dim_customer']);
+});

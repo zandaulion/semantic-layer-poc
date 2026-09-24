@@ -1,7 +1,7 @@
 import { config } from './config.js';
 
 export function expandSearchQuery(question) {
-  const normalized = question.replace(/\bclients?\b/gi, 'customer');
+  const normalized = question.replace(/\b(?:clients?|customers?)\b/gi, 'customer');
   return /\bcustomer\b/i.test(normalized) && /\bdefault(?:ed)?\b/i.test(normalized)
     ? `${normalized} loan delinquency default_flag daily`
     : normalized;

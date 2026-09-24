@@ -79,6 +79,31 @@ WHERE f.default_flag = TRUE
   };
 }
 
+function knownActiveCustomersLastMonthDraft(question, context) {
+  if (!/^(?:(?:number of|count(?: of)?|how many)\s+)active\s+(?:customers?|clients?)\s+(?:last|previous)\s+month\??$/i.test(question.trim())) return null;
+  const customer = context.tables.find((table) => table.table_name === 'dim_customer');
+  const required = ['business_id', 'is_active', 'effective_from_date', 'effective_to_date'];
+  if (!customer || !required.every((column) => customer.columns.some((entry) => entry.column_name === column))) return null;
+  const monthEnd = "(date_trunc('month', CURRENT_DATE)::date - 1)";
+  const sql = `SELECT COUNT(DISTINCT c.business_id) AS active_customers_last_month
+FROM bank_dwh.dim_customer AS c
+WHERE c.is_active = TRUE
+  AND c.effective_from_date <= ${monthEnd}
+  AND (c.effective_to_date IS NULL OR c.effective_to_date > ${monthEnd});
+`;
+  return {
+    sql,
+    interpretation: 'Counts distinct customers active at the end of the previous calendar month using the historical customer dimension version valid on that date.',
+    assumptions: [
+      '“Last month” means the previous calendar month, evaluated when the SQL runs.',
+      'Active means dim_customer.is_active = TRUE on the version valid at month end.',
+      'effective_to_date is treated as an exclusive end date; confirm this SCD convention.',
+      'business_id identifies a customer across dimension versions.',
+    ],
+    sources: ['table.bank_dwh.dim_customer'],
+  };
+}
+
 export async function generateDraft({ question, previousSql = '', hits }) {
   const context = contextForHits(expandSearchQuery(question), hits);
   const retrievedTables = context.tables.map((table) => ({
@@ -113,7 +138,8 @@ export async function generateDraft({ question, previousSql = '', hits }) {
       checks: null, retrieved_tables: retrievedTables, metadata_status: 'synthetic_fixture',
     };
   }
-  const knownDraft = previousSql.trim() ? null : knownDefaultClientDraft(question, context);
+  const knownDraft = previousSql.trim() ? null
+    : knownDefaultClientDraft(question, context) || knownActiveCustomersLastMonthDraft(question, context);
   if (knownDraft) {
     return {
       status: 'draft', ...knownDraft, clarification_question: null,

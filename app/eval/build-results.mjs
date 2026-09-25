@@ -24,78 +24,110 @@ const answered = (r) => Boolean(r) && r.path !== 'failed';
 const agrees = (a, b) => a.status === b.status
   && JSON.stringify(a.tables_used ?? []) === JSON.stringify(b.tables_used ?? []);
 
-const hosted = await read('baselines/groq-gpt-oss-20b.json');
-const local = await read('baselines/llamacpp-cpu-mxfp4.json');
+// What the result files cannot say about themselves: where each run was
+// served from. The first run is the one the others are read against.
+const runs = [
+  {
+    file: 'baselines/groq-gpt-oss-20b.json',
+    name: 'Hosted',
+    server: 'Groq, OpenAI-compatible endpoint',
+    weights: 'as served by the provider',
+    hardware: "the provider's",
+  },
+  {
+    file: 'baselines/llamacpp-cpu-mxfp4.json',
+    name: 'CPU',
+    server: 'llama.cpp (`ghcr.io/ggml-org/llama.cpp:server`)',
+    weights: '`gpt-oss-20b-MXFP4.gguf`, the file the model ships in',
+    hardware: '4 Ampere cores, 22 GB RAM, no GPU (aarch64)',
+  },
+  {
+    file: 'baselines/llamacpp-cuda-rtx4090.json',
+    name: 'GPU',
+    server: 'llama.cpp (`ghcr.io/ggml-org/llama.cpp:server-cuda`)',
+    weights: 'the same MXFP4 file, from `ggml-org/gpt-oss-20b-GGUF`',
+    hardware: 'one RTX 4090 (24 GB), rented on RunPod Community Cloud (x86-64)',
+  },
+];
+for (const run of runs) {
+  run.data = await read(run.file);
+  run.byId = Object.fromEntries(run.data.results.map((r) => [r.id, r]));
+}
 const { cases } = await read('cases.json');
-const index = (run) => Object.fromEntries(run.results.map((r) => [r.id, r]));
-const h = index(hosted);
-const l = index(local);
 
 const lines = [];
 const w = (...text) => lines.push(...text);
+const row = (label, cell) => w(`| ${label} | ${runs.map(cell).join(' | ')} |`);
+const header = (first) => w(`| ${first} | ${runs.map((r) => r.name).join(' | ')} |`, `| --- |${' --- |'.repeat(runs.length)}`);
 
 w('# Backend comparison results', '');
 w('Generated from the recorded runs in [`baselines/`](baselines) by',
   '`node eval/build-results.mjs`. Every figure in the tables comes out of those',
   'files; none is retyped. Rerun it after recording a new run.', '');
 
-w('## The two runs', '');
-w('| | Hosted | Local |', '| --- | --- | --- |');
-w(`| Label | \`${hosted.label}\` | \`${local.label}\` |`);
-w(`| Model | \`${hosted.backend.model}\` | \`${local.backend.model}\` |`);
-w('| Server | Groq, OpenAI-compatible endpoint | llama.cpp (`ghcr.io/ggml-org/llama.cpp:server`) |');
-w('| Weights | as served by the provider | `gpt-oss-20b-MXFP4.gguf`, the file the model ships in |');
-w("| Hardware | the provider's | 4 Ampere cores, 22 GB RAM, no GPU (aarch64) |");
-w(`| Recorded | ${hosted.recorded_at.slice(0, 10)} | ${local.recorded_at.slice(0, 10)} |`, '');
-w('Same weights, two runtimes. That pairing is the point: a difference below is',
-  'attributable to how the model is served, not to which model it is.', '');
+w('## The runs', '');
+header('');
+row('Label', (r) => `\`${r.data.label}\``);
+row('Model', (r) => `\`${r.data.backend.model}\``);
+row('Server', (r) => r.server);
+row('Weights', (r) => r.weights);
+row('Hardware', (r) => r.hardware);
+row('Recorded', (r) => r.data.recorded_at.slice(0, 10));
+w('');
+w('Same weights throughout. Hosted against CPU changes the runtime; CPU against',
+  'GPU keeps the runtime and changes only the hardware under it.', '');
 
 w('## Summary', '');
-const [sh, sl] = [hosted.summary, local.summary];
-w('| Measure | Hosted | Local |', '| --- | --- | --- |');
-w(`| Cases passed | ${sh.passed}/${sh.cases} | ${sl.passed}/${sl.cases} |`);
-w(`| Table grounding | ${sh.grounding_ok}/${sh.answered} answered | ${sl.grounding_ok}/${sl.answered} answered |`);
-w(`| Expected status | ${sh.status_ok}/${sh.answered} | ${sl.status_ok}/${sl.answered} |`);
-w(`| Schema violations | ${sh.failures.schema_violation ?? 0} | ${sl.failures.schema_violation ?? 0} |`);
-w(`| Model emitted a write | ${sh.model_emitted_write ?? 0} | ${sl.model_emitted_write ?? 0} |`);
-w(`| Latency p50 | ${time(sh.latency_ms.p50)} | ${time(sl.latency_ms.p50)} |`);
-w(`| Latency p95 | ${time(sh.latency_ms.p95)} | ${time(sl.latency_ms.p95)} |`);
-w(`| Prompt tokens, mean | ${sh.tokens.prompt_mean} | ${sl.tokens.prompt_mean} |`);
-w(`| Completion tokens, mean | ${sh.tokens.completion_mean} | ${sl.tokens.completion_mean} |`, '');
+header('Measure');
+row('Cases passed', (r) => `${r.data.summary.passed}/${r.data.summary.cases}`);
+row('Table grounding', (r) => `${r.data.summary.grounding_ok}/${r.data.summary.answered} answered`);
+row('Expected status', (r) => `${r.data.summary.status_ok}/${r.data.summary.answered}`);
+row('Schema violations', (r) => r.data.summary.failures.schema_violation ?? 0);
+row('Model emitted a write', (r) => r.data.summary.model_emitted_write ?? 0);
+row('Latency p50', (r) => time(r.data.summary.latency_ms.p50));
+row('Latency p95', (r) => time(r.data.summary.latency_ms.p95));
+row('Prompt tokens, mean', (r) => r.data.summary.tokens.prompt_mean);
+row('Completion tokens, mean', (r) => r.data.summary.tokens.completion_mean);
+w('');
 
-const rateLimited = Object.entries(sh.failures).filter(([kind]) => kind !== 'schema_violation');
-if (rateLimited.length) {
-  const total = rateLimited.reduce((sum, [, count]) => sum + count, 0);
-  const recovered = Object.keys(h).filter((id) => !answered(h[id]) && answered(l[id]));
-  w(`The hosted run's ${total} failures were \`provider_error\`: a free-tier rate limit,`,
+for (const run of runs) {
+  const failures = Object.entries(run.data.summary.failures).filter(([kind]) => kind !== 'schema_violation');
+  if (!failures.length) continue;
+  const total = failures.reduce((sum, [, count]) => sum + count, 0);
+  const others = runs.filter((other) => other !== run);
+  const unanswered = Object.keys(run.byId).filter((id) => !answered(run.byId[id]));
+  const recovered = unanswered.filter((id) => others.some((other) => answered(other.byId[id])));
+  w(`The ${run.name.toLowerCase()} run's ${total} failures were \`provider_error\`: a free-tier rate limit,`,
     'reached by running twelve prompts back to back. They say nothing about the',
-    `model, and ${recovered.length ? 'the affected cases' : 'no case'} ${recovered.length ? 'were answered in the local run, so every case in the set has a verified result.' : 'was left unverified.'}`,
+    recovered.length === unanswered.length
+      ? 'model, and the affected cases were answered in the other runs, so every case\nin the set has a verified result.'
+      : 'model, and some affected cases were left unverified.',
     '');
 }
 
 w('## Every case', '');
-w('| Case | Hosted status | Hosted time | Local status | Local time | Agree? |');
-w('| --- | --- | --- | --- | --- | --- |');
+w(`| Case | ${runs.map((r) => `${r.name} status | ${r.name} time`).join(' | ')} | Agree? |`);
+w(`| --- |${' --- | --- |'.repeat(runs.length)} --- |`);
+const disagreements = [];
 for (const { id } of cases) {
-  const [a, b] = [h[id], l[id]];
-  const verdict = answered(a) && answered(b) ? (agrees(a, b) ? 'yes' : '**differs**') : '—';
-  w(`| \`${id}\` | ${cellStatus(a)} | ${time(a?.latency_ms)} | ${cellStatus(b)} | ${time(b?.latency_ms)} | ${verdict} |`);
+  const results = runs.map((r) => r.byId[id]);
+  const done = results.filter(answered);
+  const verdict = done.length < 2 ? '—' : done.every((r) => agrees(done[0], r)) ? 'yes' : '**differs**';
+  if (verdict === '**differs**') disagreements.push(id);
+  w(`| \`${id}\` | ${results.map((r) => `${cellStatus(r)} | ${time(r?.latency_ms)}`).join(' | ')} | ${verdict} |`);
 }
 w('');
 
-w('## Where the two disagreed', '');
+w('## Where the runs disagreed', '');
 const byId = Object.fromEntries(cases.map((c) => [c.id, c]));
-for (const { id } of cases) {
-  const [a, b] = [h[id], l[id]];
-  if (!answered(a) || !answered(b) || agrees(a, b)) continue;
+for (const id of disagreements) {
+  const present = runs.filter((r) => answered(r.byId[id]));
+  const differ = (field) => new Set(present.map((r) => JSON.stringify(r.byId[id][field] ?? null))).size > 1;
   w(`### \`${id}\``, '', `> ${byId[id].question}`, '');
-  if (a.status !== b.status) w(`- Status: hosted \`${a.status}\`, local \`${b.status}\``);
-  if (JSON.stringify(a.tables_used) !== JSON.stringify(b.tables_used)) {
-    w(`- Hosted used ${list(a.tables_used)}`);
-    w(`- Local used ${list(b.tables_used)}`);
-  }
-  if (a.model_emitted_write !== b.model_emitted_write) {
-    w(`- Emitted a write: hosted ${a.model_emitted_write ? 'yes' : 'no'}, local ${b.model_emitted_write ? 'yes' : 'no'}`);
+  if (differ('status')) w(`- Status: ${present.map((r) => `${r.name} \`${r.byId[id].status}\``).join(', ')}`);
+  if (differ('tables_used')) for (const r of present) w(`- ${r.name} used ${list(r.byId[id].tables_used)}`);
+  if (differ('model_emitted_write')) {
+    w(`- Emitted a write: ${present.map((r) => `${r.name} ${r.byId[id].model_emitted_write ? 'yes' : 'no'}`).join(', ')}`);
   }
   w('');
 }

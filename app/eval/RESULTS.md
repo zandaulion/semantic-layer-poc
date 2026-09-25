@@ -253,6 +253,13 @@ no slot between questions, so the number to size against is throughput: about
 How many analysts that serves depends on how often they ask, which this POC has
 no data on.
 
+None of this capacity is reachable through the application as it stands. The
+server generates one draft at a time for everyone and answers a second request
+with `429 busy`. `load.mjs` calls the pipeline directly, so the sweep measured
+the model server, not the app. Using the card means replacing that flag with a
+bounded pool — a limit near the saturation point above, a queue and a timeout —
+and that change belongs before any sizing conversation, not after.
+
 Two conditions make these figures conservative rather than optimistic. Prefix
 caching was off, so no request reused another's work; with the prompt reordered
 as above, it would. And the context limit was 8,192 tokens, which is ample for

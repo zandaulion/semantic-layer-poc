@@ -200,7 +200,10 @@ in a guard until people route around it.
 
 **What it does.** Runs the real pipeline over questions whose correct answers the
 schema determines, scores grounding, status and read-only safety, classifies
-failures, and writes comparable result files per backend.
+failures, and writes comparable result files per backend. A companion script,
+`eval/load.mjs`, sends the same model requests at rising concurrency and reports
+latency, throughput and failures per level, so a serving stack can be sized as
+well as compared.
 
 **Verdict.** Reuse — and this is arguably the most portable thing in the
 repository. The cases are fixture-bound, but the method is not: ground truth
@@ -211,7 +214,8 @@ contract" from "the account hit a rate limit".
 A bank will need exactly this for model upgrades, quantisation changes, prompt
 edits and serving-stack migrations. Bringing a validated method is a stronger
 position than bringing benchmark numbers for a stack the bank will not use.
-See [RESULTS.md](app/eval/RESULTS.md) for what it detected on first use.
+See [RESULTS.md](app/eval/RESULTS.md) for what it detected on first use, and
+for the vLLM run and concurrency sweep on a rented RTX 4090.
 
 ## 11. Access control
 
@@ -266,5 +270,10 @@ Named explicitly, so nobody infers these exist:
 - **Business term / metric layer.** No glossary, no approved metric definitions.
   The catalog rules (7) are the nearest thing and they are hardcoded.
 - **Lineage.** Relationships are candidate joins, not derived lineage.
-- **Concurrency behaviour.** Every measurement here is single-user and sequential.
+- **Concurrent generation.** The server generates one draft at a time for all
+  users: `/api/generate` answers a second request with `429 busy` until the
+  first finishes. The concurrency sweep measured the model server directly,
+  around this guard, and found one RTX 4090 handling about 240 questions a
+  minute with 32 in flight. The application cannot use any of that until the
+  single flag becomes a bounded pool with a queue and a timeout.
 - **Audit.** History is per-device convenience, not an audit trail.

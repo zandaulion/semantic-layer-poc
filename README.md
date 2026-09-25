@@ -49,9 +49,9 @@ podman exec banking-dwh node eval/run.mjs --compare app/eval/baselines/groq-gpt-
 A second backend to compare against needs no GPU: `app/deploy/quadlet/gpt-oss-local.container`
 serves the same `gpt-oss-20b` weights from CPU through llama.cpp, so the
 comparison can be run on the machine that already hosts the POC. The same
-weights were also served by vLLM on a rented RTX 4090, the server an on-prem
-deployment would most likely use, and `app/eval/load.mjs` measured that card
-under rising concurrency. The runs are recorded in `app/eval/baselines/` and
+weights were also served on a rented RTX 4090, by llama.cpp and by vLLM, the
+server an on-prem deployment would most likely use, and `app/eval/load.mjs`
+measured the vLLM card under rising concurrency. The runs are recorded in `app/eval/baselines/` and
 compared in [app/eval/RESULTS.md](app/eval/RESULTS.md). The backends agreed on
 every required table and none violated the JSON schema contract, even with 64
 requests batched on vLLM, but they differed on which dimensions they joined and
@@ -81,7 +81,7 @@ codebase. The two groups below are separated for that reason.
 - [Portfolio gallery and capture method](portfolio/README.md): ten screenshots, questions, viewport sizes, recorded responses, and regeneration steps.
 - [Synthetic banking warehouse fixture](banking-poc/README.md): PostgreSQL DDL, catalog, relationships, and a small seed for 100 tables and 5,000 columns.
 - [Backend evaluation harness](app/eval/README.md): twelve schema-grounded questions, the scoring rules, and how to compare two inference backends.
-- [Backend comparison results](app/eval/RESULTS.md): the same model served hosted, on CPU and by vLLM on a rented GPU, how one card behaves under load, what agreed, what did not, and what it does not settle.
+- [Backend comparison results](app/eval/RESULTS.md): the same model served hosted, on CPU, and by llama.cpp and vLLM on a rented GPU, how one card behaves under load, what agreed, what did not, and what it does not settle.
 - [Retrieval and naming](retrieval-and-naming.md): what happens to retrieval when the warehouse has bank-style abbreviated names instead of readable ones, and which metadata recovers it.
 
 **Designs for a possible full implementation**

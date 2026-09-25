@@ -185,13 +185,27 @@ podman exec \
   banking-dwh node eval/run.mjs --label vllm-cuda-rtx4090 --out /tmp/vllm.json
 ```
 
+llama.cpp works on a rented card too, with one precaution. The recorded
+llama.cpp GPU baseline used the image and flags of the CPU quadlet plus two
+that make the GPU explicit:
+
+```
+image  ghcr.io/ggml-org/llama.cpp:server-cuda
+entry  /bin/sh -c "/app/llama-server --list-devices; exec /app/llama-server
+       -hf ggml-org/gpt-oss-20b-GGUF --device CUDA0 -ngl 999 --host 0.0.0.0
+       --port 8080 -c 8192 --parallel 1 --jinja --metrics --api-key <random>"
+port   8080/http
+disk   30 GB
+```
+
 Three things learned the expensive way:
 
-- **llama.cpp falls back to the CPU without failing.** A run with its CUDA image
-  and `-ngl 999` generated at 28 tokens a second because the card was never
-  used, and nothing reported an error. vLLM refuses to start without a GPU, so
-  a vLLM run that answers is a GPU run. With llama.cpp, check the startup log
-  for the KV cache on `CUDA0` rather than `CPU` before trusting a figure.
+- **llama.cpp falls back to the CPU without failing.** On two Community Cloud
+  hosts, the CUDA image with `-ngl 999` never used the card, generated at 28
+  tokens a second, and reported no error. The same image and flags used the
+  card on Secure Cloud. `--device CUDA0` turns a missing card into an error,
+  and `--list-devices` in the startup log shows what llama.cpp could see. vLLM
+  refuses to start without a GPU, so a vLLM run that answers is a GPU run.
 - **A community host can arrive with its card partly occupied.** One reported
   18 of 23.5 GB free, below what vLLM reserves, and the engine crash-looped.
   Recreating the pod landed on the same host; Secure Cloud did not have the
@@ -266,16 +280,18 @@ interesting case: both backends answered acceptably but differently, which is th
 drift that a pass rate alone would hide.
 
 `baselines/` holds recorded runs kept as reference points: `groq-gpt-oss-20b.json`,
-`llamacpp-cpu-mxfp4.json`, `llamacpp-x86-cpu-runpod.json` and
-`vllm-cuda-rtx4090.json`, the same weights served four ways, plus
+`llamacpp-cpu-mxfp4.json`, `llamacpp-x86-cpu-runpod.json`,
+`llamacpp-cuda-rtx4090.json` and `vllm-cuda-rtx4090.json`, the same weights
+served five ways, plus
 `load-vllm-cuda-rtx4090.json` from the concurrency sweep. They are records of
 what each backend did on one day, not targets to hit.
 
 ## Results
 
 [RESULTS.md](RESULTS.md) holds the recorded comparison: the same `gpt-oss-20b`
-weights served by a hosted provider, by llama.cpp on two different CPUs, and by
-vLLM on one rented RTX 4090, plus that GPU's concurrency sweep. Its
+weights served by a hosted provider, by llama.cpp on two different CPUs and on
+a rented RTX 4090, and by vLLM on the same model of card, plus vLLM's
+concurrency sweep. Its
 tables are generated from the files in `baselines/` by `node eval/build-results.mjs`,
 so no figure there is retyped; the reading of those figures is written by hand
 underneath, in `results-discussion.md`.

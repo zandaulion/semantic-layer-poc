@@ -40,8 +40,8 @@ Asked to delete duplicate customer records, the backends split:
 - **Hosted** produced a `DELETE … USING` statement behind a CTE. The statement
   check caught it, the status was downgraded to `needs_revision`, and no
   executable write was ever presented as a draft.
-- **llama.cpp** on both CPUs, and **vLLM**, declined, returned no SQL at all,
-  and asked a clarifying question.
+- **llama.cpp** on both CPUs and on the GPU, and **vLLM**, declined, returned
+  no SQL at all, and asked a clarifying question.
 
 Same weights, same temperature, opposite handling of the only destructive
 request in the set. Both outcomes were safe, but only one of them was
@@ -55,10 +55,10 @@ this harness found in it mattered more than a false positive normally would.
 
 ### Dimension joins drift, in both directions
 
-For wire transfers by currency the hosted backend and the x86 CPU run joined
-`dim_currency`; the A1 CPU run and vLLM grouped by the surrogate key. For FX
-rates by currency only the hosted backend left `dim_currency` out. Both forms
-answer the question correctly.
+For wire transfers by currency the hosted backend, the x86 CPU run and
+llama.cpp on the GPU joined `dim_currency`; the A1 CPU run and vLLM grouped by
+the surrogate key. For FX rates by currency only the hosted backend left
+`dim_currency` out. Both forms answer the question correctly.
 
 The pattern is what makes this informative. A systematic difference — one
 backend always joining, the other never — would suggest a capability gap. What
@@ -78,15 +78,15 @@ response would have been to stop believing the harness.
 A specific worry going in was that `reasoning_effort: 'low'` is a gpt-oss
 parameter that a different server might quietly ignore, letting reasoning run
 long enough to truncate the answer against `max_completion_tokens`. Mean
-completion tokens were 237 hosted, 226 and 220 on the two llama.cpp runs, and
+completion tokens were 237 hosted, 220–226 on the three llama.cpp runs, and
 193 on vLLM. Whatever each server did with the field, the effect on output
 length was not material at this prompt size.
 
 ### The later runs used newer retrieval
 
 The retrieval fix recorded in [retrieval and naming](../../retrieval-and-naming.md)
-landed after the A1 CPU run and before the x86 and vLLM runs, so they did not
-see identical prompts everywhere. Ten of the twelve cases retrieved the same
+landed after the A1 CPU run and before all the rented-pod runs, so they did
+not see identical prompts everywhere. Ten of the twelve cases retrieved the same
 tables and sent the same number of prompt tokens. The other two,
 `active-customers` and `refuse-write`, retrieved eight tables instead of five,
 which is why the mean prompt grew from 2,598 to 2,797 tokens. Neither changed
@@ -95,32 +95,44 @@ self-hosted run.
 
 ### The x86 run was meant to be a GPU run
 
-The run labelled x86 CPU was started on a RunPod pod with an RTX 4090, using
-llama.cpp's CUDA image and `-ngl 999`, and was first recorded as a GPU run. It
-was not one. Generation ran at about 28 tokens per second where a 4090 manages
-several times that, and a second pod started from the same image with the same
-flags and verbose logging allocated its KV cache and compute buffers on the CPU:
-llama.cpp never used the card. Why is not established. The image asks for CUDA
-12.8 and the host offered 13.0, which should work, and the log lines that would
-have said why the CUDA backend was skipped were not retrievable before the pod
-was deleted.
+The run labelled x86 CPU was started on a RunPod Community Cloud pod with an
+RTX 4090, using llama.cpp's CUDA image and `-ngl 999`, and was first recorded
+as a GPU run. It was not one. Generation ran at about 28 tokens per second, and
+a second community pod started from the same image with the same flags and
+verbose logging allocated its KV cache and compute buffers on the CPU:
+llama.cpp never used the card, and reported no error.
 
-It stays in the comparison because it is still a clean record of something: the
-same llama.cpp on a different CPU, which is what makes the wire-transfers
-disagreement above informative. It is not a GPU measurement, and its 10 s
-latency is what 64 x86 threads did, not what the card can do.
+The same image, flags and driver then worked on a Secure Cloud pod. Before
+starting the server it listed `CUDA0: NVIDIA GeForce RTX 4090 (23685 MiB free)`,
+and the server read prompts at about 11,500 tokens per second and generated at
+about 200 — seven times the fallback's rate. That run is the llama.cpp GPU
+column. So the fallback belonged to the community hosts, not to the image or
+the flags; what on those hosts hid the card from llama.cpp was not established.
+
+The x86 run stays in the comparison because it is still a clean record of
+something: the same llama.cpp on a different CPU, which is what makes the
+wire-transfers disagreement above informative. It is not a GPU measurement.
 
 The lesson for anyone repeating this is that llama.cpp falls back to the CPU
-without failing, so a CUDA image and `-ngl` prove nothing on their own. vLLM
-refuses to start without a GPU, which is why its figures need no such caveat.
+without failing, so a CUDA image and `-ngl` prove nothing on their own. Passing
+`--device CUDA0` makes a missing card an error, and `--list-devices` before
+the server starts shows what llama.cpp can see. vLLM refuses to start without
+a GPU, which is why its figures needed no such check.
 
 ### Latency is not comparable across runs, and should not be quoted as if it were
 
-The p50 was 598 ms hosted, 161 s on four A1 cores, 10.1 s on the x86 host CPU
-and 1.3 s on vLLM with an RTX 4090. That measures the hardware and the network
-path, not the software change. Grounding and behaviour carry between runs;
-timing carries only within one. The vLLM figure includes a round trip from the
-A1 host in Frankfurt through RunPod's HTTPS proxy to a pod in Romania.
+The p50 was 598 ms hosted, 161 s on four A1 cores, 10.1 s on the x86 host CPU,
+and 1.5 s for llama.cpp and 1.3 s for vLLM on the same model of RTX 4090. That
+measures the hardware and the network path, not the software change. Grounding
+and behaviour carry between runs; timing carries only within one. Both GPU
+figures include a round trip from the A1 host in Frankfurt through RunPod's
+HTTPS proxy to a pod in Romania.
+
+One request at a time, the two servers are close. vLLM's higher p95 is its first
+request, `active-customers` at 3.9 s; its other model-backed cases took
+0.9–1.6 s. Where they will differ is under load: the llama.cpp server ran with a
+single slot, as the CPU quadlet does, and was not put through the concurrency
+sweep.
 
 Two numbers from the A1 CPU run are worth keeping anyway:
 
@@ -164,16 +176,19 @@ would.
 
 ### What the GPU runs cost
 
-Five RunPod pods over the two sessions, all RTX 4090, came to roughly $0.25:
-the run that turned out to be CPU-bound, the pod that diagnosed it, two vLLM
-starts on a community host whose card was already partly occupied by something
-else, and the Secure Cloud pod that produced the vLLM results and the sweep in
-seven minutes at $0.74 an hour.
+Six RunPod pods, all RTX 4090, came to roughly $0.30: the run that turned out
+to be CPU-bound, the pod that diagnosed it, two vLLM starts on a community host
+whose card was already partly occupied by something else, the Secure Cloud pod
+that produced the vLLM results and the sweep in seven minutes at $0.74 an hour,
+and a four-minute Secure Cloud pod for the llama.cpp GPU run.
 
 ## What this does not settle
 
 - **TGI or NIM.** vLLM held the schema contract. The other on-prem servers have
   their own constrained-decoding engines and would each need this run.
+- **llama.cpp under load.** Its GPU run used one slot. How it batches against
+  vLLM on the same card is unmeasured; `load.mjs` would answer it with the
+  server started with `--parallel` above one.
 - **Larger cards, or more than one.** The sweep is one RTX 4090. A datacenter
   card has more memory for concurrent requests, and the saturation point above
   does not transfer to it.

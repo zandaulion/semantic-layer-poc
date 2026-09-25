@@ -49,6 +49,13 @@ const runs = [
     hardware: "a rented RunPod pod's host CPU (x86-64); its RTX 4090 went unused",
   },
   {
+    file: 'baselines/llamacpp-cuda-rtx4090.json',
+    name: 'llama.cpp GPU',
+    server: 'llama.cpp (`ghcr.io/ggml-org/llama.cpp:server-cuda`)',
+    weights: 'the same MXFP4 file, from `ggml-org/gpt-oss-20b-GGUF`',
+    hardware: 'one RTX 4090 (24 GB), RunPod Secure Cloud (x86-64)',
+  },
+  {
     file: 'baselines/vllm-cuda-rtx4090.json',
     name: 'vLLM GPU',
     server: 'vLLM 0.30.0 (`vllm/vllm-openai:v0.30.0`)',
@@ -82,8 +89,9 @@ row('Weights', (r) => r.weights);
 row('Hardware', (r) => r.hardware);
 row('Recorded', (r) => r.data.recorded_at.slice(0, 10));
 w('');
-w('Same weights throughout. The two llama.cpp CPU runs share a runtime and differ',
-  'only in the machine under it; the hosted and vLLM runs change the runtime.', '');
+w('Same weights throughout. The three llama.cpp runs share a runtime and differ',
+  'only in the machine under it; the two GPU runs share a card and differ only in',
+  'the server; the hosted run differs in both.', '');
 
 w('## Summary', '');
 header('Measure');

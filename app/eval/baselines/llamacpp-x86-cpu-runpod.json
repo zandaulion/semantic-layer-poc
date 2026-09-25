@@ -1,5 +1,5 @@
 {
-  "label": "llamacpp-cuda-rtx4090",
+  "label": "llamacpp-x86-cpu-runpod",
   "recorded_at": "2026-09-25T05:47:54.617Z",
   "backend": {
     "base_url": "https://<pod-id>-8080.proxy.runpod.net/v1",

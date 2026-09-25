@@ -215,7 +215,7 @@ A bank will need exactly this for model upgrades, quantisation changes, prompt
 edits and serving-stack migrations. Bringing a validated method is a stronger
 position than bringing benchmark numbers for a stack the bank will not use.
 See [RESULTS.md](app/eval/RESULTS.md) for what it detected on first use, and
-for the vLLM run and concurrency sweep on a rented RTX 4090.
+for the llama.cpp and vLLM runs and the concurrency sweep on a rented RTX 4090.
 
 ## 11. Access control
 

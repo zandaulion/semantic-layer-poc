@@ -78,6 +78,7 @@ different things:
 | Class | Meaning |
 | --- | --- |
 | `schema_violation` | The server did not honour the strict JSON schema. **This is the portability canary.** The whole application is built on that contract, and a backend that enforces it loosely breaks the app rather than degrading it |
+| `truncated` | The reply stopped at the token limit, so the JSON was cut off. Seen with SGLang's default JSON grammar under load, where the model padded a finished answer with whitespace. Recorded as `schema_violation` before the app checked `finish_reason` |
 | `provider_error` | The endpoint refused the request — rate limit, auth, capacity. Operational, not behavioural |
 | `timeout` | No answer within the client's 70-second budget. Worth watching on-prem, where the budget was calibrated against a much faster provider |
 | `harness_error` | A defect here, not there |
@@ -212,6 +213,27 @@ Three things learned the expensive way:
   problem, at about twice the hourly price.
 - **Delete the pod, do not stop it.** A stopped pod still bills for its disk.
 
+The two load baselines for llama.cpp and SGLang came from the same kind of pod.
+llama.cpp used the recipe above with `-c 131072 --parallel 16`: the context is
+shared between slots, so that gives each of 16 slots 8,192 tokens. SGLang used:
+
+```
+image  lmsysorg/sglang:latest-cu130   (SGLang 0.5.20)
+args   python3 -m sglang.launch_server --model-path openai/gpt-oss-20b
+       --served-model-name gpt-oss-20b --port 30000 --context-length 8192
+       --mem-fraction-static 0.85 --disable-radix-cache
+       --reasoning-parser gpt-oss --constrained-json-disable-any-whitespace
+       --api-key <random>
+port   30000/http
+disk   60 GB
+```
+
+Do not leave out `--constrained-json-disable-any-whitespace`. Without it, SGLang's
+JSON grammar allows unlimited whitespace, and under load about one reply in
+fifty ran on in whitespace until it hit the token limit. `--reasoning-parser
+gpt-oss` keeps the grammar off the model's reasoning. SGLang took about seven
+minutes to answer after the pod started.
+
 ## Measuring load
 
 `run.mjs` asks one question at a time, which is right for comparing answers and
@@ -233,12 +255,15 @@ missing-year clarification would report throughput no server provides. Each
 level sends at least three rounds of its own width (`--rounds`), so a high level
 is not measured on one burst that finishes together. Every reply still goes
 through `generateDraft`, so a schema violation under batching is counted as a
-failure. The script is part of the image from the next rebuild; until then,
-`podman cp` it into the container.
+failure. That is how SGLang's whitespace runaway was found: the twelve sequential
+cases never triggered it.
 
-Turn prefix caching off on the server for this, as the vLLM recipe above does.
-The sweep cycles through ten questions, so with caching on every repeat after
-the first would be answered from cache and the throughput would be fiction.
+Turn prefix caching off on the server for this, as the vLLM and SGLang recipes
+above do. The sweep cycles through ten questions, so with caching on every
+repeat after the first would be answered from cache and the throughput would be
+fiction. llama.cpp has no server flag for it; it reuses each slot's cached
+prompt by default, so its sweep flatters it, and its `/metrics` endpoint shows
+by how much (`prompt_tokens_cached_total`).
 
 ## Measuring retrieval on its own
 
@@ -281,29 +306,34 @@ drift that a pass rate alone would hide.
 
 `baselines/` holds recorded runs kept as reference points: `groq-gpt-oss-20b.json`,
 `llamacpp-cpu-mxfp4.json`, `llamacpp-x86-cpu-runpod.json`,
-`llamacpp-cuda-rtx4090.json` and `vllm-cuda-rtx4090.json`, the same weights
-served five ways, plus
-`load-vllm-cuda-rtx4090.json` from the concurrency sweep. They are records of
+`llamacpp-cuda-rtx4090.json`, `vllm-cuda-rtx4090.json` and
+`sglang-cuda-rtx4090.json`, the same weights served six ways, plus four
+concurrency sweeps on an RTX 4090: `load-vllm-cuda-rtx4090.json`,
+`load-llamacpp-cuda-rtx4090.json`, and `load-sglang-cuda-rtx4090.json` and
+`load-sglang-cuda-rtx4090-nows.json`, before and after the whitespace flag. They are records of
 what each backend did on one day, not targets to hit.
 
 ## Results
 
 [RESULTS.md](RESULTS.md) holds the recorded comparison: the same `gpt-oss-20b`
 weights served by a hosted provider, by llama.cpp on two different CPUs and on
-a rented RTX 4090, and by vLLM on the same model of card, plus vLLM's
-concurrency sweep. Its
+a rented RTX 4090, and by vLLM and SGLang on the same model of card, plus the
+concurrency sweeps. Its
 tables are generated from the files in `baselines/` by `node eval/build-results.mjs`,
 so no figure there is retyped; the reading of those figures is written by hand
 underneath, in `results-discussion.md`.
 
-In short: no backend violated the JSON schema contract, all grounded every
+In short: no backend violated the JSON schema contract one request at a time,
+and under load only SGLang did, until it was started with
+`--constrained-json-disable-any-whitespace`. All grounded every
 answered case in the right tables, and they differed on which descriptive
 dimensions they joined and on whether a destructive request was declined outright
 or caught downstream by the SQL check. The join choice moved even between the two
 llama.cpp CPU runs, whose runtime and prompt were the same, which marks it as
 sampling variation rather than a property of any backend. vLLM held the schema
 contract with 64 requests batched together, and one RTX 4090 saturated at about
-270 questions a minute.
+270 questions a minute. llama.cpp with 16 slots reached about half that, and
+SGLang was far slower on this card.
 
 ## What it does not measure
 

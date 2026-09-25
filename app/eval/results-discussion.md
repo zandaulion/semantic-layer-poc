@@ -1,25 +1,50 @@
 ## Reading the results
 
-### The schema contract held, and that was the question that mattered
+### The schema contract held, with one server needing a flag
 
-No run produced a single `schema_violation`, and neither did any of the 392
-requests in the concurrency sweep. llama.cpp compiles the `response_format` JSON
-schema into a grammar and constrains decoding with it; vLLM does the same through
-its structured-output backend, applied to the final answer only and not to
-gpt-oss's reasoning channel. Every reply from every server parsed and satisfied
-the contract the application is built on.
+No run of the twelve cases produced a `schema_violation`, and neither did any
+of the 392 requests in vLLM's concurrency sweep or the 200 in llama.cpp's.
+llama.cpp compiles the `response_format` JSON schema into a grammar and
+constrains decoding with it; vLLM and SGLang do the same through their
+structured-output backends, applied to the final answer only and not to
+gpt-oss's reasoning channel.
 
-This is the result worth leading with, because it is the only one whose failure
-would have *broken* the system rather than degraded it. A backend that enforces
-the schema loosely does not give worse SQL — it gives unparseable responses and a
-dead request path. That does not happen here.
+SGLang was the exception, and only under load. Started with its defaults, it
+answered all twelve cases correctly one at a time, then produced four schema
+violations in 200 concurrent requests. A repeat that kept the raw replies
+showed what they were: the model finished every field of the object, then
+wrote whitespace, 3,510 characters of spaces and newlines, until it reached
+`max_completion_tokens`, so the JSON arrived cut off. The grammar SGLang
+enforces by default allows any amount of whitespace between JSON tokens, and a
+model can fall into generating it. Restarted with
+`--constrained-json-disable-any-whitespace` and nothing else changed, the same
+sweep produced no schema violations in 200 requests.
+
+This is the result worth leading with, because it is the only one whose
+failure would have *broken* the system rather than degraded it. A backend that
+enforces the schema loosely does not give worse SQL — it gives unparseable
+responses and a dead request path. Two findings follow:
+
+- **"Supports structured outputs" is not the same as "holds the contract".**
+  SGLang supports them, and still let one reply in fifty run away until the
+  flag was set. The failure did not show in the twelve sequential cases at
+  all; it needed load to appear.
+- **The flag belongs in the deployment, and the check belongs in the app.**
+  Anyone serving this with SGLang should set it. The app now also checks
+  `finish_reason`: a reply that stopped at the token limit is reported as
+  `model_truncated`, and the harness counts it as `truncated` rather than
+  `schema_violation`, so an operator can tell a runaway from a server that
+  ignored the schema. The SGLang runs recorded here predate that check, which
+  is why their four runaways appear as schema violations.
 
 vLLM was the server this question was really about, because it is what an
 on-prem deployment would most likely run. It held the contract one request at a
-time and with 64 requests batched together, which is where a constrained-decoding
-implementation is most likely to slip. TGI and NIM remain untested and implement
-this through their own engines; `strict: true` in particular is a field each may
-interpret or ignore. Run this before trusting either.
+time and with 64 requests batched together, where a constrained-decoding
+implementation is most likely to slip. TGI, which this document once listed as
+the next server to test, was archived by Hugging Face in March 2026, which
+recommends vLLM or SGLang instead. NIM remains untested; `strict: true` in
+particular is a field each server may interpret or ignore. Run this, and the
+load sweep, before trusting it.
 
 ### Retrieval and grounding are backend-independent
 
@@ -40,8 +65,8 @@ Asked to delete duplicate customer records, the backends split:
 - **Hosted** produced a `DELETE … USING` statement behind a CTE. The statement
   check caught it, the status was downgraded to `needs_revision`, and no
   executable write was ever presented as a draft.
-- **llama.cpp** on both CPUs and on the GPU, and **vLLM**, declined, returned
-  no SQL at all, and asked a clarifying question.
+- **llama.cpp** on both CPUs and on the GPU, **vLLM** and **SGLang** declined,
+  returned no SQL at all, and asked a clarifying question.
 
 Same weights, same temperature, opposite handling of the only destructive
 request in the set. Both outcomes were safe, but only one of them was
@@ -55,8 +80,8 @@ this harness found in it mattered more than a false positive normally would.
 
 ### Dimension joins drift, in both directions
 
-For wire transfers by currency the hosted backend, the x86 CPU run and
-llama.cpp on the GPU joined `dim_currency`; the A1 CPU run and vLLM grouped by
+For wire transfers by currency the hosted backend, the x86 CPU run, llama.cpp
+on the GPU and SGLang joined `dim_currency`; the A1 CPU run and vLLM grouped by
 the surrogate key. For FX rates by currency only the hosted backend left
 `dim_currency` out. Both forms answer the question correctly.
 
@@ -78,8 +103,8 @@ response would have been to stop believing the harness.
 A specific worry going in was that `reasoning_effort: 'low'` is a gpt-oss
 parameter that a different server might quietly ignore, letting reasoning run
 long enough to truncate the answer against `max_completion_tokens`. Mean
-completion tokens were 237 hosted, 220–226 on the three llama.cpp runs, and
-193 on vLLM. Whatever each server did with the field, the effect on output
+completion tokens were 237 hosted, 220–226 on the three llama.cpp runs, 193 on
+vLLM and 173 on SGLang. Whatever each server did with the field, the effect on output
 length was not material at this prompt size.
 
 ### The later runs used newer retrieval
@@ -122,17 +147,21 @@ a GPU, which is why its figures needed no such check.
 ### Latency is not comparable across runs, and should not be quoted as if it were
 
 The p50 was 598 ms hosted, 161 s on four A1 cores, 10.1 s on the x86 host CPU,
-and 1.5 s for llama.cpp and 1.3 s for vLLM on the same model of RTX 4090. That
+and 1.5 s for llama.cpp, 1.3 s for vLLM and 8.4 s for SGLang on the same model
+of RTX 4090. That
 measures the hardware and the network path, not the software change. Grounding
 and behaviour carry between runs; timing carries only within one. Both GPU
 figures include a round trip from the A1 host in Frankfurt through RunPod's
 HTTPS proxy to a pod in Romania.
 
-One request at a time, the two servers are close. vLLM's higher p95 is its first
-request, `active-customers` at 3.9 s; its other model-backed cases took
-0.9–1.6 s. Where they will differ is under load: the llama.cpp server ran with a
-single slot, as the CPU quadlet does, and was not put through the concurrency
-sweep.
+One request at a time, llama.cpp and vLLM are close. vLLM's higher p95 is its
+first request, `active-customers` at 3.9 s; its other model-backed cases took
+0.9–1.6 s. SGLang is the outlier: it generated about 20 tokens a second for a
+single request, against about 200 for llama.cpp on the same card. Its startup
+log warned that its MXFP4 path "is not fully optimized yet", and gpt-oss ships
+in MXFP4. Why it is slow on this card was not investigated; SGLang is tuned
+for datacenter GPUs, and an RTX 4090 is not one. The difference that matters
+more shows under load, below.
 
 Two numbers from the A1 CPU run are worth keeping anyway:
 
@@ -140,26 +169,67 @@ Two numbers from the A1 CPU run are worth keeping anyway:
   concurrent users against the KV cache.
 - **Prefix reuse.** `active-customers` took 271 s run on its own and 32 s inside
   the full run, because llama.cpp reused the cached prompt from an earlier
-  identical request. Reuse across *different* questions is a different matter:
-  the prompt currently opens with the question and puts the schema context
-  last, so two questions share almost no prefix. Moving the stable instructions
-  first and the question last would let a server cache the shared part. It is
-  worth doing before sizing hardware, and worth re-running this harness after,
-  because it changes what the model reads.
+  identical request. Reuse across *different* questions is a different matter,
+  and it was measured rather than assumed; see below.
+
+### Reordering the prompt would save little
+
+The prompt opens with the question, so two different questions share only the
+system message, about 2% of a prompt. The obvious fix is to put the stable
+instructions first and the question last, so a server's prefix cache can
+reuse them. Measured offline on the twelve cases, without a model:
+
+- The stable instructions are about 12% of a prompt. The other 88% is the
+  schema context, the retrieved tables, and it differs from question to
+  question.
+- With the question last, about 12% of each prompt is reusable across
+  unrelated questions. Sorting the tables into a fixed order adds almost
+  nothing, because one differing table ends the shared prefix.
+- A question that retrieves the same tables as an earlier one reuses nearly
+  all of its prompt. `refuse-write` did: it retrieved the same tables as
+  `active-customers`, so everything before the question matched. Follow-up
+  questions in one subject area would behave the same way.
+
+On a GPU the saving is small either way. At the 11,500 tokens a second that
+llama.cpp read prompts on the RTX 4090, a 2,800-token prompt takes about
+0.25 s of a request whose median is 1.3–1.5 s; generating the answer takes
+the rest. Caching 12% of the prompt would save tens of milliseconds. The prompt
+was left as it is: changing it would change what the model reads, and every
+recorded run would need repeating to compare against.
+
+This matters more on a CPU, where reading the prompt is most of the time. It
+does not change the conclusion for a GPU deployment.
 
 ### What one card holds
 
-The sweep measures vLLM on one RTX 4090 with requests held in flight at rising
-levels. Latency grows smoothly and nothing failed at any level. Throughput
-climbs from 49 requests a minute with one request in flight to 243 with 32, and
-then only to 273 with 64 while the p95 nearly doubles to 20.5 s. The card is
-effectively full at around 32 concurrent requests.
+The sweeps put vLLM, llama.cpp and SGLang each on one RTX 4090 and held
+requests in flight at rising levels.
+
+**vLLM** is the one to size with. Latency grows smoothly and nothing failed at
+any level. Throughput climbs from 49 requests a minute with one request in
+flight to 243 with 32, and then only to 273 with 64 while the p95 nearly
+doubles to 20.5 s. The card is effectively full at around 32 concurrent
+requests.
+
+**llama.cpp** with 16 slots batches, but reaches about half of that: 123
+requests a minute at 16 in flight and 130 at 32, where vLLM managed 190 and
+243. That is despite an advantage vLLM did not have. llama.cpp reuses a slot's
+cached prompt by default, and because the sweep cycles through ten questions,
+95% of its prompt tokens came from cache. Its figures are the better case for
+it, not a like-for-like one. It is a good server for one user on one machine,
+which is what the CPU quadlet uses it for; it is not the one to share a card
+between analysts.
+
+**SGLang** held none of this on this card: at most 38 requests a minute, with a
+p50 of 47.5 s at 32 in flight. Given the single-request speed above, that says
+more about its MXFP4 support on an RTX 4090 than about SGLang in general, and
+it should not be read as a verdict on a datacenter deployment.
 
 Requests in flight are not analysts. Someone reading and editing a draft holds
-no slot between questions, so the number to size against is throughput: about
-190 questions a minute with a p95 under 7 s, or about 240 with a p95 of 12 s.
-How many analysts that serves depends on how often they ask, which this POC has
-no data on.
+no slot between questions, so the number to size against is throughput: on
+vLLM, about 190 questions a minute with a p95 under 7 s, or about 240 with a
+p95 of 12 s. How many analysts that serves depends on how often they ask, which
+this POC has no data on.
 
 None of this capacity is reachable through the application as it stands. The
 server generates one draft at a time for everyone and answers a second request
@@ -168,27 +238,34 @@ the model server, not the app. Using the card means replacing that flag with a
 bounded pool — a limit near the saturation point above, a queue and a timeout —
 and that change belongs before any sizing conversation, not after.
 
-Two conditions make these figures conservative rather than optimistic. Prefix
-caching was off, so no request reused another's work; with the prompt reordered
-as above, it would. And the context limit was 8,192 tokens, which is ample for
-these prompts but leaves memory for more concurrent requests than a longer limit
-would.
+The vLLM figures are conservative rather than optimistic in one respect: the
+context limit was 8,192 tokens, which is ample for these prompts but leaves
+memory for more concurrent requests than a longer limit would. Prefix caching
+was off, but as the section above shows, turning it on would save little for
+different questions.
 
 ### What the GPU runs cost
 
-Six RunPod pods, all RTX 4090, came to roughly $0.30: the run that turned out
-to be CPU-bound, the pod that diagnosed it, two vLLM starts on a community host
-whose card was already partly occupied by something else, the Secure Cloud pod
-that produced the vLLM results and the sweep in seven minutes at $0.74 an hour,
-and a four-minute Secure Cloud pod for the llama.cpp GPU run.
+Eight RunPod pods, all RTX 4090, came to roughly $0.90:
+
+- the first six, about $0.30: the run that turned out to be CPU-bound, the pod
+  that diagnosed it, two vLLM starts on a community host whose card was
+  already partly occupied by something else, the Secure Cloud pod that
+  produced the vLLM results and sweep in seven minutes, and a four-minute pod
+  for the llama.cpp GPU run;
+- then about $0.60 for two Secure Cloud pods at $0.74 an hour: eight minutes
+  for the llama.cpp sweep, and 42 for SGLang, most of it spent in its slow
+  sweeps, the repeat that captured the failures and the restart that tested
+  the fix.
 
 ## What this does not settle
 
-- **TGI or NIM.** vLLM held the schema contract. The other on-prem servers have
-  their own constrained-decoding engines and would each need this run.
-- **llama.cpp under load.** Its GPU run used one slot. How it batches against
-  vLLM on the same card is unmeasured; `load.mjs` would answer it with the
-  server started with `--parallel` above one.
+- **NIM.** vLLM held the schema contract, and SGLang held it once configured.
+  NIM has its own engine and would need this run and the load sweep. TGI no
+  longer needs testing: it was archived in March 2026.
+- **SGLang on the hardware it is built for.** Its speed here is a result for
+  an RTX 4090 and gpt-oss's MXFP4 weights, not for SGLang on a datacenter
+  card.
 - **Larger cards, or more than one.** The sweep is one RTX 4090. A datacenter
   card has more memory for concurrent requests, and the saturation point above
   does not transfer to it.

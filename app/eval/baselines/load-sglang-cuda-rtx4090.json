@@ -1,0 +1,122 @@
+{
+  "label": "sglang-cuda-rtx4090",
+  "recorded_at": "2026-09-25T11:41:44.239Z",
+  "backend": {
+    "base_url": "https://<pod-id>-30000.proxy.runpod.net/v1",
+    "model": "gpt-oss-20b"
+  },
+  "questions": [
+    "active-customers",
+    "wire-transfers-by-currency",
+    "aml-alerts-by-jurisdiction",
+    "complaints-by-category",
+    "account-transactions-by-channel",
+    "portfolio-valuations-by-market",
+    "atm-by-branch",
+    "card-disputes",
+    "fx-rates-by-currency",
+    "refuse-write"
+  ],
+  "levels": [
+    {
+      "concurrency": 1,
+      "requests": 10,
+      "answered": 10,
+      "failures": {},
+      "wall_ms": 78130,
+      "latency_ms": {
+        "p50": 8427,
+        "p95": 13000,
+        "max": 13000
+      },
+      "requests_per_minute": 7.7,
+      "completion_tokens_per_second": 21
+    },
+    {
+      "concurrency": 2,
+      "requests": 10,
+      "answered": 9,
+      "failures": {
+        "schema_violation": 1
+      },
+      "wall_ms": 102281,
+      "latency_ms": {
+        "p50": 11386,
+        "p95": 12889,
+        "max": 12889
+      },
+      "requests_per_minute": 5.3,
+      "completion_tokens_per_second": 14
+    },
+    {
+      "concurrency": 4,
+      "requests": 12,
+      "answered": 12,
+      "failures": {},
+      "wall_ms": 51721,
+      "latency_ms": {
+        "p50": 18083,
+        "p95": 21003,
+        "max": 21003
+      },
+      "requests_per_minute": 13.9,
+      "completion_tokens_per_second": 38
+    },
+    {
+      "concurrency": 8,
+      "requests": 24,
+      "answered": 23,
+      "failures": {
+        "schema_violation": 1
+      },
+      "wall_ms": 120722,
+      "latency_ms": {
+        "p50": 23306,
+        "p95": 27936,
+        "max": 29057
+      },
+      "requests_per_minute": 11.4,
+      "completion_tokens_per_second": 33
+    },
+    {
+      "concurrency": 16,
+      "requests": 48,
+      "answered": 46,
+      "failures": {
+        "timeout": 1,
+        "schema_violation": 1
+      },
+      "wall_ms": 157666,
+      "latency_ms": {
+        "p50": 31229,
+        "p95": 38623,
+        "max": 40142
+      },
+      "requests_per_minute": 17.5,
+      "completion_tokens_per_second": 50
+    },
+    {
+      "concurrency": 32,
+      "requests": 96,
+      "answered": 92,
+      "failures": {
+        "timeout": 3,
+        "schema_violation": 1
+      },
+      "wall_ms": 210282,
+      "latency_ms": {
+        "p50": 44900,
+        "p95": 59810,
+        "max": 63669
+      },
+      "requests_per_minute": 26.3,
+      "completion_tokens_per_second": 74
+    }
+  ],
+  "server": {
+    "software": "SGLang 0.5.20 (lmsysorg/sglang:latest-cu130)",
+    "flags": "--context-length 8192 --mem-fraction-static 0.85 --disable-radix-cache --reasoning-parser gpt-oss",
+    "hardware": "RTX 4090, RunPod Secure Cloud"
+  },
+  "failure_detail": "Captured in a repeat at 16 in flight (111 requests, 1 schema_violation, 1 timeout): the schema_violation reply completed every field, then emitted 3,510 characters of whitespace until max_completion_tokens (1600), finish_reason length, so the JSON was cut off."
+}

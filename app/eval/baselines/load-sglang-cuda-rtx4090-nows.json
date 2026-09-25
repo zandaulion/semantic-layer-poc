@@ -1,0 +1,113 @@
+{
+  "label": "sglang-cuda-rtx4090-nows",
+  "recorded_at": "2026-09-25T12:01:11.807Z",
+  "backend": {
+    "base_url": "https://<pod-id>-30000.proxy.runpod.net/v1",
+    "model": "gpt-oss-20b"
+  },
+  "questions": [
+    "active-customers",
+    "wire-transfers-by-currency",
+    "aml-alerts-by-jurisdiction",
+    "complaints-by-category",
+    "account-transactions-by-channel",
+    "portfolio-valuations-by-market",
+    "atm-by-branch",
+    "card-disputes",
+    "fx-rates-by-currency",
+    "refuse-write"
+  ],
+  "levels": [
+    {
+      "concurrency": 1,
+      "requests": 10,
+      "answered": 10,
+      "failures": {},
+      "wall_ms": 86383,
+      "latency_ms": {
+        "p50": 9384,
+        "p95": 10548,
+        "max": 10548
+      },
+      "requests_per_minute": 6.9,
+      "completion_tokens_per_second": 23
+    },
+    {
+      "concurrency": 2,
+      "requests": 10,
+      "answered": 10,
+      "failures": {},
+      "wall_ms": 62005,
+      "latency_ms": {
+        "p50": 13535,
+        "p95": 15114,
+        "max": 15114
+      },
+      "requests_per_minute": 9.7,
+      "completion_tokens_per_second": 31
+    },
+    {
+      "concurrency": 4,
+      "requests": 12,
+      "answered": 12,
+      "failures": {},
+      "wall_ms": 56368,
+      "latency_ms": {
+        "p50": 20400,
+        "p95": 21751,
+        "max": 21751
+      },
+      "requests_per_minute": 12.8,
+      "completion_tokens_per_second": 40
+    },
+    {
+      "concurrency": 8,
+      "requests": 24,
+      "answered": 24,
+      "failures": {},
+      "wall_ms": 79006,
+      "latency_ms": {
+        "p50": 25387,
+        "p95": 30612,
+        "max": 31822
+      },
+      "requests_per_minute": 18.2,
+      "completion_tokens_per_second": 59
+    },
+    {
+      "concurrency": 16,
+      "requests": 48,
+      "answered": 48,
+      "failures": {},
+      "wall_ms": 105198,
+      "latency_ms": {
+        "p50": 33954,
+        "p95": 43849,
+        "max": 43965
+      },
+      "requests_per_minute": 27.4,
+      "completion_tokens_per_second": 87
+    },
+    {
+      "concurrency": 32,
+      "requests": 96,
+      "answered": 95,
+      "failures": {
+        "timeout": 1
+      },
+      "wall_ms": 149362,
+      "latency_ms": {
+        "p50": 47503,
+        "p95": 64336,
+        "max": 65978
+      },
+      "requests_per_minute": 38.2,
+      "completion_tokens_per_second": 122
+    }
+  ],
+  "server": {
+    "software": "SGLang 0.5.20 (lmsysorg/sglang:latest-cu130)",
+    "flags": "--context-length 8192 --mem-fraction-static 0.85 --disable-radix-cache --reasoning-parser gpt-oss --constrained-json-disable-any-whitespace",
+    "hardware": "RTX 4090, RunPod Secure Cloud"
+  }
+}

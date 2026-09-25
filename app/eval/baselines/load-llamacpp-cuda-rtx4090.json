@@ -1,0 +1,118 @@
+{
+  "label": "llamacpp-cuda-rtx4090-parallel16",
+  "recorded_at": "2026-09-25T11:22:45.437Z",
+  "backend": {
+    "base_url": "https://<pod-id>-8080.proxy.runpod.net/v1",
+    "model": "gpt-oss-20b"
+  },
+  "questions": [
+    "active-customers",
+    "wire-transfers-by-currency",
+    "aml-alerts-by-jurisdiction",
+    "complaints-by-category",
+    "account-transactions-by-channel",
+    "portfolio-valuations-by-market",
+    "atm-by-branch",
+    "card-disputes",
+    "fx-rates-by-currency",
+    "refuse-write"
+  ],
+  "levels": [
+    {
+      "concurrency": 1,
+      "requests": 10,
+      "answered": 10,
+      "failures": {},
+      "wall_ms": 10857,
+      "latency_ms": {
+        "p50": 1141,
+        "p95": 1366,
+        "max": 1366
+      },
+      "requests_per_minute": 55.3,
+      "completion_tokens_per_second": 193
+    },
+    {
+      "concurrency": 2,
+      "requests": 10,
+      "answered": 10,
+      "failures": {},
+      "wall_ms": 8546,
+      "latency_ms": {
+        "p50": 1845,
+        "p95": 2263,
+        "max": 2263
+      },
+      "requests_per_minute": 70.2,
+      "completion_tokens_per_second": 260
+    },
+    {
+      "concurrency": 4,
+      "requests": 12,
+      "answered": 12,
+      "failures": {},
+      "wall_ms": 8843,
+      "latency_ms": {
+        "p50": 2929,
+        "p95": 3391,
+        "max": 3391
+      },
+      "requests_per_minute": 81.4,
+      "completion_tokens_per_second": 298
+    },
+    {
+      "concurrency": 8,
+      "requests": 24,
+      "answered": 24,
+      "failures": {},
+      "wall_ms": 16414,
+      "latency_ms": {
+        "p50": 5161,
+        "p95": 6561,
+        "max": 6782
+      },
+      "requests_per_minute": 87.7,
+      "completion_tokens_per_second": 318
+    },
+    {
+      "concurrency": 16,
+      "requests": 48,
+      "answered": 48,
+      "failures": {},
+      "wall_ms": 23386,
+      "latency_ms": {
+        "p50": 7422,
+        "p95": 8740,
+        "max": 9025
+      },
+      "requests_per_minute": 123.2,
+      "completion_tokens_per_second": 450
+    },
+    {
+      "concurrency": 32,
+      "requests": 96,
+      "answered": 96,
+      "failures": {},
+      "wall_ms": 44312,
+      "latency_ms": {
+        "p50": 13802,
+        "p95": 16051,
+        "max": 17465
+      },
+      "requests_per_minute": 130,
+      "completion_tokens_per_second": 476
+    }
+  ],
+  "server": {
+    "software": "llama.cpp server-cuda, build 11176 (f805c57a2)",
+    "flags": "--device CUDA0 -ngl 999 -c 131072 --parallel 16 --jinja",
+    "hardware": "RTX 4090, RunPod Secure Cloud"
+  },
+  "server_metrics": {
+    "prompt_tokens_processed": 28360,
+    "prompt_tokens_cached": 558031,
+    "prompt_seconds": 6.33,
+    "tokens_predicted": 46029,
+    "note": "Read from /metrics after the sweep, warmup included. llama.cpp reuses a slot's cached prompt by default, and the sweep cycles ten questions, so most prompts were cache hits."
+  }
+}

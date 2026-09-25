@@ -62,8 +62,40 @@ const runs = [
     weights: '`openai/gpt-oss-20b`, MXFP4 as released',
     hardware: 'one RTX 4090 (24 GB), RunPod Secure Cloud (x86-64)',
   },
+  {
+    file: 'baselines/sglang-cuda-rtx4090.json',
+    name: 'SGLang GPU',
+    server: 'SGLang 0.5.20 (`lmsysorg/sglang:latest-cu130`), default JSON grammar',
+    weights: '`openai/gpt-oss-20b`, MXFP4 as released',
+    hardware: 'one RTX 4090 (24 GB), RunPod Secure Cloud (x86-64)',
+  },
 ];
-const load = await read('baselines/load-vllm-cuda-rtx4090.json');
+
+// Concurrency sweeps, all on one RTX 4090. Each note says what differs about
+// that server's configuration, because the tables alone cannot.
+const loads = [
+  {
+    file: 'baselines/load-vllm-cuda-rtx4090.json',
+    name: 'vLLM',
+    note: 'Prefix caching off, so repeated questions were not answered from cache.',
+  },
+  {
+    file: 'baselines/load-llamacpp-cuda-rtx4090.json',
+    name: 'llama.cpp, 16 slots',
+    note: 'Started with `--parallel 16` and 8,192 tokens per slot. llama.cpp reuses a slot\'s cached prompt by default, and it did: 558,031 of 586,391 prompt tokens came from cache. The figures are therefore flattering to it.',
+  },
+  {
+    file: 'baselines/load-sglang-cuda-rtx4090.json',
+    name: 'SGLang, default JSON grammar',
+    note: 'Radix (prefix) cache off. Started without `--constrained-json-disable-any-whitespace`, which is how the comparison run above was served too.',
+  },
+  {
+    file: 'baselines/load-sglang-cuda-rtx4090-nows.json',
+    name: 'SGLang, whitespace disallowed',
+    note: 'The same server restarted with `--constrained-json-disable-any-whitespace`, and nothing else changed.',
+  },
+];
+for (const sweep of loads) sweep.data = await read(sweep.file);
 for (const run of runs) {
   run.data = await read(run.file);
   run.byId = Object.fromEntries(run.data.results.map((r) => [r.id, r]));
@@ -90,8 +122,8 @@ row('Hardware', (r) => r.hardware);
 row('Recorded', (r) => r.data.recorded_at.slice(0, 10));
 w('');
 w('Same weights throughout. The three llama.cpp runs share a runtime and differ',
-  'only in the machine under it; the two GPU runs share a card and differ only in',
-  'the server; the hosted run differs in both.', '');
+  'only in the machine under it; the three GPU runs share a model of card and',
+  'differ only in the server; the hosted run differs in both.', '');
 
 w('## Summary', '');
 header('Measure');
@@ -135,17 +167,19 @@ for (const { id } of cases) {
 w('');
 
 w('## Under concurrent load', '');
-w(`vLLM on the same RTX 4090, from \`eval/load.mjs\`. Each level keeps that many`,
-  `requests in flight, cycling through the ${load.questions.length} questions that reach the model;`,
-  'latency is per request, throughput is over the whole level. Prefix caching was',
-  'off, so repeated questions were not answered from cache.', '');
-w('| Users in flight | Requests | Latency p50 | Latency p95 | Requests / min | Output tokens / s | Failures |');
-w('| --- | --- | --- | --- | --- | --- | --- |');
-for (const l of load.levels) {
-  const failed = Object.entries(l.failures).map(([kind, count]) => `${count} ${kind}`).join(', ') || '0';
-  w(`| ${l.concurrency} | ${l.requests} | ${time(l.latency_ms.p50)} | ${time(l.latency_ms.p95)} | ${l.requests_per_minute} | ${l.completion_tokens_per_second} | ${failed} |`);
+w('From `eval/load.mjs`, each server on its own RTX 4090. Each level keeps that',
+  `many requests in flight, cycling through the ${loads[0].data.questions.length} questions that reach the model;`,
+  'latency is per request, throughput is over the whole level.', '');
+for (const sweep of loads) {
+  w(`### ${sweep.name}`, '', sweep.note, '');
+  w('| Users in flight | Requests | Latency p50 | Latency p95 | Requests / min | Output tokens / s | Failures |');
+  w('| --- | --- | --- | --- | --- | --- | --- |');
+  for (const l of sweep.data.levels) {
+    const failed = Object.entries(l.failures).map(([kind, count]) => `${count} ${kind}`).join(', ') || '0';
+    w(`| ${l.concurrency} | ${l.requests} | ${time(l.latency_ms.p50)} | ${time(l.latency_ms.p95)} | ${l.requests_per_minute} | ${l.completion_tokens_per_second} | ${failed} |`);
+  }
+  w('');
 }
-w('');
 
 w('## Where the runs disagreed', '');
 const byId = Object.fromEntries(cases.map((c) => [c.id, c]));

@@ -49,14 +49,19 @@ podman exec banking-dwh node eval/run.mjs --compare app/eval/baselines/groq-gpt-
 A second backend to compare against needs no GPU: `app/deploy/quadlet/gpt-oss-local.container`
 serves the same `gpt-oss-20b` weights from CPU through llama.cpp, so the
 comparison can be run on the machine that already hosts the POC. The same
-weights were also served on a rented RTX 4090, by llama.cpp and by vLLM, the
-server an on-prem deployment would most likely use, and `app/eval/load.mjs`
-measured the vLLM card under rising concurrency. The runs are recorded in `app/eval/baselines/` and
-compared in [app/eval/RESULTS.md](app/eval/RESULTS.md). The backends agreed on
-every required table and none violated the JSON schema contract, even with 64
-requests batched on vLLM, but they differed on which dimensions they joined and
-on whether a destructive request was refused outright or caught downstream by the
-SQL check. One RTX 4090 saturated at about 270 questions a minute.
+weights were also served on a rented RTX 4090 by llama.cpp, by SGLang and by
+vLLM, the server an on-prem deployment would most likely use, and
+`app/eval/load.mjs` measured each under rising concurrency. The runs are
+recorded in `app/eval/baselines/` and compared in
+[app/eval/RESULTS.md](app/eval/RESULTS.md). The backends agreed on every
+required table, but they differed on which dimensions they joined and on
+whether a destructive request was refused outright or caught downstream by the
+SQL check. vLLM held the JSON schema contract with 64 requests batched, and one
+RTX 4090 saturated at about 270 questions a minute; llama.cpp reached about
+half that. SGLang broke the contract under load, about one reply in fifty
+running on in whitespace until the token limit, until it was started with
+`--constrained-json-disable-any-whitespace`. The failure never appeared one
+request at a time.
 
 It reports table grounding, status behaviour, read-only safety, inference latency
 and prompt size, and it classifies failures — a schema violation, meaning the

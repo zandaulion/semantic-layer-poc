@@ -36,19 +36,27 @@ const runs = [
   },
   {
     file: 'baselines/llamacpp-cpu-mxfp4.json',
-    name: 'CPU',
+    name: 'A1 CPU',
     server: 'llama.cpp (`ghcr.io/ggml-org/llama.cpp:server`)',
     weights: '`gpt-oss-20b-MXFP4.gguf`, the file the model ships in',
     hardware: '4 Ampere cores, 22 GB RAM, no GPU (aarch64)',
   },
   {
-    file: 'baselines/llamacpp-cuda-rtx4090.json',
-    name: 'GPU',
+    file: 'baselines/llamacpp-x86-cpu-runpod.json',
+    name: 'x86 CPU',
     server: 'llama.cpp (`ghcr.io/ggml-org/llama.cpp:server-cuda`)',
     weights: 'the same MXFP4 file, from `ggml-org/gpt-oss-20b-GGUF`',
-    hardware: 'one RTX 4090 (24 GB), rented on RunPod Community Cloud (x86-64)',
+    hardware: "a rented RunPod pod's host CPU (x86-64); its RTX 4090 went unused",
+  },
+  {
+    file: 'baselines/vllm-cuda-rtx4090.json',
+    name: 'vLLM GPU',
+    server: 'vLLM 0.30.0 (`vllm/vllm-openai:v0.30.0`)',
+    weights: '`openai/gpt-oss-20b`, MXFP4 as released',
+    hardware: 'one RTX 4090 (24 GB), RunPod Secure Cloud (x86-64)',
   },
 ];
+const load = await read('baselines/load-vllm-cuda-rtx4090.json');
 for (const run of runs) {
   run.data = await read(run.file);
   run.byId = Object.fromEntries(run.data.results.map((r) => [r.id, r]));
@@ -74,8 +82,8 @@ row('Weights', (r) => r.weights);
 row('Hardware', (r) => r.hardware);
 row('Recorded', (r) => r.data.recorded_at.slice(0, 10));
 w('');
-w('Same weights throughout. Hosted against CPU changes the runtime; CPU against',
-  'GPU keeps the runtime and changes only the hardware under it.', '');
+w('Same weights throughout. The two llama.cpp CPU runs share a runtime and differ',
+  'only in the machine under it; the hosted and vLLM runs change the runtime.', '');
 
 w('## Summary', '');
 header('Measure');
@@ -115,6 +123,19 @@ for (const { id } of cases) {
   const verdict = done.length < 2 ? '—' : done.every((r) => agrees(done[0], r)) ? 'yes' : '**differs**';
   if (verdict === '**differs**') disagreements.push(id);
   w(`| \`${id}\` | ${results.map((r) => `${cellStatus(r)} | ${time(r?.latency_ms)}`).join(' | ')} | ${verdict} |`);
+}
+w('');
+
+w('## Under concurrent load', '');
+w(`vLLM on the same RTX 4090, from \`eval/load.mjs\`. Each level keeps that many`,
+  `requests in flight, cycling through the ${load.questions.length} questions that reach the model;`,
+  'latency is per request, throughput is over the whole level. Prefix caching was',
+  'off, so repeated questions were not answered from cache.', '');
+w('| Users in flight | Requests | Latency p50 | Latency p95 | Requests / min | Output tokens / s | Failures |');
+w('| --- | --- | --- | --- | --- | --- | --- |');
+for (const l of load.levels) {
+  const failed = Object.entries(l.failures).map(([kind, count]) => `${count} ${kind}`).join(', ') || '0';
+  w(`| ${l.concurrency} | ${l.requests} | ${time(l.latency_ms.p50)} | ${time(l.latency_ms.p95)} | ${l.requests_per_minute} | ${l.completion_tokens_per_second} | ${failed} |`);
 }
 w('');
 

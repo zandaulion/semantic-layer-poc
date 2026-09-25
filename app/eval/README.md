@@ -161,32 +161,65 @@ Two of those variables are not optional:
 
 ## Serving a model on a rented GPU
 
-The same comparison runs against a GPU without owning one. The recorded GPU
-baseline came from a RunPod Community Cloud pod with one RTX 4090, running the
-official llama.cpp CUDA image with the flags the CPU quadlet uses:
+The comparison runs against a GPU without owning one. The recorded vLLM baseline
+and the concurrency sweep came from a RunPod pod with one RTX 4090:
 
 ```
-image  ghcr.io/ggml-org/llama.cpp:server-cuda
-args   -hf ggml-org/gpt-oss-20b-GGUF --host 0.0.0.0 --port 8080 -c 8192
-       --parallel 1 --jinja -ngl 999 --metrics --api-key <random>
-port   8080/http
-disk   30 GB
+image  vllm/vllm-openai:v0.30.0
+args   --model openai/gpt-oss-20b --served-model-name gpt-oss-20b
+       --max-model-len 8192 --port 8000 --gpu-memory-utilization 0.85
+       --no-enable-prefix-caching --api-key <random>
+port   8000/http
+disk   60 GB
 ```
 
-`-hf` has the server download the weights itself, so nothing passes through the
-POC host, and `-ngl 999` asks for every layer on the GPU. The pod is reached
+The server downloads the weights itself, so nothing passes through the POC host,
+and it was answering about three minutes after the pod started. It is reached
 through RunPod's HTTPS proxy, and the random key becomes `MODEL_API_KEY`:
 
 ```bash
 podman exec \
-  -e MODEL_BASE_URL=https://<pod-id>-8080.proxy.runpod.net/v1 \
+  -e MODEL_BASE_URL=https://<pod-id>-8000.proxy.runpod.net/v1 \
   -e MODEL_NAME=gpt-oss-20b \
   -e MODEL_API_KEY=<random> \
-  banking-dwh node eval/run.mjs --label llamacpp-cuda-rtx4090 --out /tmp/gpu.json
+  banking-dwh node eval/run.mjs --label vllm-cuda-rtx4090 --out /tmp/vllm.json
 ```
 
-The whole session took six minutes of pod time. Delete the pod afterwards
-rather than stopping it: a stopped pod still bills for its disk.
+Three things learned the expensive way:
+
+- **llama.cpp falls back to the CPU without failing.** A run with its CUDA image
+  and `-ngl 999` generated at 28 tokens a second because the card was never
+  used, and nothing reported an error. vLLM refuses to start without a GPU, so
+  a vLLM run that answers is a GPU run. With llama.cpp, check the startup log
+  for the KV cache on `CUDA0` rather than `CPU` before trusting a figure.
+- **A community host can arrive with its card partly occupied.** One reported
+  18 of 23.5 GB free, below what vLLM reserves, and the engine crash-looped.
+  Recreating the pod landed on the same host; Secure Cloud did not have the
+  problem, at about twice the hourly price.
+- **Delete the pod, do not stop it.** A stopped pod still bills for its disk.
+
+## Measuring load
+
+`run.mjs` asks one question at a time, which is right for comparing answers and
+wrong for sizing a server. `load.mjs` sends the same pipeline's model requests
+at rising concurrency and reports latency and throughput at each level:
+
+```bash
+podman exec -e MODEL_BASE_URL=... -e MODEL_NAME=... -e MODEL_API_KEY=... \
+  banking-dwh node eval/load.mjs --label vllm-cuda-rtx4090 --levels 1,2,4,8,16,32,64 --out /tmp/load.json
+```
+
+It uses only the questions that reach the model, since the catalog rule and the
+missing-year clarification would report throughput no server provides. Each
+level sends at least three rounds of its own width (`--rounds`), so a high level
+is not measured on one burst that finishes together. Every reply still goes
+through `generateDraft`, so a schema violation under batching is counted as a
+failure. The script is part of the image from the next rebuild; until then,
+`podman cp` it into the container.
+
+Turn prefix caching off on the server for this, as the vLLM recipe above does.
+The sweep cycles through ten questions, so with caching on every repeat after
+the first would be answered from cache and the throughput would be fiction.
 
 ## Measuring retrieval on its own
 
@@ -228,15 +261,16 @@ interesting case: both backends answered acceptably but differently, which is th
 drift that a pass rate alone would hide.
 
 `baselines/` holds recorded runs kept as reference points: `groq-gpt-oss-20b.json`,
-`llamacpp-cpu-mxfp4.json` and `llamacpp-cuda-rtx4090.json`, the same weights
-served three ways. They are records of what each backend did on one day, not
-targets to hit.
+`llamacpp-cpu-mxfp4.json`, `llamacpp-x86-cpu-runpod.json` and
+`vllm-cuda-rtx4090.json`, the same weights served four ways, plus
+`load-vllm-cuda-rtx4090.json` from the concurrency sweep. They are records of
+what each backend did on one day, not targets to hit.
 
 ## Results
 
 [RESULTS.md](RESULTS.md) holds the recorded comparison: the same `gpt-oss-20b`
-weights served by a hosted provider, by llama.cpp on four CPU cores, and by
-llama.cpp on one rented RTX 4090. Its
+weights served by a hosted provider, by llama.cpp on two different CPUs, and by
+vLLM on one rented RTX 4090, plus that GPU's concurrency sweep. Its
 tables are generated from the files in `baselines/` by `node eval/build-results.mjs`,
 so no figure there is retyped; the reading of those figures is written by hand
 underneath, in `results-discussion.md`.
@@ -244,17 +278,19 @@ underneath, in `results-discussion.md`.
 In short: no backend violated the JSON schema contract, all grounded every
 answered case in the right tables, and they differed on which descriptive
 dimensions they joined and on whether a destructive request was declined outright
-or caught downstream by the SQL check. The join choice moved even between the CPU
-and GPU runs, whose runtime and prompt were the same, which marks it as sampling
-variation rather than a property of any backend.
+or caught downstream by the SQL check. The join choice moved even between the two
+llama.cpp CPU runs, whose runtime and prompt were the same, which marks it as
+sampling variation rather than a property of any backend. vLLM held the schema
+contract with 64 requests batched together, and one RTX 4090 saturated at about
+270 questions a minute.
 
 ## What it does not measure
 
 Honest limits, so the numbers are not read for more than they carry:
 
-- **Single-user latency only.** Every case runs sequentially. This says nothing
-  about behaviour under concurrency, which is the question that actually decides
-  on-prem capacity.
+- **Concurrency on one card, with one question mix.** `load.mjs` measures one
+  server under rising load, cycling ten questions. Real traffic has a different
+  mix and arrives unevenly, and a different card saturates elsewhere.
 - **Table selection, not SQL correctness.** Nothing executes the generated SQL.
   Column choice, join direction, and business meaning are unverified — the same
   limits the PWA itself declares.

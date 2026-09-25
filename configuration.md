@@ -86,6 +86,7 @@ podman exec \
 | `npm run validate:catalog` | Checks the catalog before it is indexed |
 | `npm run ingest` | Builds a new index, swaps the alias, prunes superseded generations |
 | `npm run eval` | Scores the configured backend against the evaluation set |
+| `npm run eval:load` | Measures the configured backend's latency and throughput under rising concurrency |
 | `npm run eval:results` | Regenerates `app/eval/RESULTS.md` from the recorded baselines |
 | `./deploy.sh` | Tests, builds the image, installs the units, restarts, health-checks |
 

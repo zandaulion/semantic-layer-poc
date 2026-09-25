@@ -12,6 +12,7 @@
     "ingest": "node server/ingest.js",
     "test": "node --test test/*.test.js",
     "eval": "node eval/run.mjs",
+    "eval:load": "node eval/load.mjs",
     "eval:results": "node eval/build-results.mjs",
     "validate:catalog": "node server/validate-catalog.mjs"
   },

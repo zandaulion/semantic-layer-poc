@@ -48,10 +48,11 @@ podman exec banking-dwh node eval/run.mjs --compare app/eval/baselines/groq-gpt-
 
 A second backend to compare against needs no GPU: `app/deploy/quadlet/gpt-oss-local.container`
 serves the same `gpt-oss-20b` weights from CPU through llama.cpp, so the
-comparison can be run on the machine that already hosts the POC. Both runs are
+comparison can be run on the machine that already hosts the POC. A third run
+served the same weights with llama.cpp on a rented RTX 4090. All three runs are
 recorded in `app/eval/baselines/` and compared in
-[app/eval/RESULTS.md](app/eval/RESULTS.md). The hosted and local backends agreed on every
-required table and neither violated the JSON schema contract, but they differed
+[app/eval/RESULTS.md](app/eval/RESULTS.md). The backends agreed on every
+required table and none violated the JSON schema contract, but they differed
 on which dimensions they joined and on whether a destructive request was refused
 outright or caught downstream by the SQL check.
 
@@ -78,7 +79,7 @@ codebase. The two groups below are separated for that reason.
 - [Portfolio gallery and capture method](portfolio/README.md): ten screenshots, questions, viewport sizes, recorded responses, and regeneration steps.
 - [Synthetic banking warehouse fixture](banking-poc/README.md): PostgreSQL DDL, catalog, relationships, and a small seed for 100 tables and 5,000 columns.
 - [Backend evaluation harness](app/eval/README.md): twelve schema-grounded questions, the scoring rules, and how to compare two inference backends.
-- [Backend comparison results](app/eval/RESULTS.md): the same model served hosted and locally, what agreed, what did not, and what it does not settle.
+- [Backend comparison results](app/eval/RESULTS.md): the same model served hosted, on CPU and on a rented GPU, what agreed, what did not, and what it does not settle.
 - [Retrieval and naming](retrieval-and-naming.md): what happens to retrieval when the warehouse has bank-style abbreviated names instead of readable ones, and which metadata recovers it.
 
 **Designs for a possible full implementation**

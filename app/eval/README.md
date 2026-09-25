@@ -159,6 +159,35 @@ Two of those variables are not optional:
   on four Ampere cores. Leaving the default makes a slow backend look like a
   broken one, and the harness would record `timeout` for every case.
 
+## Serving a model on a rented GPU
+
+The same comparison runs against a GPU without owning one. The recorded GPU
+baseline came from a RunPod Community Cloud pod with one RTX 4090, running the
+official llama.cpp CUDA image with the flags the CPU quadlet uses:
+
+```
+image  ghcr.io/ggml-org/llama.cpp:server-cuda
+args   -hf ggml-org/gpt-oss-20b-GGUF --host 0.0.0.0 --port 8080 -c 8192
+       --parallel 1 --jinja -ngl 999 --metrics --api-key <random>
+port   8080/http
+disk   30 GB
+```
+
+`-hf` has the server download the weights itself, so nothing passes through the
+POC host, and `-ngl 999` asks for every layer on the GPU. The pod is reached
+through RunPod's HTTPS proxy, and the random key becomes `MODEL_API_KEY`:
+
+```bash
+podman exec \
+  -e MODEL_BASE_URL=https://<pod-id>-8080.proxy.runpod.net/v1 \
+  -e MODEL_NAME=gpt-oss-20b \
+  -e MODEL_API_KEY=<random> \
+  banking-dwh node eval/run.mjs --label llamacpp-cuda-rtx4090 --out /tmp/gpu.json
+```
+
+The whole session took six minutes of pod time. Delete the pod afterwards
+rather than stopping it: a stopped pod still bills for its disk.
+
 ## Measuring retrieval on its own
 
 `--retrieval-only` skips the model and reports two layers:
@@ -198,22 +227,26 @@ selection. A changed table selection with an unchanged pass mark is the
 interesting case: both backends answered acceptably but differently, which is the
 drift that a pass rate alone would hide.
 
-`baselines/` holds recorded runs kept as reference points: `groq-gpt-oss-20b.json`
-and `llamacpp-cpu-mxfp4.json`, the same weights served two ways. They are records
-of what each backend did on one day, not targets to hit.
+`baselines/` holds recorded runs kept as reference points: `groq-gpt-oss-20b.json`,
+`llamacpp-cpu-mxfp4.json` and `llamacpp-cuda-rtx4090.json`, the same weights
+served three ways. They are records of what each backend did on one day, not
+targets to hit.
 
 ## Results
 
 [RESULTS.md](RESULTS.md) holds the recorded comparison: the same `gpt-oss-20b`
-weights served by a hosted provider and by llama.cpp on four CPU cores. Its
+weights served by a hosted provider, by llama.cpp on four CPU cores, and by
+llama.cpp on one rented RTX 4090. Its
 tables are generated from the files in `baselines/` by `node eval/build-results.mjs`,
 so no figure there is retyped; the reading of those figures is written by hand
 underneath, in `results-discussion.md`.
 
-In short: neither backend violated the JSON schema contract, both grounded every
+In short: no backend violated the JSON schema contract, all grounded every
 answered case in the right tables, and they differed on which descriptive
 dimensions they joined and on whether a destructive request was declined outright
-or caught downstream by the SQL check.
+or caught downstream by the SQL check. The join choice moved even between the CPU
+and GPU runs, whose runtime and prompt were the same, which marks it as sampling
+variation rather than a property of any backend.
 
 ## What it does not measure
 

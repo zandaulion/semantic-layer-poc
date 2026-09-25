@@ -209,6 +209,11 @@ podman exec -e MODEL_BASE_URL=... -e MODEL_NAME=... -e MODEL_API_KEY=... \
   banking-dwh node eval/load.mjs --label vllm-cuda-rtx4090 --levels 1,2,4,8,16,32,64 --out /tmp/load.json
 ```
 
+It calls the pipeline directly rather than the HTTP API, because the server
+generates one draft at a time for all users and would answer every concurrent
+request but one with `429 busy`. What it measures is therefore the model server's
+capacity, not the application's.
+
 It uses only the questions that reach the model, since the catalog rule and the
 missing-year clarification would report throughput no server provides. Each
 level sends at least three rounds of its own width (`--rounds`), so a high level

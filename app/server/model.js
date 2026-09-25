@@ -267,6 +267,16 @@ export async function generateDraft({ question, previousSql = '', hits }) {
         throw error;
       }
       const payload = await response.json();
+      // A reply that hit the token limit is cut off mid-object and will not
+      // parse. Say so, rather than letting it read as a server that ignored
+      // the schema: under load, SGLang's default JSON grammar let the model
+      // pad a finished answer with whitespace until it ran out of tokens.
+      if (payload.choices?.[0]?.finish_reason === 'length') {
+        const error = new Error('Model response was cut off at the token limit');
+        error.publicCode = 'model_truncated';
+        error.publicMessage = 'The model ran out of room before finishing the draft. Try again, or ask a narrower question.';
+        throw error;
+      }
       result = JSON.parse(payload.choices?.[0]?.message?.content || '{}');
       // Reported so evaluation can size a prompt against an on-prem KV cache;
       // not every server returns it, so it stays optional.

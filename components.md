@@ -144,7 +144,12 @@ what lets "I need to ask something" and "I cannot do this" be first-class answer
 instead of prose the UI has to guess at.
 
 **Carry this caveat with it:** enforcement is the serving stack's job, and stacks
-differ. Verify it on whatever server you deploy — component 10 exists for this.
+differ. Verify it on whatever server you deploy, under load as well as one
+request at a time — component 10 exists for this. SGLang's default JSON grammar
+allowed unlimited whitespace, and under load the model sometimes padded a
+finished object until the token limit cut it off. The server now checks
+`finish_reason` and reports such a reply as `model_truncated` rather than as an
+unparseable one.
 
 ## 7. Deterministic catalog rules
 
@@ -215,7 +220,10 @@ A bank will need exactly this for model upgrades, quantisation changes, prompt
 edits and serving-stack migrations. Bringing a validated method is a stronger
 position than bringing benchmark numbers for a stack the bank will not use.
 See [RESULTS.md](app/eval/RESULTS.md) for what it detected on first use, and
-for the llama.cpp and vLLM runs and the concurrency sweep on a rented RTX 4090.
+for the llama.cpp, vLLM and SGLang runs and concurrency sweeps on a rented RTX
+4090. The sweep is what caught SGLang breaking the schema contract under load, a
+failure the sequential cases never showed; a migration check that runs only one
+request at a time would have passed it.
 
 ## 11. Access control
 
@@ -274,6 +282,6 @@ Named explicitly, so nobody infers these exist:
   users: `/api/generate` answers a second request with `429 busy` until the
   first finishes. The concurrency sweep measured the model server directly,
   around this guard, and found one RTX 4090 handling about 240 questions a
-  minute with 32 in flight. The application cannot use any of that until the
+  minute with 32 in flight on vLLM. The application cannot use any of that until the
   single flag becomes a bounded pool with a queue and a timeout.
 - **Audit.** History is per-device convenience, not an audit trail.

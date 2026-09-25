@@ -51,6 +51,7 @@ function redact(message) {
 function classifyFailure(error) {
   const message = String(error?.message || error);
   if (error?.name === 'AbortError' || /aborted/i.test(message)) return 'timeout';
+  if (error?.publicCode === 'model_truncated') return 'truncated';
   if (/Model response status is invalid/.test(message) || error instanceof SyntaxError) return 'schema_violation';
   if (error?.publicCode === 'model_provider_error') return 'provider_error';
   return 'harness_error';

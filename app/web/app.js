@@ -416,6 +416,10 @@ async function loadTests() {
   renderTestsTable(runs);
   renderTestsMatrix(runs, data.questions);
   renderQuickChecks(data.quick ?? []);
+  const newest = runs.map((r) => r.recorded_at).sort().at(-1);
+  $('tests-print-meta').textContent = `Bank DWH Studio · model benchmark · ${runs.length} recorded runs, the latest on ${newest.slice(0, 10)} · exported ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC. `
+    + 'Synthetic banking warehouse: hard questions are scored by running each drafted query against a seeded copy and comparing its result with a reference answer.';
+  $('tests-export').hidden = false;
 }
 
 function renderTestsTable(runs) {
@@ -521,6 +525,15 @@ function renderTestsMatrix(runs, questions) {
     }
   }
 }
+
+// Export: the browser's own "Save as PDF", from a print stylesheet that lays
+// the tab out as a report. The title becomes the suggested file name.
+$('tests-export').addEventListener('click', () => {
+  const title = document.title;
+  document.title = `Model tests ${new Date().toISOString().slice(0, 10)}`;
+  addEventListener('afterprint', () => { document.title = title; }, { once: true });
+  print();
+});
 
 $('tab-draft').addEventListener('click', () => showView('draft'));
 $('tab-tests').addEventListener('click', () => showView('tests'));

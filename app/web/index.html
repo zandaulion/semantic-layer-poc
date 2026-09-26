@@ -138,8 +138,9 @@
         <div id="tests-view" hidden>
           <div class="page-heading">
             <div><span class="eyebrow">MODEL BENCHMARK</span><h1>Which model drafts SQL you can trust?</h1><p>Each run rents a GPU, serves one model, asks the benchmark questions three times and runs every drafted query against a seeded copy of the warehouse.</p></div>
-            <span class="draft-badge">RECORDED RUNS</span>
+            <div class="button-group"><button id="tests-export" class="button button-secondary" type="button" hidden>Export PDF</button><span class="draft-badge">RECORDED RUNS</span></div>
           </div>
+          <p id="tests-print-meta" class="print-only"></p>
           <p id="tests-status" class="empty-copy">Loading recorded runs…</p>
 
           <section class="panel tests-panel" aria-labelledby="tests-results-title" hidden>

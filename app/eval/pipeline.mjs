@@ -30,6 +30,9 @@ export function classifyFailure(error) {
   if (error?.name === 'AbortError' || /aborted/i.test(message)) return 'timeout';
   if (error?.publicCode === 'model_truncated') return 'truncated';
   if (/Model response status is invalid/.test(message) || error instanceof SyntaxError) return 'schema_violation';
+  // A daily allowance used up (Groq's free tier: tokens per day) will not come
+  // back within a run; it is not a model failure and not worth waiting for.
+  if (/per day|\bTPD\b|\bRPD\b/.test(message)) return 'quota_exhausted';
   if (error?.publicCode === 'model_provider_error') return 'provider_error';
   return 'harness_error';
 }
@@ -90,7 +93,8 @@ export async function withRateLimitRetry(work, attempts = Number(process.env.MOD
     } catch (error) {
       const message = String(error?.message || '');
       const limited = /429|rate_limit/i.test(message);
-      if (!limited || attempt >= attempts - 1) throw error;
+      const daily = /per day|\bTPD\b|\bRPD\b/.test(message);
+      if (!limited || daily || attempt >= attempts - 1) throw error;
       // Providers say how long to wait ("Please try again in 7.66s"); take
       // them at their word, plus a margin, and back off only without it.
       const hint = message.match(/try again in (?:(\d+)m)?([\d.]+)(ms|s)/i);

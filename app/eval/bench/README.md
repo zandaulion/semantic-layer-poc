@@ -161,9 +161,28 @@ Guards, all enforced by the daemon, whatever the page shows:
 | `--load` | Adds a load test at 1, 8 and 32 requests in flight (`--load-levels`), stopped early if a level's median passes 30 s. Adds a few minutes |
 | `--max-minutes N` | Hard limit on the whole run, default 20 |
 | `--endpoint URL --served-name NAME --key-file F` | Benchmarks a server that already exists; rents nothing |
+| `--resume FILE` | Keeps the answers of a stopped run and asks only the rest. A stopped run prints the file to pass |
+| `--rate-limit-attempts N`, `--runner-minutes N` | For a rate-limited API: how often a question may wait for room, and how long the question phase may take |
 | `--drafts FILE` | Re-scores saved answers without calling a model |
 | `--keep-db` | Leaves the benchmark's PostgreSQL running afterwards |
 | `--cleanup` | Deletes pods an interrupted run left behind |
+
+## A free API tier
+
+Groq's free tier allows 8,000 tokens a minute and 200,000 a day for
+gpt-oss-20b. A benchmark question costs about 5,000 against both (its prompt
+plus the answer budget it reserves), so a day covers about 40 questions of
+the 138. Run it one at a time with patience, and resume it on the following
+days; a paid tier finishes it in one go, for a few cents:
+
+```bash
+node eval/bench/bench.mjs --endpoint https://api.groq.com/openai/v1 --served-name openai/gpt-oss-20b \
+  --provider Groq --key-file KEYFILE --concurrency 1 --rate-limit-attempts 12 --runner-minutes 150 --max-minutes 170
+# the next day, the same command plus the --resume file it printed
+```
+
+The allowance is the key's, so a benchmark run spends what the POC app would
+otherwise use that day.
 
 ## Money and safety
 

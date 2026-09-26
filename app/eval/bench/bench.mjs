@@ -420,8 +420,11 @@ async function main() {
       try {
         baseUrl = await waitForServer({ id: podId, apiKey: serverKey, model: profile.name, deadline: Math.min(deadline - 4 * 60_000, Date.now() + 14 * 60_000), onTick });
       } catch (error) {
-        const tail = await podLog(podId).catch(() => []);
-        if (tail.length) console.log(`--- last lines of the pod's log\n${tail.join('\n')}\n---`);
+        // Keep the evidence: the pod, and its logs with it, are deleted next.
+        const logs = error.logs ?? { container: await podLog(podId, 40).catch(() => []), system: await podLog(podId, 40, 'system').catch(() => []) };
+        const file = path.join(cacheDir, 'failed-start.log');
+        await writeFile(file, `# ${new Date().toISOString()} ${profile.name} on ${card}\n# ${error.message}\n\n--- system\n${logs.system.join('\n')}\n\n--- container\n${logs.container.join('\n')}\n`);
+        say(`the pod's last log lines are kept in ${path.relative(appDir, file)}`);
         throw error;
       }
       timings.ready_s = Math.round((Date.now() - podStarted) / 1000);

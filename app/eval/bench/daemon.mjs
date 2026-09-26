@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 
 import { loadBenchResults } from '../../server/bench-results.js';
 import { apiKey, billedToday, listGpus } from './runpod.mjs';
-import { fits, isAmpere, validateModel } from './validate.mjs';
+import { fits, validateModel } from './validate.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appDir = path.resolve(here, '..', '..');
@@ -121,7 +121,6 @@ async function startRun({ model: name, gpu: gpuId, mode, requested_by: requested
   const gpu = (await gpus()).find((g) => g.id === gpuId);
   if (!gpu) return { status: 400, body: { error: 'bad_gpu', message: 'That card is not on the list.' } };
   if (gpu.stock === 'NONE') return { status: 409, body: { error: 'no_stock', message: `${gpu.name} has no stock right now. Choose another card.` } };
-  if (model.fp8 && isAmpere(gpu.name)) return { status: 400, body: { error: 'no_fp8', message: `${model.model} has FP8 weights, and ${gpu.name} has no FP8 in hardware. Choose an Ada, Hopper or Blackwell card (RTX 4090, L40S, RTX PRO, H100).` } };
   if (!fits(model, gpu.memory_gb)) return { status: 400, body: { error: 'too_small', message: `${model.model} needs about ${model.need_gb} GB; ${gpu.name} has ${gpu.memory_gb} GB.` } };
   const worst = Math.round((gpu.price * LIMIT_MINUTES[mode]) / 60 * 100) / 100;
   const spent = await spentToday();

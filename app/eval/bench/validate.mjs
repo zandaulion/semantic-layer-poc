@@ -89,9 +89,10 @@ export async function validateModel(input) {
     weights_gb: weightsGb,
     need_gb: Math.ceil(weightsGb + OVERHEAD_GB),
     dtypes: Object.keys(tensors),
-    // FP8 weights need a card with FP8 in hardware (Ada, Hopper, Blackwell).
-    // On Ampere vLLM falls back to a slower path, and for Ministral 3 its
-    // compiler failed outright on an A40.
+    // FP8 weights run natively on Ada, Hopper and Blackwell. On Ampere (A100,
+    // A40) vLLM falls back to a slower weight-only path, which works for most
+    // models; for Ministral 3 its compiler failed on an A40. The page warns
+    // rather than refuses.
     fp8: Object.keys(tensors).some((t) => t.startsWith('F8')),
     architecture: info.config?.architectures?.[0] ?? null,
     pipeline: info.pipeline_tag ?? null,
@@ -105,4 +106,3 @@ export const fits = (model, memoryGb) => model.need_gb <= memoryGb * USABLE;
 
 /** Ampere cards: no FP8 in hardware. Matched by RunPod's names for them. */
 export const isAmpere = (gpuName) => /^(A10|A30|A40|A100|RTX A\d+|RTX 30\d0)\b/.test(String(gpuName).replace(/^NVIDIA (GeForce )?/, ''));
-export const suits = (model, gpu) => fits(model, gpu.memory_gb) && !(model.fp8 && isAmpere(gpu.name));

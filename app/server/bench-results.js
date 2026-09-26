@@ -54,5 +54,20 @@ export function loadBenchResults(appDir) {
       outcomes,
     };
   });
-  return { runs, questions };
+  // Fast runs and runs stopped early: listed on their own, never in the
+  // comparison, because ten questions asked once do not compare with 46 asked
+  // three times.
+  let quick = [];
+  try {
+    quick = fs.readdirSync(path.join(dir, 'quick')).filter((f) => f.endsWith('.json')).sort().reverse().map((file) => {
+      const r = JSON.parse(fs.readFileSync(path.join(dir, 'quick', file), 'utf8'));
+      return {
+        id: file.replace(/\.json$/, ''), recorded_at: r.recorded_at, model: r.model.name, card: r.card,
+        server: String(r.server ?? '').replace(/^vLLM \((?:[^:]+):([^)]+)\)$/, 'vLLM $1') || null,
+        summary: r.summary, stopped_early: r.stopped_early ?? null, cost_usd: r.cost_usd ?? null,
+        minutes: r.timings?.total_s ? Math.round(r.timings.total_s / 6) / 10 : null,
+      };
+    });
+  } catch { /* no fast runs yet */ }
+  return { runs, questions, quick };
 }

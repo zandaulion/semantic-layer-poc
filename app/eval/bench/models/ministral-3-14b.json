@@ -3,10 +3,11 @@
   "about": "Mistral AI Ministral 3 14B Instruct (2512), dense, FP8 as published by Mistral. Apache-2.0, EU vendor. Loaded in Mistral's own format as its model card prescribes for vLLM, at temperature 0.05: the card asks for below 0.1 in production. Served with vLLM v0.29.0: v0.30.0 ships transformers 5.17, which renamed a class vLLM's Pixtral code imports, so every Mistral 3 model fails to start there (vllm-project/vllm#58755, fixed on main, no 0.30 patch release). Sends reasoning_effort \"none\": the app's \"low\" (a gpt-oss setting) is refused by Mistral models, which accept only none or high (found by the app-shape probe, 2026-09-26). FP8 weights: it failed to compile on an A40 (Ampere, no native FP8); prefer an Ada, Hopper or Blackwell card.",
   "hf": "mistralai/Ministral-3-14B-Instruct-2512",
   "cards": [
+    "NVIDIA A100-SXM4-80GB",
+    "NVIDIA A100 80GB PCIe",
     "NVIDIA GeForce RTX 4090",
     "NVIDIA RTX PRO 4500 Blackwell",
-    "NVIDIA L40S",
-    "NVIDIA A100-SXM4-80GB"
+    "NVIDIA L40S"
   ],
   "disk_gb": 70,
   "vllm_args": [

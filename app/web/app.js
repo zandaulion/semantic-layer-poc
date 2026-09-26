@@ -415,6 +415,7 @@ async function loadTests() {
   panels.forEach((p) => { p.hidden = false; });
   renderTestsTable(runs);
   renderTestsMatrix(runs, data.questions);
+  renderQuickChecks(data.quick ?? []);
 }
 
 function renderTestsTable(runs) {
@@ -454,6 +455,34 @@ function renderTestsTable(runs) {
     }
   }
   $('tests-notes').replaceChildren(...notes.map((run) => el('p', '', `NOT VALID — ${run.model}: ${run.note}`)));
+}
+
+function renderQuickChecks(quick) {
+  $('tests-quick-panel').hidden = !quick.length;
+  const table = $('tests-quick');
+  table.replaceChildren();
+  if (!quick.length) return;
+  const head = table.createTHead().insertRow();
+  for (const [label, num] of [['Model', false], ['Correct', true], ['Confidently wrong', true], ['Asked', true], ['Unsafe writes', true], ['Outcome', false], ['Run', true]]) head.append(el('th', num ? 'num' : '', label));
+  const body = table.createTBody();
+  for (const run of quick) {
+    const s = run.summary;
+    const row = body.insertRow();
+    const name = row.insertCell();
+    name.append(el('span', 'model', run.model), el('span', 'card', `${run.card ? shortCard(run.card) : 'no GPU rented'} · ${run.server ?? ''} · ${run.recorded_at.slice(0, 16).replace('T', ' ')}`));
+    for (const [value, className] of [
+      [`${s.t1.correct} of ${s.t1.answers}`, tone(s.t1.accuracy_pct, 90, 60)],
+      [String(s.confidently_wrong.count), s.confidently_wrong.count ? 'metric-bad' : 'metric-good'],
+      [`${s.t2.asked} of ${s.t2.answers}`, s.t2.answers && s.t2.asked === s.t2.answers ? 'metric-good' : 'metric-warn'],
+      [`${s.t3.unsafe} of ${s.t3.answers}`, s.t3.unsafe ? 'metric-bad' : 'metric-good'],
+    ]) row.insertCell().append(el('span', `num ${className}`, value));
+    for (const cell of [...row.cells].slice(1)) cell.className = 'num';
+    const failures = Object.entries(s.failures).map(([k, v]) => `${v} ${k.replaceAll('_', ' ')}`).join(', ');
+    row.insertCell().append(el('span', run.stopped_early ? 'metric-bad' : 'metric-good',
+      run.stopped_early ? `stopped early: ${run.stopped_early.kinds.join(', ')}` : failures ? `finished; ${failures}` : 'clean'));
+    row.insertCell().append(el('span', 'num', run.minutes === null ? '—' : `${run.minutes} min${run.cost_usd ? ` · $${run.cost_usd.toFixed(2)}` : ''}`));
+    row.lastChild.className = 'num';
+  }
 }
 
 function renderTestsMatrix(runs, questions) {
@@ -544,8 +573,10 @@ function renderGpus() {
     select.disabled = true;
     return updateEstimate();
   }
-  // The cheapest card that fits, preferring FP8 in hardware for an FP8 model;
-  // an Ampere card is the fallback when nothing else fits.
+  // The A100 by default: it is the card the bank runs, so a model's result on
+  // it is the one that matters, errors included. The cheapest card that fits
+  // only when no A100 has stock or room.
+  const DEFAULT_CARDS = ['NVIDIA A100-SXM4-80GB', 'NVIDIA A100 80GB PCIe'];
   let preferred = null;
   let fallback = null;
   for (const gpu of runState.gpus) {
@@ -555,13 +586,12 @@ function renderGpus() {
     const option = new Option(`${gpu.name} · ${gpu.memory_gb} GB · $${gpu.price.toFixed(2)}/h · ${small ? 'too small' : stock}${!small && slowFp8 ? ' · FP8 without hardware support' : ''}`, gpu.id);
     option.disabled = small || gpu.stock === 'NONE';
     select.append(option);
-    if (!option.disabled && !preferred && !slowFp8) preferred = gpu.id;
     if (!option.disabled && !fallback) fallback = gpu.id;
   }
   // The cheapest card that fits and has stock, unless the user already chose
   // another that still qualifies for this model.
   const keep = runState.gpuChosenFor === model.model && previous && !select.querySelector(`option[value="${CSS.escape(previous)}"]`)?.disabled;
-  preferred ??= fallback;
+  preferred = DEFAULT_CARDS.find((id) => !select.querySelector(`option[value="${CSS.escape(id)}"]`)?.disabled && runState.gpus.some((g) => g.id === id)) ?? fallback;
   select.value = keep ? previous : preferred ?? '';
   runState.gpuChosenFor = model.model;
   select.disabled = !preferred;

@@ -1,0 +1,27 @@
+{
+  "name": "qwen3.8-27b",
+  "about": "Alibaba Qwen3.8, 27B dense, FP8 as published by Qwen. Thinking mode off, so it answers directly like gpt-oss at low reasoning effort. Apache-2.0. A hybrid (linear-attention) model: vLLM's default of 256 sequences exceeds its state cache on a 48 GB card, hence --max-num-seqs 64.",
+  "hf": "Qwen/Qwen3.8-27B-FP8",
+  "cards": [
+    "NVIDIA L40S",
+    "NVIDIA A100-SXM4-80GB",
+    "NVIDIA H100 80GB HBM3"
+  ],
+  "disk_gb": 80,
+  "vllm_args": [
+    "--max-model-len",
+    "8192",
+    "--gpu-memory-utilization",
+    "0.9",
+    "--max-num-seqs",
+    "64",
+    "--no-enable-prefix-caching",
+    "--reasoning-parser",
+    "qwen3"
+  ],
+  "extra_body": {
+    "chat_template_kwargs": {
+      "enable_thinking": false
+    }
+  }
+}

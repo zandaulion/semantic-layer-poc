@@ -1,0 +1,9 @@
+{
+  "name": "gpt-oss-20b",
+  "about": "OpenAI, mixture of experts (3.6B active), MXFP4 as released. The model approved today; the baseline every other profile is read against.",
+  "hf": "openai/gpt-oss-20b",
+  "cards": ["NVIDIA GeForce RTX 4090", "NVIDIA L40S", "NVIDIA A100-SXM4-80GB"],
+  "disk_gb": 60,
+  "vllm_args": ["--max-model-len", "8192", "--gpu-memory-utilization", "0.85", "--no-enable-prefix-caching"],
+  "extra_body": {}
+}

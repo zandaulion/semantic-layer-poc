@@ -25,3 +25,6 @@ Thumbs.db
 tmp/reference/
 app/data/
 .codex-remote-attachments/
+
+# Benchmark scratch: generated seed, run files, the pod ledger
+app/eval/bench/.cache/

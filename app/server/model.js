@@ -242,6 +242,7 @@ export async function generateDraft({ question, previousSql = '', hits }) {
       { role: 'user', content: prompt },
     ],
     response_format: { type: 'json_schema', json_schema: { name: 'sql_draft', strict: true, schema: responseSchema } },
+    ...config.modelExtraBody,
   });
   let result;
   try {
@@ -274,6 +275,20 @@ export async function generateDraft({ question, previousSql = '', hits }) {
       if (payload.choices?.[0]?.finish_reason === 'length') {
         const error = new Error('Model response was cut off at the token limit');
         error.publicCode = 'model_truncated';
+        // What filled the budget, for evaluation: reasoning that never ended,
+        // an answer padded with whitespace, or an answer that was simply long.
+        // Lengths and the last few characters only, never the whole reply.
+        const message = payload.choices[0].message ?? {};
+        const reasoning = String(message.reasoning_content ?? message.reasoning ?? '');
+        const content = String(message.content ?? '');
+        error.detail = {
+          completion_tokens: payload.usage?.completion_tokens ?? null,
+          reasoning_chars: reasoning.length,
+          content_chars: content.length,
+          content_whitespace_chars: content.length - content.trimEnd().length,
+          content_tail: content.trimEnd().slice(-120),
+          content_head: content.slice(0, 120),
+        };
         error.publicMessage = 'The model ran out of room before finishing the draft. Try again, or ask a narrower question.';
         throw error;
       }

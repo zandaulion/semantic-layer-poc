@@ -544,19 +544,24 @@ function renderGpus() {
     select.disabled = true;
     return updateEstimate();
   }
+  // The cheapest card that fits, preferring FP8 in hardware for an FP8 model;
+  // an Ampere card is the fallback when nothing else fits.
   let preferred = null;
+  let fallback = null;
   for (const gpu of runState.gpus) {
     const small = model.need_gb > gpu.memory_gb * USABLE;
-    const noFp8 = model.fp8 && gpu.ampere;
+    const slowFp8 = model.fp8 && gpu.ampere;
     const stock = gpu.stock === 'NONE' ? 'none in stock' : `${gpu.stock.toLowerCase()} stock`;
-    const option = new Option(`${gpu.name} · ${gpu.memory_gb} GB · $${gpu.price.toFixed(2)}/h · ${small ? 'too small' : noFp8 ? 'no native FP8' : stock}`, gpu.id);
-    option.disabled = small || noFp8 || gpu.stock === 'NONE';
+    const option = new Option(`${gpu.name} · ${gpu.memory_gb} GB · $${gpu.price.toFixed(2)}/h · ${small ? 'too small' : stock}${!small && slowFp8 ? ' · FP8 without hardware support' : ''}`, gpu.id);
+    option.disabled = small || gpu.stock === 'NONE';
     select.append(option);
-    if (!option.disabled && !preferred) preferred = gpu.id;
+    if (!option.disabled && !preferred && !slowFp8) preferred = gpu.id;
+    if (!option.disabled && !fallback) fallback = gpu.id;
   }
   // The cheapest card that fits and has stock, unless the user already chose
   // another that still qualifies for this model.
   const keep = runState.gpuChosenFor === model.model && previous && !select.querySelector(`option[value="${CSS.escape(previous)}"]`)?.disabled;
+  preferred ??= fallback;
   select.value = keep ? previous : preferred ?? '';
   runState.gpuChosenFor = model.model;
   select.disabled = !preferred;

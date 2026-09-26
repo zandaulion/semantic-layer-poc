@@ -217,6 +217,16 @@ node eval/run.mjs --retrieval-only --cases /tmp/cryptic/cases.json
 `--retrieval-only` needs Elasticsearch but no model, so a full three-variant
 sweep takes seconds.
 
+## With a model
+
+The retrieval figures above were later checked end to end, with `gpt-oss-20b`
+and `gpt-oss-120b` each drafting on catalogs B and C, three runs apiece. On B
+both passed every case. On C both passed the same six: three questions found no
+tables and never reached a model, and three reached one without the table they
+needed. The 120b asked a question each time; the 20b did too, except once,
+when it drafted a plausible query from the wrong table. The figures are in
+[RESULTS.md](app/eval/RESULTS.md#abbreviated-names).
+
 ## Limits
 
 - One fixture, generated with regular naming. A real warehouse is messier in

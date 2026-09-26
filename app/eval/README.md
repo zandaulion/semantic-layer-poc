@@ -295,6 +295,22 @@ node eval/make-cryptic.mjs --out /tmp/cryptic-bare --strip-prose
 node eval/run.mjs --retrieval-only --cases /tmp/cryptic/cases.json
 ```
 
+A variant can be ingested beside the live index rather than over it:
+`ELASTICSEARCH_INDEX` names the alias the ingestion moves, so a separate alias
+leaves the application's index untouched. The same two variables then point a
+full run, model included, at the variant:
+
+```bash
+podman exec -e CATALOG_PATH=/tmp/cryptic/catalog.json -e ELASTICSEARCH_INDEX=eval-cryptic \
+  banking-dwh node server/ingest.js
+podman exec -e CATALOG_PATH=/tmp/cryptic/catalog.json -e ELASTICSEARCH_INDEX=eval-cryptic \
+  -e MODEL_BASE_URL=... -e MODEL_NAME=... -e MODEL_API_KEY=... \
+  banking-dwh node eval/run.mjs --cases /tmp/cryptic/cases.json --out /tmp/cryptic-run.json
+```
+
+Both models' runs on both variants are in `baselines/cryptic/`, three per
+model and catalog.
+
 The findings from that sweep, and the two defects it exposed, are in
 [retrieval and naming](../../retrieval-and-naming.md).
 
@@ -345,6 +361,8 @@ contract with 64 requests batched together, and one RTX 4090 saturated at about
 SGLang was far slower on this card. On an A100, `gpt-oss-120b` gave the same
 answers as the 20b at more than twice the GPU time per question: every case is
 one the 20b already passes, so the set cannot show what the larger model adds.
+With abbreviated names and no descriptions, the 20b once drafted a plausible
+query from the wrong table where the 120b asked a question every time.
 
 ## What it does not measure
 

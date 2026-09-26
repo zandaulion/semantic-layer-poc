@@ -64,7 +64,9 @@ running on in whitespace until the token limit, until it was started with
 request at a time. On a rented A100, `gpt-oss-120b` matched the 20b on every
 case at more than twice the GPU time per question, which says the twelve
 cases are too easy to separate the two models rather than that the larger one
-adds nothing; the 20b ran no faster on the A100 than on the RTX 4090.
+adds nothing; the 20b ran no faster on the A100 than on the RTX 4090. On a
+catalog with abbreviated names and no descriptions, the 20b once drafted a
+plausible query from the wrong table where the 120b asked instead.
 
 It reports table grounding, status behaviour, read-only safety, inference latency
 and prompt size, and it classifies failures — a schema violation, meaning the

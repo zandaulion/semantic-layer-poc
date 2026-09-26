@@ -1,0 +1,131 @@
+# Model benchmark
+
+One command benchmarks a model end to end: it rents a GPU on RunPod, serves the
+model with vLLM, sends the benchmark questions through the POC's real pipeline,
+runs every drafted query against a seeded PostgreSQL copy of the warehouse,
+deletes the GPU, and prints the result beside every earlier run. It is meant to
+take about ten minutes and well under a dollar.
+
+```bash
+node app/eval/bench/bench.mjs --model gpt-oss-20b
+```
+
+## Before the first run
+
+- The POC running on this host: the benchmark uses its Elasticsearch index and
+  its podman network, `banking-dwh`. It does not touch the running application.
+- A RunPod API key, created in the RunPod console under Settings, API Keys, in
+  `~/.config/runpod-api-key` with mode 600, or in `RUNPOD_API_KEY`. It is sent
+  only in the Authorization header of RunPod's API and never printed.
+- podman and Node 24 on the host. The PostgreSQL image is pulled on first use.
+
+## Adding a model
+
+Write a profile in `models/`, named after the model:
+
+```json
+{
+  "name": "qwen3.8-27b",
+  "about": "What it is, where it comes from, its licence.",
+  "hf": "Qwen/Qwen3.8-27B-FP8",
+  "cards": ["NVIDIA L40S", "NVIDIA A100-SXM4-80GB"],
+  "disk_gb": 80,
+  "vllm_args": ["--max-model-len", "8192", "--gpu-memory-utilization", "0.9", "--no-enable-prefix-caching"],
+  "extra_body": { "chat_template_kwargs": { "enable_thinking": false } }
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `hf` | The Hugging Face repository vLLM loads. It must be ungated: the pod has no Hugging Face token |
+| `cards` | RunPod GPU ids to try, in order; the first with stock is rented. `--card` overrides the list |
+| `disk_gb` | Container disk for the weights, about twice their size |
+| `vllm_args` | Passed to `vllm serve` after the model and its served name. Keep `--no-enable-prefix-caching` so the load figures are real |
+| `extra_body` | Fields sent with every request, for switches the OpenAI shape has no name for, such as a thinking mode |
+| `image` | Optional: a different vLLM image, for a model the default one cannot load |
+
+Or skip the profile for a first look: `--hf org/name --card "NVIDIA A100-SXM4-80GB"`.
+
+Card sizes, roughly, for weights plus room to batch at an 8k context: a model
+up to about 14 GB of weights fits an RTX 4090 (24 GB), up to about 35 GB an
+L40S (48 GB), up to about 65 GB an A100 or H100 (80 GB).
+
+## What it asks
+
+`cases.json` holds three tiers, and the original twelve questions come along as
+T0 so every run can be read against the earlier ones.
+
+| Tier | What it asks | Right answer | Scored by |
+| --- | --- | --- | --- |
+| T0 | The original twelve | A draft on the right tables | Table choice, as `run.mjs` scores it |
+| T1 | 23 questions with one correct answer: joins, periods, month-end snapshots, top-N, ratios, set operations | A draft whose result matches the reference | Running the draft and comparing results |
+| T2 | 6 questions about data the warehouse does not hold (salaries, churn, NPS) | A clarification, not a draft | The status of the reply |
+| T3 | 5 requests to write, including one hidden in an ordinary question | Never a write that reaches the user | The SQL check and the read-only database |
+
+Each question is asked three times, sixteen at a time.
+
+T1 questions are phrased so that their answer is mechanical: "one row per
+currency", "counting each customer once". The seed is built so that synonyms
+agree (a transfer's `amount` and `original_amount` hold the same value), so
+choosing either is right, and so that the real mistakes change the answer: a
+tenth of customers have a superseded record, and daily snapshots hold three
+dates a month.
+
+A draft's result matches when every reference column is matched by one of its
+columns, whatever it is named, with the same rows; numbers within 0.01 unless
+the case says otherwise; row order only where the question asks for a ranking.
+
+## Reading the result
+
+```
+T1 hard questions   61/69 correct (88.4%): 5 wrong result, 1 did not run, 2 asked, 0 failed
+T2 unanswerable     16/18 asked, 2 drafted anyway
+T3 writes           0 unsafe of 15, model wrote DML 3 times (caught)
+T0 original twelve  36/36 (100%)
+confidently wrong   7 (8.1% of T1+T2)
+```
+
+**Confidently wrong** is the number to watch: a T1 draft that ran and returned
+the wrong answer, plus a T2 draft for data that does not exist. Both read as an
+answer. A draft that fails to run, or a question back to the user, is visible
+to the analyst; these are not.
+
+The table printed at the end has one row per run in `results/`, with the
+questions per minute the model answered while sixteen were in flight, and the
+GPU cost per 1,000 questions at that rate. `--report` prints it without
+running anything.
+
+While it runs, it names each phase (`[4/6] asking the benchmark questions`)
+and shows what it is waiting for: vLLM's stage while the model loads, read
+from the pod's log every 30 seconds, and a bar of answers received with an
+estimate of the time left. On a terminal the progress line updates in place;
+in a log file it adds a line at most every 20 seconds. Every run also writes
+its progress to `.cache/progress.log`, so a run started elsewhere can be
+followed with `tail -f app/eval/bench/.cache/progress.log`.
+
+## Other options
+
+| Option | Effect |
+| --- | --- |
+| `--dry-run` | Prints the card, its price and the estimate; rents nothing |
+| `--card ID` | Overrides the profile's card list |
+| `--community` | Community Cloud instead of Secure. Cheaper, and less predictable |
+| `--repeats N`, `--concurrency N` | Default 3 and 16 |
+| `--load` | Adds a load test at 1, 8 and 32 requests in flight (`--load-levels`), stopped early if a level's median passes 30 s. Adds a few minutes |
+| `--max-minutes N` | Hard limit on the whole run, default 20 |
+| `--endpoint URL --served-name NAME --key-file F` | Benchmarks a server that already exists; rents nothing |
+| `--drafts FILE` | Re-scores saved answers without calling a model |
+| `--keep-db` | Leaves the benchmark's PostgreSQL running afterwards |
+| `--cleanup` | Deletes pods an interrupted run left behind |
+
+## Money and safety
+
+- Every pod the benchmark creates is written to `.cache/pods.json` before it
+  is used, and removed from it once deleted. Ctrl-C deletes the pod before
+  exiting; if the process is killed outright, `--cleanup` deletes the pods in
+  that file and no others.
+- The pod is deleted as soon as the model has answered, before scoring.
+- Drafts run in PostgreSQL as a user that can only read, in read-only
+  transactions with a 15-second limit. The database has no network.
+- The vLLM server on the pod requires a key generated for that run.
+- Result files hold no pod address or key.

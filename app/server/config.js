@@ -24,4 +24,15 @@ export const config = {
   // modest hardware can take minutes for the same prompt. The budget has to
   // move with the backend, or a slow server is misreported as a broken one.
   modelTimeoutMs: Number(process.env.MODEL_TIMEOUT_MS) > 0 ? Number(process.env.MODEL_TIMEOUT_MS) : 70_000,
+  // Fields a particular model needs in every request and the OpenAI shape has
+  // no name for, such as Qwen's `chat_template_kwargs` to switch its thinking
+  // mode off. A JSON object, merged over the request the server builds.
+  modelExtraBody: parseExtraBody(process.env.MODEL_EXTRA_BODY),
 };
+
+function parseExtraBody(text) {
+  if (!text) return {};
+  const value = JSON.parse(text);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('MODEL_EXTRA_BODY must be a JSON object');
+  return value;
+}

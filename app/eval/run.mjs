@@ -26,99 +26,9 @@ import { fileURLToPath } from 'node:url';
 import { config } from '../server/config.js';
 import { searchTables, elasticHealth } from '../server/elastic.js';
 import { contextForHits } from '../server/catalog.js';
-import { generateDraft } from '../server/model.js';
-import { referencedTables } from '../server/sql-check.js';
+import { classifyFailure, redact, runCase } from './pipeline.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-
-/**
- * Why a case produced no usable answer. The distinction matters more than the
- * pass rate does: a schema violation means the server did not honour the strict
- * JSON schema the whole application is built on, which is a portability defect,
- * while a provider error or a timeout is an operational one.
- */
-/**
- * Provider errors quote account and organisation identifiers. Result files are
- * meant to be compared, attached to a decision, and kept, so those are stripped
- * here rather than trusted not to matter later.
- */
-function redact(message) {
-  return String(message)
-    .replace(/\borg_[A-Za-z0-9]+/g, 'org_[redacted]')
-    .replace(/\b(?:sk|gsk)_[A-Za-z0-9]+/g, '[redacted-key]');
-}
-
-function classifyFailure(error) {
-  const message = String(error?.message || error);
-  if (error?.name === 'AbortError' || /aborted/i.test(message)) return 'timeout';
-  if (error?.publicCode === 'model_truncated') return 'truncated';
-  if (/Model response status is invalid/.test(message) || error instanceof SyntaxError) return 'schema_violation';
-  if (error?.publicCode === 'model_provider_error') return 'provider_error';
-  return 'harness_error';
-}
-
-function scoreCase(testCase, draft) {
-  const expect = testCase.expect ?? {};
-  const wanted = Array.isArray(expect.status) ? expect.status : [expect.status].filter(Boolean);
-  const { known, unknown } = referencedTables(draft.sql || '');
-  const used = new Set(known);
-
-  const required = expect.required_tables ?? [];
-  const preferred = expect.preferred_tables ?? [];
-  const forbidden = expect.forbidden_tables ?? [];
-
-  const missing = required.filter((table) => !used.has(table));
-  const trespassed = forbidden.filter((table) => used.has(table));
-  // Two different questions, and conflating them scores the wrong thing. The
-  // safety property is that a write never reaches the user as a draft, which
-  // the checker enforces by downgrading the status. Whether the model needed
-  // saving at all is recorded separately -- it is precisely the behaviour a
-  // different backend is likely to change.
-  const statementFailed = draft.checks?.statement === 'failed';
-  const readOnly = !(statementFailed && draft.status === 'draft');
-  const emittedWrite = statementFailed && Boolean((draft.sql || '').trim());
-
-  return {
-    status: draft.status,
-    status_ok: wanted.length === 0 || wanted.includes(draft.status),
-    // Grounding is only meaningful where a draft was the right answer at all.
-    grounding_ok: missing.length === 0 && trespassed.length === 0,
-    missing_tables: missing,
-    forbidden_tables_used: trespassed,
-    preferred_covered: preferred.length ? preferred.filter((table) => used.has(table)).length / preferred.length : null,
-    unknown_tables: unknown,
-    // Never conditional: the POC drafts read-only SQL for every question.
-    read_only_ok: readOnly,
-    model_emitted_write: emittedWrite,
-    checks: { statement: draft.checks?.statement, tables: draft.checks?.tables },
-    tables_used: [...used].sort(),
-  };
-}
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/**
- * A rate limit says something about an account's quota, not about the model's
- * behaviour on the question. Scoring it as a failed case would make a run's
- * pass rate depend on how recently the last run happened, so the harness waits
- * and asks again instead. Nothing else is retried: a schema violation or a
- * malformed answer is a result, and retrying it would hide exactly what this
- * harness exists to find.
- */
-async function withRateLimitRetry(work, attempts = 4) {
-  for (let attempt = 0; ; attempt += 1) {
-    const startedAt = Date.now();
-    try {
-      return { value: await work(), startedAt };
-    } catch (error) {
-      const limited = /429|rate_limit/i.test(String(error?.message || ''));
-      if (!limited || attempt >= attempts - 1) throw error;
-      const wait = 5_000 * 2 ** attempt;
-      process.stderr.write(`rate limited, waiting ${wait / 1000}s ... `);
-      await sleep(wait);
-    }
-  }
-}
 
 /**
  * Retrieval measured on its own, without calling a model.
@@ -177,39 +87,6 @@ async function runRetrievalCase(testCase) {
   }
 }
 
-async function runCase(testCase) {
-  const started = Date.now();
-  try {
-    const hits = await searchTables(testCase.question, testCase.domain ?? 'all');
-    const { value: draft, startedAt: attemptStarted } = await withRateLimitRetry(
-      () => generateDraft({ question: testCase.question, hits }),
-    );
-    const score = scoreCase(testCase, draft);
-    return {
-      id: testCase.id,
-      ok: score.status_ok && score.grounding_ok && score.read_only_ok,
-      // Measured on the attempt that succeeded, so a backoff does not get
-      // reported as the model being slow.
-      latency_ms: Date.now() - attemptStarted,
-      // Which code path answered. The catalog rule never calls a model, so it is
-      // the control: it must not move when the backend does.
-      path: draft.model === 'catalog_rule' ? 'catalog_rule' : 'model',
-      usage: draft.usage ?? null,
-      retrieved: (draft.retrieved_tables ?? []).length,
-      ...score,
-      sql: draft.sql || '',
-    };
-  } catch (error) {
-    return {
-      id: testCase.id,
-      ok: false,
-      path: 'failed',
-      failure: classifyFailure(error),
-      message: redact(error?.message || error).slice(0, 300),
-      latency_ms: Date.now() - started,
-    };
-  }
-}
 
 function percentile(values, fraction) {
   if (!values.length) return null;

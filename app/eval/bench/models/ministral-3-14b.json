@@ -1,0 +1,9 @@
+{
+  "name": "ministral-3-14b",
+  "about": "Mistral AI Ministral 3 14B Instruct (2512), dense, FP8 as published by Mistral. Apache-2.0, EU vendor. Loaded in Mistral's own format as its model card prescribes for vLLM, at temperature 0.05: the card asks for below 0.1 in production.",
+  "hf": "mistralai/Ministral-3-14B-Instruct-2512",
+  "cards": ["NVIDIA GeForce RTX 4090", "NVIDIA RTX PRO 4500 Blackwell", "NVIDIA L40S", "NVIDIA A100-SXM4-80GB"],
+  "disk_gb": 70,
+  "vllm_args": ["--max-model-len", "8192", "--gpu-memory-utilization", "0.9", "--max-num-seqs", "64", "--no-enable-prefix-caching", "--tokenizer-mode", "mistral", "--config-format", "mistral", "--load-format", "mistral"],
+  "extra_body": { "temperature": 0.05 }
+}

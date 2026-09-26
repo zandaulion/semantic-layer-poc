@@ -449,8 +449,11 @@ async function main() {
     let started = Date.now();
     phase(`asking the benchmark questions, ${repeats === 1 ? 'once' : `${repeats} times`} each, ${concurrency} at once`);
     await inRunner('eval/bench/drafts.mjs', ['--out', '/out/drafts.json', '--repeats', String(repeats), '--concurrency', String(concurrency), ...(quick ? ['--quick'] : [])], env, outDir, (line) => {
-      if (line.startsWith('STOPPED')) { say(`stopping early: ${line.slice(8)} replies so far failed`); return; }
-      const m = line.match(/^PROGRESS (\d+) (\d+)$/);
+      if (/STOPPED \d/.test(line)) { say(`stopping early: ${line.slice(line.indexOf('STOPPED') + 8)} replies so far failed`); return; }
+      // Anywhere in the line: a rate-limit notice ("rate limited, waiting
+      // 28s ... ") is written without a newline, and the next progress
+      // report lands on the end of it.
+      const m = line.match(/PROGRESS (\d+) (\d+)$/);
       if (!m) return;
       const [done, total] = [Number(m[1]), Number(m[2])];
       const spent = (Date.now() - started) / 1000;

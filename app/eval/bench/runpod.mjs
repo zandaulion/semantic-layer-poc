@@ -44,6 +44,27 @@ async function call(method, route, body) {
   return payload;
 }
 
+/**
+ * Cards the benchmark can rent: NVIDIA (the vLLM image is CUDA), whole cards
+ * rather than MIG slices, with a Secure Cloud price, 24 GB or more.
+ */
+export async function listGpus() {
+  // Stock counted only on hosts new enough for the vLLM image (CUDA 12.8), the
+  // same constraint every pod is created with: otherwise a card shows stock
+  // that a create then refuses.
+  const { gpus } = await call('GET', '/catalog/gpus?include=AVAILABILITY&product=POD&cloud=SECURE&minCudaVersion=12.8');
+  return gpus
+    .filter((g) => g.secure && g.manufacturer !== 'AMD' && !/MIG/.test(g.id) && g.memory >= 24 && g.price?.secure > 0)
+    .map((g) => ({ id: g.id, name: g.name ?? g.id, memory_gb: g.memory, price: g.price.secure, stock: g.availability ?? 'NONE' }))
+    .sort((a, b) => a.price - b.price);
+}
+
+/** What RunPod has billed today, all resources. It lags by up to a few hours. */
+export async function billedToday() {
+  const billing = await call('GET', '/billing?bucketSize=day&lastN=1');
+  return billing?.metadata?.totals?.totalAmount ?? 0;
+}
+
 export async function gpuPrice(gpuId, cloud) {
   const gpu = await call('GET', `/catalog/gpus/${encodeURIComponent(gpuId)}`);
   return gpu.price?.[cloud === 'COMMUNITY' ? 'community' : 'secure'] ?? null;
@@ -79,7 +100,7 @@ export async function createPod({ name, cards, cloud, image, cmd, env, disk, min
   for (const card of cards) {
     // The catalog says when a card is out of stock, which is cheaper and
     // clearer than reading it out of a refused create.
-    const stock = await call('GET', `/catalog/gpus/${encodeURIComponent(card)}?include=AVAILABILITY&product=POD&cloud=${cloud}`).catch(() => null);
+    const stock = await call('GET', `/catalog/gpus/${encodeURIComponent(card)}?include=AVAILABILITY&product=POD&cloud=${cloud}${minCuda ? `&minCudaVersion=${minCuda}` : ''}`).catch(() => null);
     if (stock?.availability === 'NONE') { refusals.push(`${card}: none in stock`); continue; }
     try {
       const pod = await call('POST', '/pods', {

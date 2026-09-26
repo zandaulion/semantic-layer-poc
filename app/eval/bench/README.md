@@ -108,10 +108,44 @@ its progress to `.cache/progress.log`, so a run started elsewhere can be
 followed with `tail -f app/eval/bench/.cache/progress.log`.
 
 The PWA shows the same runs in its **Model tests** tab (`/#tests`): the table,
-a legend, and every question's outcome per run. It reads the files in
-`results/` that are built into the image, so a new run appears there after the
-image is rebuilt and the service restarted. Quick and superseded runs stay out,
-as they do here.
+a legend, and every question's outcome per run. With the daemon running it
+reads the checkout's `results/`, so a new run appears at once; without it,
+the files built into the image. Quick and superseded runs stay out, as they
+do here.
+
+## Running a test from the PWA
+
+The **Run a test** tab (`/#run`) does what the command line does. Enter a
+model, a Hugging Face id or a profile name, and check it; choose a card from
+the list; choose Fast (`--quick`) or Full; confirm the price; and follow the
+run as it goes. The finished run stays on show for two hours.
+
+Checking a model asks Hugging Face, before anything is rented, whether it
+exists, is public and ungated, has safetensors weights, and generates text,
+and sizes its weights from the files themselves. The card list then offers
+only cards with room for it and stock right now, counting only hosts new
+enough for the vLLM image (CUDA 12.8). What cannot be checked in advance is
+whether vLLM serves the model well; that is what a fast run is for.
+
+The PWA itself holds no RunPod key and runs no containers. A daemon on the
+host does (`eval/bench/daemon.mjs`), installed as a user service by
+`app/deploy/a1/install-bench-daemon.sh`. The two talk through request and
+response files in `~/.local/share/banking-bench`, which the banking-dwh
+quadlet mounts at `/run/bench`: files rather than a socket, because SELinux
+refuses a container a connection to a host process's socket and allows a
+relabelled directory. There is no port.
+
+Guards, all enforced by the daemon, whatever the page shows:
+
+- **Who.** Only devices listed in `BENCH_RUNNER_DEVICES` in the server's
+  environment file may use the tab to start anything; others see results only.
+- **One at a time.** A second run is refused while one is going.
+- **Time.** A fast run is stopped at 15 minutes and a full one at 25.
+- **Money.** A run whose worst case would take the day past
+  `BENCH_DAILY_CAP_USD` (default $5) is refused. Today's spend is the higher
+  of the daemon's own ledger and RunPod's bill, which lags by a few hours.
+- **Clean-up.** Stopping a run, or the daemon, interrupts `bench.mjs` the way
+  Ctrl-C does, which deletes the pod.
 
 ## Other options
 

@@ -25,10 +25,18 @@ Environment=CATALOG_PATH=/srv/banking-poc/catalog.json
 # Reached by container name on the private network. Overrides whatever the
 # environment file still says about loopback.
 Environment=ELASTICSEARCH_URL=http://banking-poc-elasticsearch:9200
+# Shared with the benchmark daemon on the host (app/deploy/a1/install-bench-
+# daemon.sh), for the "Run a test" tab. Files, not a socket: SELinux refuses a
+# container a connection to a host process's socket, and allows a relabelled
+# directory. Without the daemon the tab says so and nothing else changes.
+Volume=%h/.local/share/banking-bench:/run/bench:z
+Environment=BENCH_DIR=/run/bench
 NoNewPrivileges=true
 DropCapability=all
 
 [Service]
+# The shared directory has to exist before the container mounts it.
+ExecStartPre=/usr/bin/mkdir -p %h/.local/share/banking-bench
 Restart=always
 RestartSec=10
 

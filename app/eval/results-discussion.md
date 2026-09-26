@@ -244,6 +244,47 @@ memory for more concurrent requests than a longer limit would. Prefix caching
 was off, but as the section above shows, turning it on would save little for
 different questions.
 
+### The larger model changed nothing this harness can see
+
+`gpt-oss-120b` passed all twelve cases, grounded every answer in the right
+tables, held the schema contract and declined the delete request, as every
+self-hosted 20b run did. The one case where it differed from the 20b on the
+RTX 4090 was the `dim_currency` join on wire transfers. The 20b on the A100
+made the same join, as did four of the six 20b runs above, so that is the
+sampling drift described earlier rather than something the larger model knows.
+The 120b gave the same statuses and tables in all three of its runs.
+
+What it did change was cost. On the same card it took 2.2 s at the median
+instead of 1.2 s, wrote about 40% more tokens per answer (267 against 191,
+mostly reasoning), and topped out at about 115 questions a minute against 263.
+Each question costs more than twice the GPU time, and on these
+twelve cases nothing was bought with it.
+
+That is a statement about the cases, not the model. All twelve are ones every
+20b backend already answers, so the set sits at its ceiling and cannot show
+what a larger model is for. Telling the two apart needs questions the 20b gets
+wrong: ambiguous business terms, joins across more than one hop, and the
+abbreviated catalog from `make-cryptic.mjs`, where the names stop explaining
+themselves.
+
+On the card question, the A100 did not beat the RTX 4090 for the 20b: the same
+median for one request, and 263 questions a minute at saturation against 273.
+The 20b fits comfortably in 24 GB, so the A100's extra memory buys it nothing,
+and at $1.59 an hour against $0.74 it costs about twice as much per question.
+The A100 pod was in Maryland rather than Romania, which adds a transatlantic
+round trip to every request, but that affects single-request latency, not
+throughput with 64 in flight.
+
+One request in the A100 20b sweep came back `truncated`, at 64 in flight. That
+is the check added after SGLang's whitespace runaway, and it caught a reply
+cut off at `max_completion_tokens`. Two more batches of 384 requests at 64 in
+flight, which kept each failure's raw reply, produced no failure at all, so the
+cause was not captured. vLLM's startup configuration shows its JSON grammar
+also allows arbitrary whitespace by default (`disable_any_whitespace=False`),
+so the same runaway is a plausible cause but an unconfirmed one. At about one
+in a thousand requests, it is a reason to keep the check, not a reason to
+change servers.
+
 ### What the GPU runs cost
 
 Eight RunPod pods, all RTX 4090, came to roughly $0.90:
@@ -258,6 +299,11 @@ Eight RunPod pods, all RTX 4090, came to roughly $0.90:
   sweeps, the repeat that captured the failures and the restart that tested
   the fix.
 
+A ninth pod, one A100 SXM on Secure Cloud at $1.59 an hour, ran for about 21
+minutes and cost about $0.56. It served the 120b for three runs and a sweep,
+was restarted with the 20b for one run and a sweep, and ran the two capture
+batches.
+
 ## What this does not settle
 
 - **NIM.** vLLM held the schema contract, and SGLang held it once configured.
@@ -266,12 +312,15 @@ Eight RunPod pods, all RTX 4090, came to roughly $0.90:
 - **SGLang on the hardware it is built for.** Its speed here is a result for
   an RTX 4090 and gpt-oss's MXFP4 weights, not for SGLang on a datacenter
   card.
-- **Larger cards, or more than one.** The sweep is one RTX 4090. A datacenter
-  card has more memory for concurrent requests, and the saturation point above
-  does not transfer to it.
+- **More than one card, or newer ones.** The sweeps are one RTX 4090 and one
+  A100. Neither says how the 120b scales across cards with tensor parallelism,
+  or what a Hopper-class card with native FP8 and FP4 support would do.
 - **Whether the SQL is right.** Nothing executes it. Table selection is checked;
   column choice, join direction and business meaning are not — the same limits the
   PWA declares to its own users.
-- **A larger or different model.** The likely corporate reality is not this model
+- **What a larger model is worth.** The 120b matched the 20b on every case,
+  because every case is one the 20b already answers. A harder question set is
+  needed before that comparison means anything.
+- **A different model.** The likely corporate reality is not this model
   self-hosted but a different one entirely, chosen by model risk approval. That
   swap would dwarf the hosting difference measured here.

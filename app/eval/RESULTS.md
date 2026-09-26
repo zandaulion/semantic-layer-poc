@@ -114,6 +114,60 @@ The same server restarted with `--constrained-json-disable-any-whitespace`, and 
 | 16 | 48 | 34.0 s | 43.8 s | 27.4 | 87 | 0 |
 | 32 | 96 | 47.5 s | 64.3 s | 38.2 | 122 | 1 timeout |
 
+## A larger model, and a datacenter card
+
+`gpt-oss-120b` fits on one 80 GB A100 in the MXFP4 it ships in. Both A100 runs
+used vLLM 0.30.0 with the flags of the RTX 4090 recipe, so the 20b column
+separates the card from the model.
+
+| Measure | 20b on RTX 4090 | 20b on A100 | 120b on A100 |
+| --- | --- | --- | --- |
+| Label | `vllm-cuda-rtx4090` | `vllm-a100-gpt-oss-20b` | `vllm-a100-gpt-oss-120b` |
+| Hardware | one RTX 4090 (24 GB), RunPod Secure Cloud | one A100 SXM (80 GB), RunPod Secure Cloud | one A100 SXM (80 GB), RunPod Secure Cloud |
+| Recorded | 2026-09-25 | 2026-09-26 | 2026-09-26 |
+| Cases passed | 12/12 | 12/12 | 12/12 |
+| Table grounding | 12/12 answered | 12/12 answered | 12/12 answered |
+| Schema violations | 0 | 0 | 0 |
+| Model emitted a write | 0 | 0 | 0 |
+| Latency p50 | 1.3 s | 1.2 s | 2.2 s |
+| Latency p95 | 3.9 s | 4.7 s | 5.4 s |
+| Completion tokens, mean | 193 | 191 | 267 |
+| Peak requests / min | 273.2 | 262.8 | 114.8 |
+
+20b on A100 against 20b on RTX 4090: `wire-transfers-by-currency` used `dim_currency`, `dim_date`, `fact_wire_transfer` where the reference used `dim_date`, `fact_wire_transfer`.
+
+120b on A100 against 20b on RTX 4090: `wire-transfers-by-currency` used `dim_currency`, `dim_date`, `fact_wire_transfer` where the reference used `dim_date`, `fact_wire_transfer`.
+
+120b on A100 was run 3 times (`vllm-a100-gpt-oss-120b`, `vllm-a100-gpt-oss-120b-r2`, `vllm-a100-gpt-oss-120b-r3`). Every case had the same status and tables in every run.
+
+### gpt-oss-20b on one A100
+
+The same vLLM image and flags as the RTX 4090 sweep, on the larger card.
+
+| Users in flight | Requests | Latency p50 | Latency p95 | Requests / min | Output tokens / s | Failures |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 10 | 1.2 s | 1.5 s | 48.8 | 154 | 0 |
+| 2 | 10 | 1.5 s | 1.7 s | 81.4 | 257 | 0 |
+| 4 | 12 | 2.1 s | 2.5 s | 114.9 | 364 | 0 |
+| 8 | 24 | 3.0 s | 3.5 s | 158.3 | 505 | 0 |
+| 16 | 48 | 4.4 s | 6.5 s | 208.9 | 677 | 0 |
+| 32 | 96 | 7.4 s | 11.2 s | 254.5 | 816 | 0 |
+| 64 | 192 | 12.6 s | 20.7 s | 262.8 | 840 | 1 truncated |
+
+### gpt-oss-120b on one A100
+
+Started with `--gpu-memory-utilization 0.92`; the weights take most of the card, and the rest holds the KV cache.
+
+| Users in flight | Requests | Latency p50 | Latency p95 | Requests / min | Output tokens / s | Failures |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 10 | 2.4 s | 2.9 s | 25.6 | 116 | 0 |
+| 2 | 10 | 3.1 s | 4.8 s | 38.2 | 185 | 0 |
+| 4 | 12 | 4.1 s | 6.6 s | 51.6 | 250 | 0 |
+| 8 | 24 | 6.7 s | 7.7 s | 75.2 | 340 | 0 |
+| 16 | 48 | 10.3 s | 13.8 s | 92.5 | 436 | 0 |
+| 32 | 96 | 16.6 s | 25.4 s | 112.8 | 522 | 0 |
+| 64 | 192 | 31.0 s | 41.5 s | 114.8 | 526 | 1 timeout |
+
 ## Where the runs disagreed
 
 ### `wire-transfers-by-currency`
@@ -397,6 +451,47 @@ memory for more concurrent requests than a longer limit would. Prefix caching
 was off, but as the section above shows, turning it on would save little for
 different questions.
 
+### The larger model changed nothing this harness can see
+
+`gpt-oss-120b` passed all twelve cases, grounded every answer in the right
+tables, held the schema contract and declined the delete request, as every
+self-hosted 20b run did. The one case where it differed from the 20b on the
+RTX 4090 was the `dim_currency` join on wire transfers. The 20b on the A100
+made the same join, as did four of the six 20b runs above, so that is the
+sampling drift described earlier rather than something the larger model knows.
+The 120b gave the same statuses and tables in all three of its runs.
+
+What it did change was cost. On the same card it took 2.2 s at the median
+instead of 1.2 s, wrote about 40% more tokens per answer (267 against 191,
+mostly reasoning), and topped out at about 115 questions a minute against 263.
+Each question costs more than twice the GPU time, and on these
+twelve cases nothing was bought with it.
+
+That is a statement about the cases, not the model. All twelve are ones every
+20b backend already answers, so the set sits at its ceiling and cannot show
+what a larger model is for. Telling the two apart needs questions the 20b gets
+wrong: ambiguous business terms, joins across more than one hop, and the
+abbreviated catalog from `make-cryptic.mjs`, where the names stop explaining
+themselves.
+
+On the card question, the A100 did not beat the RTX 4090 for the 20b: the same
+median for one request, and 263 questions a minute at saturation against 273.
+The 20b fits comfortably in 24 GB, so the A100's extra memory buys it nothing,
+and at $1.59 an hour against $0.74 it costs about twice as much per question.
+The A100 pod was in Maryland rather than Romania, which adds a transatlantic
+round trip to every request, but that affects single-request latency, not
+throughput with 64 in flight.
+
+One request in the A100 20b sweep came back `truncated`, at 64 in flight. That
+is the check added after SGLang's whitespace runaway, and it caught a reply
+cut off at `max_completion_tokens`. Two more batches of 384 requests at 64 in
+flight, which kept each failure's raw reply, produced no failure at all, so the
+cause was not captured. vLLM's startup configuration shows its JSON grammar
+also allows arbitrary whitespace by default (`disable_any_whitespace=False`),
+so the same runaway is a plausible cause but an unconfirmed one. At about one
+in a thousand requests, it is a reason to keep the check, not a reason to
+change servers.
+
 ### What the GPU runs cost
 
 Eight RunPod pods, all RTX 4090, came to roughly $0.90:
@@ -411,6 +506,11 @@ Eight RunPod pods, all RTX 4090, came to roughly $0.90:
   sweeps, the repeat that captured the failures and the restart that tested
   the fix.
 
+A ninth pod, one A100 SXM on Secure Cloud at $1.59 an hour, ran for about 21
+minutes and cost about $0.56. It served the 120b for three runs and a sweep,
+was restarted with the 20b for one run and a sweep, and ran the two capture
+batches.
+
 ## What this does not settle
 
 - **NIM.** vLLM held the schema contract, and SGLang held it once configured.
@@ -419,13 +519,16 @@ Eight RunPod pods, all RTX 4090, came to roughly $0.90:
 - **SGLang on the hardware it is built for.** Its speed here is a result for
   an RTX 4090 and gpt-oss's MXFP4 weights, not for SGLang on a datacenter
   card.
-- **Larger cards, or more than one.** The sweep is one RTX 4090. A datacenter
-  card has more memory for concurrent requests, and the saturation point above
-  does not transfer to it.
+- **More than one card, or newer ones.** The sweeps are one RTX 4090 and one
+  A100. Neither says how the 120b scales across cards with tensor parallelism,
+  or what a Hopper-class card with native FP8 and FP4 support would do.
 - **Whether the SQL is right.** Nothing executes it. Table selection is checked;
   column choice, join direction and business meaning are not — the same limits the
   PWA declares to its own users.
-- **A larger or different model.** The likely corporate reality is not this model
+- **What a larger model is worth.** The 120b matched the 20b on every case,
+  because every case is one the 20b already answers. A harder question set is
+  needed before that comparison means anything.
+- **A different model.** The likely corporate reality is not this model
   self-hosted but a different one entirely, chosen by model risk approval. That
   swap would dwarf the hosting difference measured here.
 

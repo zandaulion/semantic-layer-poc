@@ -50,6 +50,10 @@ Card sizes, roughly, for weights plus room to batch at an 8k context: a model
 up to about 14 GB of weights fits an RTX 4090 (24 GB), up to about 35 GB an
 L40S (48 GB), up to about 65 GB an A100 or H100 (80 GB).
 
+Every run sends two probe requests the moment the server answers, one for
+plain text and one for a tiny JSON schema, and prints both replies. When a
+model fails, they say whether it is broken as served or only under the schema.
+
 ## What it asks
 
 `cases.json` holds three tiers, and the original twelve questions come along as
@@ -103,11 +107,20 @@ in a log file it adds a line at most every 20 seconds. Every run also writes
 its progress to `.cache/progress.log`, so a run started elsewhere can be
 followed with `tail -f app/eval/bench/.cache/progress.log`.
 
+The PWA shows the same runs in its **Model tests** tab (`/#tests`): the table,
+a legend, and every question's outcome per run. It reads the files in
+`results/` that are built into the image, so a new run appears there after the
+image is rebuilt and the service restarted. Quick and superseded runs stay out,
+as they do here.
+
 ## Other options
 
 | Option | Effect |
 | --- | --- |
 | `--dry-run` | Prints the card, its price and the estimate; rents nothing |
+| `--quick` | A smoke test: ten questions once each, saved under `results/quick/` and left out of the table. Use it first for a new model |
+| `--vllm-extra JSON`, `--image REF` | Extra `vllm serve` arguments, or a different image, for an experiment, without editing the profile |
+| `--no-fail-fast` | Keeps asking even when most replies fail. By default a run stops once more than half of at least eight replies have failed |
 | `--card ID` | Overrides the profile's card list |
 | `--community` | Community Cloud instead of Secure. Cheaper, and less predictable |
 | `--repeats N`, `--concurrency N` | Default 3 and 16 |

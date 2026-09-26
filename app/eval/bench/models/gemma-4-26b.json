@@ -1,6 +1,6 @@
 {
   "name": "gemma-4-26b",
-  "about": "Google Gemma 4, mixture of experts (26B, 4B active), BF16 as released. Apache-2.0. Uses Google's recommended sampling (temperature 1.0, top_p 0.95, top_k 64) instead of the POC's 0.1: at 0.1 it looped, repeating a phrase inside its answer until the token limit, on about three replies in four (results/superseded). The whitespace setting is kept because it costs nothing.",
+  "about": "Google Gemma 4, mixture of experts (26B, 4B active), BF16 as released. Apache-2.0. NOT USABLE with the POC as of 2026-09: under strict JSON output it collapses into repeating a token mid-answer, a known model-level regression from Gemma 3 (google-deepmind/gemma#622, vllm-project/vllm#40080) that penalties do not fix. Tried here: default settings, no-whitespace grammar, Google's recommended sampling, and FLEX_ATTENTION (would not start); short prompts answer correctly, benchmark prompts loop. See results/superseded and results/quick.",
   "hf": "google/gemma-4-26B-A4B-it",
   "cards": [
     "NVIDIA A100-SXM4-80GB",

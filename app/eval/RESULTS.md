@@ -4,6 +4,28 @@ Generated from the recorded runs in [`baselines/`](baselines) by
 `node eval/build-results.mjs`. Every figure in the tables comes out of those
 files; none is retyped. Rerun it after recording a new run.
 
+## At a glance
+
+Every comparison made so far, one row each. The linked section has the
+detail; the reading of it is under [Reading the results](#reading-the-results).
+
+| Comparison | Varied | Held the same | Cases passed | Peak questions / min | GPU cost per 1,000 questions | Finding |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Model server](#summary) | Hosted, A1 CPU, x86 CPU, llama.cpp GPU, vLLM GPU, SGLang GPU | `gpt-oss-20b`, original catalog | Hosted 10/12 (2 provider_error); 12/12 in 5 runs | — | — | Every server grounded every answered case in the right tables. Optional joins drifted even between runs of one server. Only the hosted run wrote the `DELETE`; the SQL check caught it |
+| [Load on one RTX 4090](#under-concurrent-load) | server, 1 to 64 requests in flight | `gpt-oss-20b`, one RTX 4090 | — | vLLM: 273<br>llama.cpp, 16 slots: 130<br>SGLang, default JSON grammar: 26<br>SGLang, whitespace disallowed: 38 | vLLM $0.045 | vLLM is the one to size with. SGLang broke the JSON contract under load until started with `--constrained-json-disable-any-whitespace` |
+| [Card](#a-larger-model-and-a-datacenter-card) | RTX 4090 vs A100 | vLLM, `gpt-oss-20b` | 12/12 in both runs | 20b on RTX 4090: 273<br>20b on A100: 263 | 20b on RTX 4090: $0.045<br>20b on A100: $0.101 | Same speed; the 20b does not need the A100's memory, so the RTX 4090 is the cheaper card for it |
+| [Model size](#a-larger-model-and-a-datacenter-card) | `gpt-oss-20b` vs `gpt-oss-120b` | vLLM, one A100, original catalog | 12/12 in all 4 runs | 20b on A100: 263<br>120b on A100: 115 | 20b on A100: $0.101<br>120b on A100: $0.230 | Same answers. Every case is one the 20b already passes, so this set cannot show what the 120b adds |
+| [Abbreviated names](#abbreviated-names), descriptions kept (B) | table and column names | both models, vLLM, one A100 | 20b: 12/12 in all 3 runs<br>120b: 12/12 in all 3 runs | — | — | Descriptions carry what the names lost; prompts grow by about half. Wrong drafts: 20b 0, 120b 0 |
+| [Abbreviated names](#abbreviated-names), descriptions stripped (C) | names and descriptions | both models, vLLM, one A100 | 20b: 6/12 in all 3 runs<br>120b: 6/12 in all 3 runs | — | — | Search finds nothing for three questions. Where the model lacked the right table, the 120b always asked; the 20b once drafted a plausible query from the wrong one. Wrong drafts: 20b 1, 120b 0 |
+
+Cost per 1,000 questions is the pod's hourly price divided by its peak throughput:
+the GPU alone, at full load, with nothing idle.
+
+**Not yet compared** (see [What this does not settle](#what-this-does-not-settle)):
+whether the generated SQL is correct, questions written to be hard, other model
+families, NIM, SGLang on a datacenter card, more than one card or newer ones, and
+the application itself under load, which still generates one draft at a time.
+
 ## The runs
 
 |  | Hosted | A1 CPU | x86 CPU | llama.cpp GPU | vLLM GPU | SGLang GPU |
@@ -559,8 +581,8 @@ cases.
 Neither model invented a table on either catalog. When context was missing,
 both said so or guessed within the tables they were given.
 
-The larger model's cost carried over: about 40% more output tokens on both
-catalogs and roughly twice the median latency.
+The larger model's cost carried over: a third to 40% more output tokens, and
+one and a half to two times the median latency.
 
 ### What the GPU runs cost
 

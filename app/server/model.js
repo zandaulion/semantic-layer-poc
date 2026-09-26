@@ -3,7 +3,7 @@ import { contextForHits, schemaName, DOCUMENT_STATUS } from './catalog.js';
 import { expandSearchQuery } from './elastic.js';
 import { checkSql } from './sql-check.js';
 
-const responseSchema = {
+export const responseSchema = {
   type: 'object',
   properties: {
     status: { type: 'string', enum: ['draft', 'needs_clarification', 'unsupported'] },

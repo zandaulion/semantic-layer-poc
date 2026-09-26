@@ -73,7 +73,10 @@ const phase = (text) => say(`[${++phaseCount}/${PHASES}] ${text}`);
 let PHASES = 6;
 
 /** What vLLM is doing, judged from the last lines of the pod's log. */
-function stage(lines) {
+function stage(lines, system = []) {
+  // The container's own log first: the system log's early "pulling" lines
+  // would otherwise outrank a model that is already loading.
+  if (!lines.length) return /start container/.test(system.join('\n')) ? 'starting the container' : /Pulling|Downloading|Extracting|pull/i.test(system.join('\n')) ? 'pulling the vLLM image' : 'starting';
   const text = lines.join('\n');
   const last = (re) => [...text.matchAll(re)].at(-1);
   const shards = last(/checkpoint shards:\s+(\d+)%/g);
@@ -202,6 +205,54 @@ async function probe(baseUrl, key, profile) {
     messages: [{ role: 'user', content: 'What is the capital of France? Reply as JSON.' }],
     response_format: { type: 'json_schema', json_schema: { name: 'probe', strict: true, schema: { type: 'object', properties: { answer: { type: 'string' } }, required: ['answer'], additionalProperties: false } } },
   });
+  await appShapeProbe(baseUrl, key, profile);
+}
+
+/**
+ * The request the application actually sends, with its schema and fields. A
+ * server can accept the probes above and refuse this; when it does, send it
+ * again with one difference taken away at a time, and say which removal made
+ * it pass. That names the incompatible field in one run instead of one per
+ * guess.
+ */
+async function appShapeProbe(baseUrl, key, profile) {
+  const { responseSchema } = await import('../../server/model.js');
+  const full = {
+    model: profile.name, temperature: 0.1, max_completion_tokens: 300, reasoning_effort: 'low',
+    messages: [
+      { role: 'system', content: 'You draft reviewable PostgreSQL SQL. Output only the requested JSON object.' },
+      { role: 'user', content: 'Count the rows of bank_dwh.dim_branch.' },
+    ],
+    response_format: { type: 'json_schema', json_schema: { name: 'sql_draft', strict: true, schema: responseSchema } },
+    ...(profile.extra_body ?? {}),
+  };
+  const send = async (body) => {
+    try {
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+        body: JSON.stringify(body), signal: AbortSignal.timeout(90_000),
+      });
+      const payload = await response.json().catch(() => ({}));
+      return { ok: response.ok, status: response.status, text: String(payload.choices?.[0]?.message?.content ?? payload.error?.message ?? payload.message ?? payload.detail ?? '').replace(/\s+/g, ' ') };
+    } catch (error) {
+      return { ok: false, status: 0, text: error.message };
+    }
+  };
+  const first = await send(full);
+  say(`probe, the app's request: ${first.status} ${JSON.stringify(first.text.slice(0, 200))}`);
+  if (first.ok) return;
+  const without = (field) => { const copy = { ...full }; delete copy[field]; return copy; };
+  const variants = [
+    ['without reasoning_effort', without('reasoning_effort')],
+    ['with max_tokens instead of max_completion_tokens', { ...without('max_completion_tokens'), max_tokens: 300 }],
+    ['without the system message', { ...full, messages: full.messages.filter((m) => m.role !== 'system') }],
+    ['with a non-strict schema', { ...full, response_format: { type: 'json_schema', json_schema: { name: 'sql_draft', schema: responseSchema } } }],
+    ['with json_object instead of a schema', { ...full, response_format: { type: 'json_object' } }],
+  ];
+  for (const [label, body] of variants) {
+    const reply = await send(body);
+    say(`  ${reply.ok ? 'accepted' : 'refused '} ${label}${reply.ok ? '' : `: ${reply.text.slice(0, 120)}`}`);
+  }
 }
 
 /** Why replies were cut off, from what the truncated ones held. */
@@ -356,7 +407,7 @@ async function main() {
         if (Date.now() - lastLook > 30_000) {
           lastLook = Date.now();
           const [system, container] = await Promise.all([podLog(podId, 15, 'system'), podLog(podId, 40, 'container')].map((p) => p.catch(() => [])));
-          current = stage([...system, ...container]);
+          current = stage(container, system);
         }
         progress(`${current}, ${Math.round((Date.now() - podStarted) / 1000)} s since the pod started`);
       };

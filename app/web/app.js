@@ -542,9 +542,10 @@ function renderGpus() {
   let preferred = null;
   for (const gpu of runState.gpus) {
     const small = model.need_gb > gpu.memory_gb * USABLE;
+    const noFp8 = model.fp8 && gpu.ampere;
     const stock = gpu.stock === 'NONE' ? 'none in stock' : `${gpu.stock.toLowerCase()} stock`;
-    const option = new Option(`${gpu.name} · ${gpu.memory_gb} GB · $${gpu.price.toFixed(2)}/h · ${small ? 'too small' : stock}`, gpu.id);
-    option.disabled = small || gpu.stock === 'NONE';
+    const option = new Option(`${gpu.name} · ${gpu.memory_gb} GB · $${gpu.price.toFixed(2)}/h · ${small ? 'too small' : noFp8 ? 'no native FP8' : stock}`, gpu.id);
+    option.disabled = small || noFp8 || gpu.stock === 'NONE';
     select.append(option);
     if (!option.disabled && !preferred) preferred = gpu.id;
   }

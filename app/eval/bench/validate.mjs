@@ -65,8 +65,12 @@ export async function validateModel(input) {
   if (info.pipeline_tag && !TEXT.has(info.pipeline_tag)) return fail(`${info.id} is a model for ${info.pipeline_tag.replaceAll('-', ' ')}, not one that writes text.`);
 
   const unknown = Object.keys(tensors).filter((t) => !(t in BYTES));
-  const fileBytes = (info.siblings ?? []).filter((f) => f.rfilename.endsWith('.safetensors') && !f.rfilename.includes('/'))
-    .reduce((n, f) => n + (f.size ?? 0), 0);
+  // Some repositories ship the weights twice: Hugging Face shards and a
+  // `consolidated` copy in the vendor's own layout. vLLM loads one of them,
+  // so count the shards when both are there.
+  const weightFiles = (info.siblings ?? []).filter((f) => f.rfilename.endsWith('.safetensors') && !f.rfilename.includes('/'));
+  const shards = weightFiles.filter((f) => !/^consolidated/.test(f.rfilename));
+  const fileBytes = (shards.length ? shards : weightFiles).reduce((n, f) => n + (f.size ?? 0), 0);
   const bytes = fileBytes || Object.entries(tensors).reduce((n, [dtype, count]) => n + count * (BYTES[dtype] ?? 2), 0);
   const weightsGb = Math.round((bytes / 1e9) * 10) / 10;
   const warnings = [];

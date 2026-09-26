@@ -285,6 +285,46 @@ so the same runaway is a plausible cause but an unconfirmed one. At about one
 in a thousand requests, it is a reason to keep the check, not a reason to
 change servers.
 
+### Abbreviated names separated the models once, in the direction that matters
+
+With names abbreviated and descriptions kept (catalog B), both models passed
+every case in all three runs. The descriptions carried what the names no longer
+did. The cost was in the prompt: 4,339 tokens on average instead of 2,797.
+Search pulled in eight tables where it had pulled six for most questions, and
+abbreviations take more tokens than words: `active-customers` retrieved eight
+tables in both catalogs and its prompt still grew by a quarter. The catalog
+rule for clients in default stood down, as it is built to when it cannot
+recognise its columns, and both models answered that case themselves.
+
+With the descriptions stripped as well (catalog C), both models passed the same
+six cases in every run, and the six failures split in two:
+
+- **Three never reached a model.** Search returned no tables for wire
+  transfers, complaints and card disputes, and the pipeline asked the user
+  instead of calling the model. That is retrieval, and it matches the
+  `--retrieval-only` measurement in [retrieval and naming](../../retrieval-and-naming.md).
+- **Three reached a model without the table they needed**, and what the model
+  did with that is the one place the two sizes differed. The 120b asked a
+  question every time, in all three runs. The 20b asked in eight of its nine
+  chances; in the ninth it answered "how many clients were in default at the end
+  of August 2025" by counting customer interactions with a lifecycle status of
+  `'DEFAULT'` across the whole month, a plausible query that has nothing to do
+  with loan delinquency.
+
+That draft is the failure this POC exists to prevent: it reads as an answer,
+and neither the statement check nor the table check can catch it, because every
+table and column it names exists. One wrong draft in nine is not enough to
+rank the models; three runs each can show a difference but cannot size it. It
+is the first result in this comparison where the larger model did something
+the smaller one did not, and it came from the hardest catalog, not the easy
+cases.
+
+Neither model invented a table on either catalog. When context was missing,
+both said so or guessed within the tables they were given.
+
+The larger model's cost carried over: a third to 40% more output tokens, and
+one and a half to two times the median latency.
+
 ### What the GPU runs cost
 
 Eight RunPod pods, all RTX 4090, came to roughly $0.90:
@@ -304,6 +344,9 @@ minutes and cost about $0.56. It served the 120b for three runs and a sweep,
 was restarted with the 20b for one run and a sweep, and ran the two capture
 batches.
 
+A tenth pod, the same A100 configuration, ran for about 14 minutes and cost
+about $0.36: three runs of each model on each abbreviated catalog.
+
 ## What this does not settle
 
 - **NIM.** vLLM held the schema contract, and SGLang held it once configured.
@@ -318,9 +361,11 @@ batches.
 - **Whether the SQL is right.** Nothing executes it. Table selection is checked;
   column choice, join direction and business meaning are not — the same limits the
   PWA declares to its own users.
-- **What a larger model is worth.** The 120b matched the 20b on every case,
-  because every case is one the 20b already answers. A harder question set is
-  needed before that comparison means anything.
+- **What a larger model is worth.** The 120b matched the 20b on every case of
+  the original catalog, because every case is one the 20b already answers. On
+  the stripped catalog it avoided one wrong draft the 20b made in three runs.
+  Sizing that difference needs more runs, and questions written to be hard
+  rather than a catalog made hard.
 - **A different model.** The likely corporate reality is not this model
   self-hosted but a different one entirely, chosen by model risk approval. That
   swap would dwarf the hosting difference measured here.

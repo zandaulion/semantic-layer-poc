@@ -258,6 +258,57 @@ for (const run of scale.filter((r) => r.repeatData.length)) {
 }
 scaleLoads.forEach(sweepTable);
 
+// Both models on the abbreviated catalogs from make-cryptic.mjs, three runs of
+// each, all on one A100. The expected tables are translated through the same
+// name map, so each case still asserts the same thing.
+const crypticModels = ['gpt-oss-20b', 'gpt-oss-120b'];
+const crypticCatalogs = [
+  { id: 'cryptic', name: 'B: abbreviated names, descriptions kept' },
+  { id: 'cryptic-bare', name: 'C: abbreviated names, descriptions stripped' },
+];
+const cryptic = [];
+for (const catalog of crypticCatalogs) {
+  for (const model of crypticModels) {
+    const files = [1, 2, 3].map((i) => `baselines/cryptic/${model}-${catalog.id}-r${i}.json`);
+    cryptic.push({ catalog, model, files, runs: await Promise.all(files.map(read)) });
+  }
+}
+// A draft is the dangerous outcome here: it reads as an answer. A clarification
+// is the safe one, and whether the model or retrieval produced it matters,
+// because only the first says anything about the model. The result file marks
+// both `path: 'model'`; only a reply the model actually wrote carries `usage`.
+const wrongDrafts = (d) => d.results.filter((r) => answered(r) && r.status === 'draft' && !r.grounding_ok);
+const modelAsked = (d) => d.results.filter((r) => r.usage && r.status === 'needs_clarification' && !r.grounding_ok);
+const noModel = (d) => d.results.filter((r) => !r.usage && !r.ok);
+const perRun = (runs, f) => runs.map(f).join(' / ');
+const median = (values) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
+
+w('## Abbreviated names', '');
+w('The same twelve cases against the two catalogs `make-cryptic.mjs` builds, where',
+  '`fact_wire_transfer` becomes `F_WR_TRF`. Each model ran three times on each',
+  'catalog, on one A100 with vLLM 0.30.0. Figures are given per run.', '');
+w(`| Measure | ${cryptic.map((c) => `${c.model}, ${c.catalog.id}`).join(' | ')} |`, `| --- |${' --- |'.repeat(cryptic.length)}`);
+const crypticRow = (label, cell) => w(`| ${label} | ${cryptic.map(cell).join(' | ')} |`);
+crypticRow('Cases passed', (c) => perRun(c.runs, (d) => `${d.summary.passed}/${d.summary.cases}`));
+crypticRow('Draft with the wrong tables', (c) => perRun(c.runs, (d) => wrongDrafts(d).length));
+crypticRow('Model asked instead', (c) => perRun(c.runs, (d) => modelAsked(d).length));
+crypticRow('Retrieval found nothing, no model call', (c) => perRun(c.runs, (d) => noModel(d).length));
+crypticRow('Unknown tables invented', (c) => perRun(c.runs, (d) => d.results.reduce((n, r) => n + (r.unknown_tables?.length ?? 0), 0)));
+crypticRow('Prompt tokens, mean', (c) => c.runs[0].summary.tokens.prompt_mean);
+crypticRow('Completion tokens, mean', (c) => Math.round(c.runs.reduce((n, d) => n + d.summary.tokens.completion_mean, 0) / c.runs.length));
+crypticRow('Latency p50, median of runs', (c) => time(median(c.runs.map((d) => d.summary.latency_ms.p50))));
+w('');
+for (const catalog of crypticCatalogs) w(`- **${catalog.id}** — ${catalog.name}`);
+w('');
+for (const c of cryptic) {
+  c.runs.forEach((d) => {
+    for (const r of wrongDrafts(d)) {
+      w(`\`${d.label}\` drafted \`${r.id}\` from ${list(r.tables_used)}, without ${list(r.missing_tables)}:`, '',
+        '```sql', r.sql, '```', '');
+    }
+  });
+}
+
 w('## Where the runs disagreed', '');
 const byId = Object.fromEntries(cases.map((c) => [c.id, c]));
 for (const id of disagreements) {

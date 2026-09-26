@@ -168,6 +168,36 @@ Started with `--gpu-memory-utilization 0.92`; the weights take most of the card,
 | 32 | 96 | 16.6 s | 25.4 s | 112.8 | 522 | 0 |
 | 64 | 192 | 31.0 s | 41.5 s | 114.8 | 526 | 1 timeout |
 
+## Abbreviated names
+
+The same twelve cases against the two catalogs `make-cryptic.mjs` builds, where
+`fact_wire_transfer` becomes `F_WR_TRF`. Each model ran three times on each
+catalog, on one A100 with vLLM 0.30.0. Figures are given per run.
+
+| Measure | gpt-oss-20b, cryptic | gpt-oss-120b, cryptic | gpt-oss-20b, cryptic-bare | gpt-oss-120b, cryptic-bare |
+| --- | --- | --- | --- | --- |
+| Cases passed | 12/12 / 12/12 / 12/12 | 12/12 / 12/12 / 12/12 | 6/12 / 6/12 / 6/12 | 6/12 / 6/12 / 6/12 |
+| Draft with the wrong tables | 0 / 0 / 0 | 0 / 0 / 0 | 0 / 0 / 1 | 0 / 0 / 0 |
+| Model asked instead | 0 / 0 / 0 | 0 / 0 / 0 | 3 / 3 / 2 | 3 / 3 / 3 |
+| Retrieval found nothing, no model call | 0 / 0 / 0 | 0 / 0 / 0 | 3 / 3 / 3 | 3 / 3 / 3 |
+| Unknown tables invented | 0 / 0 / 0 | 0 / 0 / 0 | 0 / 0 / 0 | 0 / 0 / 0 |
+| Prompt tokens, mean | 4339 | 4339 | 3592 | 3592 |
+| Completion tokens, mean | 224 | 314 | 179 | 236 |
+| Latency p50, median of runs | 1.5 s | 3.0 s | 1.1 s | 1.6 s |
+
+- **cryptic** — B: abbreviated names, descriptions kept
+- **cryptic-bare** — C: abbreviated names, descriptions stripped
+
+`vllm-a100-gpt-oss-20b-cryptic-bare-r3` drafted `clients-in-default-month-end` from `D_DT`, `F_CUST_INTRC`, without `F_LN_DLQ_D`:
+
+```sql
+SELECT COUNT(DISTINCT f.CUST_K) AS num_default_clients
+FROM bank_dwh.F_CUST_INTRC f
+JOIN bank_dwh.D_DT d ON f.BUS_DT_K = d.DT_K
+WHERE d.CAL_DT >= '2025-08-01' AND d.CAL_DT <= '2025-08-31'
+  AND f.LFCYC_STS_CD1 = 'DEFAULT';
+```
+
 ## Where the runs disagreed
 
 ### `wire-transfers-by-currency`
@@ -492,6 +522,46 @@ so the same runaway is a plausible cause but an unconfirmed one. At about one
 in a thousand requests, it is a reason to keep the check, not a reason to
 change servers.
 
+### Abbreviated names separated the models once, in the direction that matters
+
+With names abbreviated and descriptions kept (catalog B), both models passed
+every case in all three runs. The descriptions carried what the names no longer
+did. The cost was in the prompt: 4,339 tokens on average instead of 2,797.
+Search pulled in eight tables where it had pulled six for most questions, and
+abbreviations take more tokens than words: `active-customers` retrieved eight
+tables in both catalogs and its prompt still grew by a quarter. The catalog
+rule for clients in default stood down, as it is built to when it cannot
+recognise its columns, and both models answered that case themselves.
+
+With the descriptions stripped as well (catalog C), both models passed the same
+six cases in every run, and the six failures split in two:
+
+- **Three never reached a model.** Search returned no tables for wire
+  transfers, complaints and card disputes, and the pipeline asked the user
+  instead of calling the model. That is retrieval, and it matches the
+  `--retrieval-only` measurement in [retrieval and naming](../../retrieval-and-naming.md).
+- **Three reached a model without the table they needed**, and what the model
+  did with that is the one place the two sizes differed. The 120b asked a
+  question every time, in all three runs. The 20b asked in eight of its nine
+  chances; in the ninth it answered "how many clients were in default at the end
+  of August 2025" by counting customer interactions with a lifecycle status of
+  `'DEFAULT'` across the whole month, a plausible query that has nothing to do
+  with loan delinquency.
+
+That draft is the failure this POC exists to prevent: it reads as an answer,
+and neither the statement check nor the table check can catch it, because every
+table and column it names exists. One wrong draft in nine is not enough to
+rank the models; three runs each can show a difference but cannot size it. It
+is the first result in this comparison where the larger model did something
+the smaller one did not, and it came from the hardest catalog, not the easy
+cases.
+
+Neither model invented a table on either catalog. When context was missing,
+both said so or guessed within the tables they were given.
+
+The larger model's cost carried over: about 40% more output tokens on both
+catalogs and roughly twice the median latency.
+
 ### What the GPU runs cost
 
 Eight RunPod pods, all RTX 4090, came to roughly $0.90:
@@ -511,6 +581,9 @@ minutes and cost about $0.56. It served the 120b for three runs and a sweep,
 was restarted with the 20b for one run and a sweep, and ran the two capture
 batches.
 
+A tenth pod, the same A100 configuration, ran for about 14 minutes and cost
+about $0.36: three runs of each model on each abbreviated catalog.
+
 ## What this does not settle
 
 - **NIM.** vLLM held the schema contract, and SGLang held it once configured.
@@ -525,9 +598,11 @@ batches.
 - **Whether the SQL is right.** Nothing executes it. Table selection is checked;
   column choice, join direction and business meaning are not — the same limits the
   PWA declares to its own users.
-- **What a larger model is worth.** The 120b matched the 20b on every case,
-  because every case is one the 20b already answers. A harder question set is
-  needed before that comparison means anything.
+- **What a larger model is worth.** The 120b matched the 20b on every case of
+  the original catalog, because every case is one the 20b already answers. On
+  the stripped catalog it avoided one wrong draft the 20b made in three runs.
+  Sizing that difference needs more runs, and questions written to be hard
+  rather than a catalog made hard.
 - **A different model.** The likely corporate reality is not this model
   self-hosted but a different one entirely, chosen by model risk approval. That
   swap would dwarf the hosting difference measured here.

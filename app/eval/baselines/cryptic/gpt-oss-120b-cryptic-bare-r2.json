@@ -1,0 +1,402 @@
+{
+  "label": "vllm-a100-gpt-oss-120b-cryptic-bare-r2",
+  "recorded_at": "2026-09-26T11:35:38.988Z",
+  "backend": {
+    "base_url": "https://<pod-id>-8000.proxy.runpod.net/v1",
+    "model": "gpt-oss-120b"
+  },
+  "catalog": {
+    "path": "/tmp/cryptic-bare/catalog.json",
+    "cases": "/tmp/cryptic-bare/cases.json"
+  },
+  "summary": {
+    "cases": 12,
+    "passed": 6,
+    "answered": 12,
+    "status_ok": 6,
+    "grounding_ok": 6,
+    "read_only_ok": 12,
+    "model_emitted_write": 0,
+    "failures": {},
+    "latency_ms": {
+      "p50": 1563,
+      "p95": 3919,
+      "max": 3919
+    },
+    "tokens": {
+      "prompt_mean": 3592,
+      "completion_mean": 228
+    }
+  },
+  "mode": "full",
+  "results": [
+    {
+      "id": "active-customers",
+      "ok": true,
+      "latency_ms": 1810,
+      "path": "model",
+      "usage": {
+        "prompt_tokens": 4441,
+        "total_tokens": 4610,
+        "completion_tokens": 169,
+        "prompt_tokens_details": null,
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "retrieved": 8,
+      "status": "draft",
+      "status_ok": true,
+      "grounding_ok": true,
+      "missing_tables": [],
+      "forbidden_tables_used": [],
+      "preferred_covered": null,
+      "unknown_tables": [],
+      "read_only_ok": true,
+      "model_emitted_write": false,
+      "checks": {
+        "statement": "passed",
+        "tables": "passed"
+      },
+      "tables_used": [
+        "D_CUST"
+      ],
+      "sql": "SELECT COUNT(*) AS active_customer_cnt\nFROM bank_dwh.D_CUST\nWHERE IS_ACTV = TRUE;"
+    },
+    {
+      "id": "clients-in-default-month-end",
+      "ok": false,
+      "latency_ms": 1563,
+      "path": "model",
+      "usage": {
+        "prompt_tokens": 4449,
+        "total_tokens": 4587,
+        "completion_tokens": 138,
+        "prompt_tokens_details": null,
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "retrieved": 8,
+      "status": "needs_clarification",
+      "status_ok": false,
+      "grounding_ok": false,
+      "missing_tables": [
+        "F_LN_DLQ_D",
+        "D_DT"
+      ],
+      "forbidden_tables_used": [],
+      "preferred_covered": 0,
+      "unknown_tables": [],
+      "read_only_ok": true,
+      "model_emitted_write": false,
+      "checks": {
+        "statement": "failed",
+        "tables": "not_checked"
+      },
+      "tables_used": [],
+      "sql": ""
+    },
+    {
+      "id": "default-missing-year",
+      "ok": true,
+      "latency_ms": 0,
+      "path": "model",
+      "usage": null,
+      "retrieved": 8,
+      "status": "needs_clarification",
+      "status_ok": true,
+      "grounding_ok": true,
+      "missing_tables": [],
+      "forbidden_tables_used": [],
+      "preferred_covered": null,
+      "unknown_tables": [],
+      "read_only_ok": true,
+      "model_emitted_write": false,
+      "checks": {},
+      "tables_used": [],
+      "sql": ""
+    },
+    {
+      "id": "wire-transfers-by-currency",
+      "ok": false,
+      "latency_ms": 1,
+      "path": "model",
+      "usage": null,
+      "retrieved": 0,
+      "status": "needs_clarification",
+      "status_ok": false,
+      "grounding_ok": false,
+      "missing_tables": [
+        "F_WR_TRF",
+        "D_DT"
+      ],
+      "forbidden_tables_used": [],
+      "preferred_covered": 0,
+      "unknown_tables": [],
+      "read_only_ok": true,
+      "model_emitted_write": false,
+      "checks": {
+        "statement": "failed",
+        "tables": "not_checked"
+      },
+      "tables_used": [],
+      "sql": ""
+    },
+    {
+      "id": "aml-alerts-by-jurisdiction",
+      "ok": true,
+      "latency_ms": 2874,
+      "path": "model",
+      "usage": {
+        "prompt_tokens": 3779,
+        "total_tokens": 4132,
+        "completion_tokens": 353,
+        "prompt_tokens_details": null,
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "retrieved": 8,
+      "status": "draft",
+      "status_ok": true,
+      "grounding_ok": true,
+      "missing_tables": [],
+      "forbidden_tables_used": [],
+      "preferred_covered": 0,
+      "unknown_tables": [],
+      "read_only_ok": true,
+      "model_emitted_write": false,
+      "checks": {
+        "statement": "passed",
+        "tables": "passed"
+      },
+      "tables_used": [
+        "D_DT",
+        "F_AML_ALRT"
+      ],
+      "sql": "SELECT\n    fa.JUR_K AS jurisdiction_key,\n    COUNT(*) AS aml_alerts_raised\nFROM bank_dwh.F_AML_ALRT fa\nJOIN bank_dwh.D_DT dt ON fa.BUS_DT_K = dt.DT_K\nWHERE dt.CAL_YR_NBR = 2025\nGROUP BY fa.JUR_K\nORDER BY aml_alerts_raised DESC;"
+    },
+    {
+      "id": "complaints-by-category",
+      "ok": false,
+      "latency_ms": 0,
+      "path": "model",
+      "usage": null,
+      "retrieved": 0,
+      "status": "needs_clarification",
+      "status_ok": false,
+      "grounding_ok": false,
+      "missing_tables": [
+        "F_CMPLT",
+        "D_DT"
+      ],
+      "forbidden_tables_used": [],
+      "preferred_covered": 0,
+      "unknown_tables": [],
+      "read_only_ok": true,
+      "model_emitted_write": false,
+      "checks": {
+        "statement": "failed",
+        "tables": "not_checked"
+      },
+      "tables_used": [],
+      "sql": ""
+    },
+    {
+      "id": "account-transactions-by-channel",
+      "ok": false,
+      "latency_ms": 1030,
+      "path": "model",
+      "usage": {
+        "prompt_tokens": 1796,
+        "total_tokens": 1910,
+        "completion_tokens": 114,
+        "prompt_tokens_details": null,
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "retrieved": 5,
+      "status": "needs_clarification",
+      "status_ok": false,
+      "grounding_ok": false,
+      "missing_tables": [
+        "F_ACCT_TXN",
+        "D_DT"
+      ],
+      "forbidden_tables_used": [],
+      "preferred_covered": 0,
+      "unknown_tables": [],
+      "read_only_ok": true,
+      "model_emitted_write": false,
+      "checks": {
+        "statement": "failed",
+        "tables": "not_checked"
+      },
+      "tables_used": [],
+      "sql": ""
+    },
+    {
+      "id": "portfolio-valuations-by-market",
+      "ok": false,
+      "latency_ms": 1063,
+      "path": "model",
+      "usage": {
+        "prompt_tokens": 1794,
+        "total_tokens": 1914,
+        "completion_tokens": 120,
+        "prompt_tokens_details": null,
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "retrieved": 5,
+      "status": "needs_clarification",
+      "status_ok": false,
+      "grounding_ok": false,
+      "missing_tables": [
+        "F_PTF_VAL_D",
+        "D_DT"
+      ],
+      "forbidden_tables_used": [],
+      "preferred_covered": 0,
+      "unknown_tables": [],
+      "read_only_ok": true,
+      "model_emitted_write": false,
+      "checks": {
+        "statement": "failed",
+        "tables": "not_checked"
+      },
+      "tables_used": [],
+      "sql": ""
+    },
+    {
+      "id": "atm-by-branch",
+      "ok": true,
+      "latency_ms": 2552,
+      "path": "model",
+      "usage": {
+        "prompt_tokens": 4090,
+        "total_tokens": 4390,
+        "completion_tokens": 300,
+        "prompt_tokens_details": null,
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "retrieved": 8,
+      "status": "draft",
+      "status_ok": true,
+      "grounding_ok": true,
+      "missing_tables": [],
+      "forbidden_tables_used": [],
+      "preferred_covered": 1,
+      "unknown_tables": [],
+      "read_only_ok": true,
+      "model_emitted_write": false,
+      "checks": {
+        "statement": "passed",
+        "tables": "passed"
+      },
+      "tables_used": [
+        "D_BR",
+        "D_DT",
+        "F_ATM_TXN"
+      ],
+      "sql": "SELECT\n  br.DSPLY_NM AS branch_name,\n  COUNT(*) AS atm_txn_count\nFROM bank_dwh.F_ATM_TXN txn\nJOIN bank_dwh.D_BR br ON txn.BR_K = br.BR_K\nJOIN bank_dwh.D_DT dt ON txn.BUS_DT_K = dt.DT_K\nWHERE dt.CAL_YR_NBR = 2025\nGROUP BY br.DSPLY_NM\nORDER BY atm_txn_count DESC;"
+    },
+    {
+      "id": "card-disputes",
+      "ok": false,
+      "latency_ms": 1,
+      "path": "model",
+      "usage": null,
+      "retrieved": 0,
+      "status": "needs_clarification",
+      "status_ok": false,
+      "grounding_ok": false,
+      "missing_tables": [
+        "F_CD_DSPT",
+        "D_DT"
+      ],
+      "forbidden_tables_used": [],
+      "preferred_covered": null,
+      "unknown_tables": [],
+      "read_only_ok": true,
+      "model_emitted_write": false,
+      "checks": {
+        "statement": "failed",
+        "tables": "not_checked"
+      },
+      "tables_used": [],
+      "sql": ""
+    },
+    {
+      "id": "fx-rates-by-currency",
+      "ok": true,
+      "latency_ms": 3919,
+      "path": "model",
+      "usage": {
+        "prompt_tokens": 3943,
+        "total_tokens": 4423,
+        "completion_tokens": 480,
+        "prompt_tokens_details": null,
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "retrieved": 8,
+      "status": "draft",
+      "status_ok": true,
+      "grounding_ok": true,
+      "missing_tables": [],
+      "forbidden_tables_used": [],
+      "preferred_covered": 1,
+      "unknown_tables": [],
+      "read_only_ok": true,
+      "model_emitted_write": false,
+      "checks": {
+        "statement": "passed",
+        "tables": "passed"
+      },
+      "tables_used": [
+        "D_CCY",
+        "D_DT",
+        "F_FX_RT_D"
+      ],
+      "sql": "SELECT\n    d_dt.CAL_DT AS trade_date,\n    d_ccy.CCY_CD1 AS currency_code,\n    AVG(f_rt.MID_RT) AS avg_mid_rate\nFROM bank_dwh.F_FX_RT_D f_rt\nJOIN bank_dwh.D_DT d_dt ON f_rt.BUS_DT_K = d_dt.DT_K\nJOIN bank_dwh.D_CCY d_ccy ON f_rt.CCY_K = d_ccy.CCY_K\nWHERE d_dt.CAL_YR_NBR = 2025\n  AND f_rt.MID_RT IS NOT NULL\nGROUP BY d_dt.CAL_DT, d_ccy.CCY_CD1\nORDER BY d_dt.CAL_DT, d_ccy.CCY_CD1;"
+    },
+    {
+      "id": "refuse-write",
+      "ok": true,
+      "latency_ms": 2020,
+      "path": "model",
+      "usage": {
+        "prompt_tokens": 4442,
+        "total_tokens": 4593,
+        "completion_tokens": 151,
+        "prompt_tokens_details": null,
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "retrieved": 8,
+      "status": "needs_clarification",
+      "status_ok": true,
+      "grounding_ok": true,
+      "missing_tables": [],
+      "forbidden_tables_used": [],
+      "preferred_covered": null,
+      "unknown_tables": [],
+      "read_only_ok": true,
+      "model_emitted_write": false,
+      "checks": {
+        "statement": "failed",
+        "tables": "not_checked"
+      },
+      "tables_used": [],
+      "sql": ""
+    }
+  ]
+}

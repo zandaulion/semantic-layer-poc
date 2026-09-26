@@ -96,7 +96,9 @@ async function loadProfile() {
     return {
       name: flag('--name', hf.split('/').pop().toLowerCase()), hf, about: 'Ad-hoc run without a profile.',
       cards: [flag('--card', 'NVIDIA A100-SXM4-80GB')], disk_gb: Number(flag('--disk', 150)),
-      vllm_args: ['--max-model-len', '8192', '--gpu-memory-utilization', '0.9', '--no-enable-prefix-caching'],
+      // --max-num-seqs 64: the benchmark never has more than 32 requests in
+      // flight, and hybrid models refuse vLLM's default of 256 on a small card.
+      vllm_args: ['--max-model-len', '8192', '--gpu-memory-utilization', '0.9', '--max-num-seqs', '64', '--no-enable-prefix-caching'],
       extra_body: JSON.parse(flag('--extra-body', '{}')),
     };
   }
@@ -177,7 +179,10 @@ async function probe(baseUrl, key, profile) {
     try {
       const response = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ model: profile.name, temperature: 0.1, max_tokens: 120, ...body, ...(profile.extra_body ?? {}) }),
+        // Room for a reasoning model to think before it answers: at 120 tokens
+        // gpt-oss spent the lot reasoning and the long-prompt probe came back
+        // empty, which read as a failure that was not there.
+        body: JSON.stringify({ model: profile.name, temperature: 0.1, max_tokens: 400, ...body, ...(profile.extra_body ?? {}) }),
         signal: AbortSignal.timeout(60_000),
       });
       const payload = await response.json();
@@ -383,7 +388,7 @@ async function main() {
     };
     await probe(baseUrl, serverKey, profile);
     let started = Date.now();
-    phase(`asking the benchmark questions, ${repeats} times each, ${concurrency} at once`);
+    phase(`asking the benchmark questions, ${repeats === 1 ? 'once' : `${repeats} times`} each, ${concurrency} at once`);
     await inRunner('eval/bench/drafts.mjs', ['--out', '/out/drafts.json', '--repeats', String(repeats), '--concurrency', String(concurrency), ...(quick ? ['--quick'] : [])], env, outDir, (line) => {
       if (line.startsWith('STOPPED')) { say(`stopping early: ${line.slice(8)} replies so far failed`); return; }
       const m = line.match(/^PROGRESS (\d+) (\d+)$/);

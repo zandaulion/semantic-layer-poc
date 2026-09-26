@@ -28,6 +28,11 @@ export const config = {
   // no name for, such as Qwen's `chat_template_kwargs` to switch its thinking
   // mode off. A JSON object, merged over the request the server builds.
   modelExtraBody: parseExtraBody(process.env.MODEL_EXTRA_BODY),
+  // The directory shared with the benchmark daemon on the host; empty turns
+  // the Run tab off. Device ids allowed to start runs, comma separated: runs
+  // rent GPUs, so the default is nobody.
+  benchDir: process.env.BENCH_DIR || '',
+  benchRunnerDevices: (process.env.BENCH_RUNNER_DEVICES || '').split(',').map((v) => v.trim()).filter(Boolean),
 };
 
 function parseExtraBody(text) {

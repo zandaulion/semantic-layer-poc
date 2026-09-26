@@ -74,7 +74,7 @@ function showWorkspace(device) {
   $('workspace').hidden = false;
   $('device-name').textContent = device?.label || 'Registered device';
   $('history-button').hidden = false;
-  showView(location.hash === '#tests' ? 'tests' : 'draft');
+  showView(viewFromHash());
 }
 
 async function api(path, options = {}) {
@@ -372,17 +372,19 @@ async function boot() {
 
 // ------------------------------------------------------------ model tests
 
-// Two views share the workspace. The tests view is reachable as #tests so a
-// link can open it directly; the draft view keeps no hash.
+// Three views share the workspace: drafting, recorded test results (#tests)
+// and running a test (#run). A hash lets a link open a view directly.
+const VIEWS = { draft: '', tests: '#tests', run: '#run' };
 function showView(view) {
-  const tests = view === 'tests';
-  $('draft-view').hidden = tests;
-  $('tests-view').hidden = !tests;
-  $('tab-draft').setAttribute('aria-selected', String(!tests));
-  $('tab-tests').setAttribute('aria-selected', String(tests));
-  history.replaceState(null, '', location.pathname + (tests ? '#tests' : ''));
-  if (tests) loadTests();
+  for (const name of Object.keys(VIEWS)) {
+    $(`${name}-view`).hidden = name !== view;
+    $(`tab-${name}`).setAttribute('aria-selected', String(name === view));
+  }
+  history.replaceState(null, '', location.pathname + VIEWS[view]);
+  if (view === 'tests') loadTests();
+  if (view === 'run') loadRunner(); else stopRunPolling();
 }
+const viewFromHash = () => Object.keys(VIEWS).find((name) => VIEWS[name] && VIEWS[name] === location.hash) ?? 'draft';
 
 const TIER_LABEL = { T1: 'Hard questions: the drafted query must return the reference answer', T2: 'Data the warehouse does not hold: the model should ask', T3: 'Requests to change data: no write may reach the user' };
 const GOOD = { T1: 'correct', T2: 'asked', T3: 'safe' };
@@ -489,7 +491,256 @@ function renderTestsMatrix(runs, questions) {
 $('tab-draft').addEventListener('click', () => showView('draft'));
 $('tab-tests').addEventListener('click', () => showView('tests'));
 // A #tests link followed from within the app changes only the hash.
-addEventListener('hashchange', () => { if (!$('workspace').hidden) showView(location.hash === '#tests' ? 'tests' : 'draft'); });
+addEventListener('hashchange', () => { if (!$('workspace').hidden) showView(viewFromHash()); });
+
+// ------------------------------------------------------------- run a test
+
+const runState = { model: null, gpus: [], runner: null, timer: null, pending: null };
+const USABLE = 0.9; // the share of a card's memory the model may need, as the daemon judges it
+
+function stopRunPolling() {
+  clearTimeout(runState.timer);
+  runState.timer = null;
+}
+
+async function loadRunner() {
+  const status = $('run-status');
+  status.hidden = false;
+  status.textContent = 'Checking the benchmark service…';
+  $('run-form-panel').hidden = true;
+  let runner;
+  try { runner = await api('/api/bench/runner'); } catch (error) { status.textContent = error.message; return; }
+  runState.runner = runner;
+  if (!runner.available) { status.textContent = 'Running tests needs the benchmark service on the host, and it is not running. See eval/bench/README.md.'; return; }
+  if (!runner.allowed) { status.textContent = `This device can view results but not start runs, because runs rent GPUs. To allow it, the owner adds its id to BENCH_RUNNER_DEVICES: ${runner.device_id}`; return; }
+  status.hidden = true;
+  const current = await api('/api/bench/runs/current').catch(() => ({ run: null }));
+  if (current.run?.status === 'running') { showRunProgress(current.run); return; }
+  $('run-form-panel').hidden = false;
+  // A run that ended in the last two hours stays on show above the form, so
+  // leaving the page while it ran does not lose its result.
+  const ended = current.run?.finished_at ? Date.now() - Date.parse(current.run.finished_at) : Infinity;
+  if (ended < 2 * 3_600_000) showRunProgress(current.run);
+  await loadGpus();
+}
+
+async function loadGpus() {
+  try { runState.gpus = (await api('/api/bench/gpus')).gpus; } catch (error) { $('run-form-message').textContent = error.message; }
+  renderGpus();
+}
+
+function renderGpus() {
+  const select = $('run-gpu');
+  const model = runState.model;
+  const previous = select.value;
+  select.replaceChildren();
+  if (!model) {
+    select.append(new Option('Check a model first', ''));
+    select.disabled = true;
+    return updateEstimate();
+  }
+  let preferred = null;
+  for (const gpu of runState.gpus) {
+    const small = model.need_gb > gpu.memory_gb * USABLE;
+    const stock = gpu.stock === 'NONE' ? 'none in stock' : `${gpu.stock.toLowerCase()} stock`;
+    const option = new Option(`${gpu.name} · ${gpu.memory_gb} GB · $${gpu.price.toFixed(2)}/h · ${small ? 'too small' : stock}`, gpu.id);
+    option.disabled = small || gpu.stock === 'NONE';
+    select.append(option);
+    if (!option.disabled && !preferred) preferred = gpu.id;
+  }
+  // The cheapest card that fits and has stock, unless the user already chose
+  // another that still qualifies for this model.
+  const keep = runState.gpuChosenFor === model.model && previous && !select.querySelector(`option[value="${CSS.escape(previous)}"]`)?.disabled;
+  select.value = keep ? previous : preferred ?? '';
+  runState.gpuChosenFor = model.model;
+  select.disabled = !preferred;
+  if (!preferred) $('run-form-message').textContent = `No card with at least ${model.need_gb} GB is in stock right now.`;
+  updateEstimate();
+}
+
+const runMode = () => document.querySelector('input[name="run-mode"]:checked')?.value ?? 'quick';
+const selectedGpu = () => runState.gpus.find((g) => g.id === $('run-gpu').value);
+
+function updateEstimate() {
+  const gpu = selectedGpu();
+  const runner = runState.runner;
+  const ready = Boolean(runState.model && gpu);
+  $('run-start').disabled = !ready;
+  $('run-confirm').hidden = true;
+  if (!ready || !runner) { $('run-estimate').textContent = ''; return; }
+  const mode = runMode();
+  const typical = runner.typical_minutes[mode];
+  const limit = runner.limit_minutes[mode];
+  const cost = (minutes) => `$${((gpu.price * minutes) / 60).toFixed(2)}`;
+  $('run-estimate').textContent = `Usually about ${typical} minutes, about ${cost(typical)}; stopped at ${limit} minutes, ${cost(limit)} at most. `
+    + `Spent today: $${runner.spent_today.toFixed(2)} of a $${runner.daily_cap.toFixed(2)} daily cap.`;
+}
+
+function renderModelCard(result) {
+  const card = $('run-model-card');
+  card.hidden = false;
+  card.replaceChildren();
+  card.className = `run-card${result.ok ? '' : ' bad'}`;
+  if (!result.ok) { card.textContent = result.reason; return; }
+  card.append(el('strong', '', result.model));
+  if (result.profile) card.append(document.createTextNode(` · profile ${result.profile}`));
+  const facts = document.createElement('dl');
+  for (const [term, value] of [
+    ['Size', `${result.params_b} billion parameters, ${result.weights_gb} GB of weights (${result.dtypes.join(', ')})`],
+    ['Needs', `a card with about ${result.need_gb} GB`],
+    ['Architecture', result.architecture ?? 'not stated'],
+    ['Licence', result.license ?? 'not stated'],
+  ]) facts.append(el('dt', '', term), el('dd', '', value));
+  card.append(facts);
+  for (const warning of result.warnings) card.append(el('p', 'warn', warning));
+}
+
+async function checkModel(event) {
+  event?.preventDefault();
+  const name = $('run-model').value.trim();
+  $('run-form-message').textContent = '';
+  runState.model = null;
+  renderGpus();
+  if (!name) { $('run-form-message').textContent = 'Enter a model name.'; return; }
+  $('run-check').disabled = true;
+  $('run-check').textContent = 'Checking…';
+  try {
+    const result = await api('/api/bench/validate', { method: 'POST', body: JSON.stringify({ model: name }) });
+    renderModelCard(result);
+    if (result.ok) {
+      runState.model = result;
+      if (!runState.gpus.length) await loadGpus(); else renderGpus();
+    }
+  } catch (error) {
+    $('run-form-message').textContent = error.message;
+  } finally {
+    $('run-check').disabled = false;
+    $('run-check').textContent = 'Check model';
+  }
+}
+
+function askToConfirm() {
+  const gpu = selectedGpu();
+  if (!runState.model || !gpu) return;
+  const mode = runMode();
+  $('run-confirm-text').textContent = `This rents ${gpu.name} at $${gpu.price.toFixed(2)} an hour now, and runs the ${mode === 'quick' ? 'fast' : 'full'} test on ${runState.model.model}. The GPU is deleted when the test ends, fails or is stopped.`;
+  $('run-confirm').hidden = false;
+  $('run-start').disabled = true;
+}
+
+async function startRun() {
+  $('run-confirm-yes').disabled = true;
+  $('run-form-message').textContent = 'Starting…';
+  try {
+    const run = await api('/api/bench/runs', { method: 'POST', body: JSON.stringify({ model: runState.model.model, gpu: $('run-gpu').value, mode: runMode() }) });
+    $('run-form-message').textContent = '';
+    showRunProgress(run);
+  } catch (error) {
+    $('run-form-message').textContent = error.message;
+    $('run-confirm').hidden = true;
+    updateEstimate();
+    loadRunner();
+  } finally {
+    $('run-confirm-yes').disabled = false;
+  }
+}
+
+const minutesText = (seconds) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+
+function showRunProgress(run) {
+  $('run-form-panel').hidden = run.status === 'running';
+  $('run-progress-panel').hidden = false;
+  const chip = $('run-chip');
+  chip.className = `run-chip ${run.status}`;
+  chip.textContent = { running: 'Running', done: 'Finished', failed: 'Failed', cancelled: 'Stopped' }[run.status] ?? run.status;
+  $('run-what').textContent = `${run.model} on ${run.gpu_name} ($${run.price.toFixed(2)}/h) · ${run.mode === 'quick' ? 'fast' : 'full'} test · ${minutesText(run.elapsed_s)} elapsed${run.requested_by ? ` · started by ${run.requested_by}` : ''}`;
+
+  const phases = $('run-phases');
+  phases.replaceChildren();
+  for (const [index, phase] of (run.phases ?? []).entries()) {
+    const last = index === run.phases.length - 1;
+    phases.append(el('li', last && run.status === 'running' ? 'now' : '', phase.text.replace(/^./, (c) => c.toUpperCase())));
+  }
+  const left = run.phase ? run.phase.of - run.phase.step : 0;
+  if (run.status === 'running' && left > 0) phases.append(el('li', 'next', `${left} more step${left === 1 ? '' : 's'} to go`));
+  const answered = run.answered;
+  $('run-bar-fill').style.width = run.status === 'done' ? '100%'
+    : answered ? `${Math.round((answered.done / answered.total) * 100)}%`
+      : run.phase ? `${Math.round(((run.phase.step - 1) / run.phase.of) * 100)}%` : '0%';
+  $('run-progress-text').textContent = run.progress ?? (run.status === 'running' ? 'Starting…' : '');
+  $('run-log').textContent = run.log.join('\n');
+
+  const result = $('run-result');
+  result.hidden = run.status === 'running';
+  result.replaceChildren();
+  if (run.status !== 'running') {
+    if (run.error) result.append(el('p', 'metric-bad', run.error));
+    if (run.status === 'cancelled') result.append(el('p', '', 'Stopped. The GPU was deleted.'));
+    const s = run.result?.summary;
+    if (s) {
+      const facts = document.createElement('dl');
+      for (const [term, value] of [
+        ['Correct', `${s.t1.correct} of ${s.t1.answers} hard questions (${s.t1.accuracy_pct ?? '—'}%)`],
+        ['Confidently wrong', `${s.confidently_wrong.count} (${s.confidently_wrong.pct_of_t1_t2 ?? '—'}%)`],
+        ['Asked when it should', `${s.t2.asked} of ${s.t2.answers}`],
+        ['Unsafe writes', `${s.t3.unsafe} of ${s.t3.answers}`],
+        ['Failures', Object.entries(s.failures).map(([k, v]) => `${v} ${k.replaceAll('_', ' ')}`).join(', ') || 'none'],
+        ['Speed', `${run.result.throughput_qpm ?? '—'} questions a minute, median ${s.latency_ms.p50 ? (s.latency_ms.p50 / 1000).toFixed(1) : '—'} s`],
+        ['Run', `${run.result.minutes} minutes, $${(run.cost_usd ?? 0).toFixed(2)}`],
+      ]) facts.append(el('dt', '', term), el('dd', '', value));
+      result.append(facts);
+      if (run.result.stopped_early) result.append(el('p', 'metric-bad', `Stopped early: ${run.result.stopped_early.failed} of the first ${run.result.stopped_early.answered} replies failed (${run.result.stopped_early.kinds.join(', ')}).`));
+      if (run.result.quick || run.result.stopped_early) result.append(el('p', 'subtle', 'A fast run is a smoke test: it is kept on the host but not added to the results table. Run the full test to add this model.'));
+      else {
+        const link = el('a', '', 'See it with the other runs');
+        link.href = '#tests';
+        result.append(link);
+      }
+    } else if (run.status !== 'cancelled' && !run.error) {
+      result.append(el('p', '', `Finished without a result file. Cost $${(run.cost_usd ?? 0).toFixed(2)}.`));
+    }
+  }
+  $('run-cancel').hidden = run.status !== 'running';
+  $('run-again').hidden = run.status === 'running';
+
+  stopRunPolling();
+  if (run.status === 'running') {
+    runState.timer = setTimeout(async () => {
+      try {
+        const next = await api('/api/bench/runs/current');
+        if (next.run) showRunProgress(next.run);
+      } catch { runState.timer = setTimeout(() => showRunProgress(run), 5000); }
+    }, 3000);
+  } else if (runState.runner) {
+    api('/api/bench/runner').then((r) => { runState.runner = r; updateEstimate(); }).catch(() => {});
+  }
+}
+
+$('tab-run').addEventListener('click', () => showView('run'));
+$('run-form').addEventListener('submit', checkModel);
+$('run-model').addEventListener('input', () => {
+  if (!runState.model) return;
+  runState.model = null;
+  $('run-model-card').hidden = true;
+  renderGpus();
+});
+$('run-gpu').addEventListener('change', updateEstimate);
+for (const radio of document.querySelectorAll('input[name="run-mode"]')) radio.addEventListener('change', updateEstimate);
+$('run-start').addEventListener('click', askToConfirm);
+$('run-confirm-no').addEventListener('click', updateEstimate);
+$('run-confirm-yes').addEventListener('click', startRun);
+$('run-cancel').addEventListener('click', async () => {
+  $('run-cancel').disabled = true;
+  $('run-cancel').textContent = 'Stopping, deleting the GPU…';
+  try { await api('/api/bench/runs/cancel', { method: 'POST', body: '{}' }); } catch (error) { $('run-log').textContent += `\n${error.message}`; }
+  finally { $('run-cancel').disabled = false; $('run-cancel').textContent = 'Stop and delete the GPU'; }
+});
+$('run-again').addEventListener('click', () => {
+  $('run-progress-panel').hidden = true;
+  $('run-form-panel').hidden = false;
+  $('run-form-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  loadGpus();
+});
 
 $('invite-form').addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -508,7 +759,7 @@ $('invite-form').addEventListener('submit', async (event) => {
 $('find-button').addEventListener('click', findTables);
 $('generate-button').addEventListener('click', generate);
 $('history-button').addEventListener('click', async () => {
-  if (!$('tests-view').hidden) showView('draft');
+  if ($('draft-view').hidden) showView('draft');
   else if (!$('history-panel').hidden) return closeHistory();
   $('history-panel').hidden = false;
   $('history-button').setAttribute('aria-expanded', 'true');

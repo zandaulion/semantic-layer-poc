@@ -74,6 +74,7 @@
         <nav class="view-tabs" aria-label="Views">
           <button id="tab-draft" class="view-tab" type="button" aria-controls="draft-view" aria-selected="true">Draft SQL</button>
           <button id="tab-tests" class="view-tab" type="button" aria-controls="tests-view" aria-selected="false">Model tests</button>
+          <button id="tab-run" class="view-tab" type="button" aria-controls="run-view" aria-selected="false">Run a test</button>
         </nav>
 
         <div id="draft-view">
@@ -163,6 +164,60 @@
             <div class="panel-heading"><div><span class="step">03</span><h2 id="tests-matrix-title">Question by question</h2></div><span class="subtle">Right answers out of repeats</span></div>
             <div class="table-wrap"><table id="tests-matrix" class="tests-matrix"></table></div>
           </section>
+        </div>
+
+        <div id="run-view" hidden>
+          <div class="page-heading">
+            <div><span class="eyebrow">RUN A TEST</span><h1>Benchmark a model.</h1><p>Rents a GPU, serves the model, asks the benchmark questions and deletes the GPU when it is done. The result joins Model tests.</p></div>
+            <span class="draft-badge">RENTS A GPU</span>
+          </div>
+          <p id="run-status" class="empty-copy">Checking the benchmark service…</p>
+
+          <section id="run-progress-panel" class="panel tests-panel" aria-live="polite" hidden>
+            <div class="panel-heading"><div><span class="step">▶</span><h2 id="run-progress-title">Latest run</h2></div><span id="run-chip" class="run-chip">Running</span></div>
+            <p id="run-what" class="run-what"></p>
+            <ol id="run-phases" class="run-phases"></ol>
+            <div class="run-bar" aria-hidden="true"><span id="run-bar-fill"></span></div>
+            <p id="run-progress-text" class="run-progress-text"></p>
+            <pre id="run-log" class="run-log"></pre>
+            <div id="run-result" class="run-result" hidden></div>
+            <div class="run-actions"><button id="run-cancel" class="button button-secondary" type="button">Stop and delete the GPU</button><button id="run-again" class="button button-text" type="button" hidden>Run another test</button></div>
+          </section>
+
+          <section id="run-form-panel" class="panel tests-panel" hidden>
+            <form id="run-form" novalidate>
+              <div class="panel-heading"><div><span class="step">01</span><h2>Model</h2></div><span class="subtle">Checked on Hugging Face before anything is rented</span></div>
+              <label for="run-model" class="field-label">Hugging Face id or profile name</label>
+              <div class="run-row">
+                <input id="run-model" class="run-input" autocomplete="off" spellcheck="false" maxlength="120" placeholder="Qwen/Qwen3.8-27B-FP8, openai/gpt-oss-20b, gpt-oss-20b…">
+                <button id="run-check" class="button button-secondary" type="submit">Check model</button>
+              </div>
+              <div id="run-model-card" class="run-card" hidden></div>
+
+              <div class="panel-heading run-gap"><div><span class="step">02</span><h2>GPU</h2></div><span class="subtle">Secure Cloud · price per hour</span></div>
+              <label for="run-gpu" class="field-label">Card</label>
+              <select id="run-gpu" class="run-input" disabled><option value="">Check a model first</option></select>
+              <p class="input-hint run-hint">Cards without enough memory for the model, or without stock right now, cannot be chosen.</p>
+
+              <div class="panel-heading run-gap"><div><span class="step">03</span><h2>Test</h2></div></div>
+              <fieldset class="run-modes">
+                <legend class="sr-only">Test size</legend>
+                <label class="run-mode"><input type="radio" name="run-mode" value="quick" checked><span><strong>Fast</strong><small>Ten questions, once each. Stops early if most replies fail. For a first look at a new model.</small></span></label>
+                <label class="run-mode"><input type="radio" name="run-mode" value="full"><span><strong>Full</strong><small>All 46 questions, three times each. The run that goes into the results table.</small></span></label>
+              </fieldset>
+
+              <p id="run-estimate" class="run-estimate"></p>
+              <div class="run-actions">
+                <button id="run-start" class="button button-primary" type="button" disabled>Start test</button>
+              </div>
+              <div id="run-confirm" class="run-confirm" hidden>
+                <p id="run-confirm-text"></p>
+                <div class="button-group"><button id="run-confirm-yes" class="button button-primary" type="button">Rent it and start</button><button id="run-confirm-no" class="button button-text" type="button">Back</button></div>
+              </div>
+              <p id="run-form-message" class="form-message" role="status" aria-live="polite"></p>
+            </form>
+          </section>
+
         </div>
 
         <footer class="page-footer">Synthetic banking metadata for a personal proof of concept. Confirm joins, metrics, and results with a domain expert before use.</footer>

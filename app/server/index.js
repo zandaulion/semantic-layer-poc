@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { AuthStore, clearCookie, constantTimeTokenMatch, cookieForToken, tokenFromCookie } from './auth.js';
 import { config } from './config.js';
 import { loadBenchResults } from './bench-results.js';
+import { benchAvailable, benchRequest, mayRunBench } from './bench-runner.js';
 import { domains, tables, DOCUMENT_STATUS } from './catalog.js';
 import { elasticHealth, searchTables } from './elastic.js';
 import { generateDraft } from './model.js';
@@ -156,7 +157,36 @@ export function createAppServer({ auth = new AuthStore(path.join(config.dataDir,
           return json(res, 200, { elasticsearch: await elasticHealth(), model_configured: Boolean(config.modelApiKey), model: config.modelName, tables: tables.length, metadata_status: DOCUMENT_STATUS });
         }
         if (pathname === '/api/domains' && req.method === 'GET') return json(res, 200, { domains });
-        if (pathname === '/api/bench' && req.method === 'GET') return json(res, 200, loadBenchResults(config.appDir));
+        if (pathname === '/api/bench' && req.method === 'GET') {
+          // The daemon reads the checkout, so a run just finished is there at
+          // once; the files in the image are the fallback.
+          if (benchAvailable()) {
+            const live = await benchRequest('GET', '/results');
+            if (live.status === 200) return json(res, 200, live.body);
+          }
+          return json(res, 200, loadBenchResults(config.appDir));
+        }
+        if (pathname === '/api/bench/runner' && req.method === 'GET') {
+          if (!benchAvailable()) return json(res, 200, { available: false, allowed: false, device_id: device.id });
+          const status = await benchRequest('GET', '/status');
+          return json(res, 200, { available: status.status === 200, allowed: mayRunBench(device), device_id: device.id, ...(status.status === 200 ? status.body : {}) });
+        }
+        if (pathname.startsWith('/api/bench/')) {
+          if (!benchAvailable()) return json(res, 503, { error: 'bench_unavailable', message: 'Running tests is not set up on this server.' });
+          if (!mayRunBench(device)) return json(res, 403, { error: 'not_allowed', message: 'This device may view results but not start runs.' });
+          const routes = { 'GET /api/bench/gpus': '/gpus', 'POST /api/bench/validate': '/validate', 'POST /api/bench/runs': '/runs', 'GET /api/bench/runs/current': '/runs/current', 'POST /api/bench/runs/cancel': '/runs/cancel' };
+          const target = routes[`${req.method} ${pathname}`];
+          if (!target) return json(res, 404, { error: 'not_found' });
+          let body;
+          if (req.method === 'POST') {
+            const input = await readJson(req);
+            body = target === '/runs'
+              ? { model: String(input.model ?? ''), gpu: String(input.gpu ?? ''), mode: String(input.mode ?? ''), requested_by: device.label }
+              : target === '/validate' ? { model: String(input.model ?? '') } : {};
+          }
+          const reply = await benchRequest(req.method, target, body);
+          return json(res, reply.status, reply.body);
+        }
         if (pathname === '/api/history' && req.method === 'GET') {
           const limitText = url.searchParams.get('limit') || '20';
           const beforeText = url.searchParams.get('before');

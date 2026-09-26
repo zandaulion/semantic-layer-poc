@@ -1,0 +1,30 @@
+{
+  "name": "ministral-3-14b-bf16",
+  "about": "Mistral AI Ministral 3 14B Instruct (2512) in BF16, as published by Mistral: the same model as ministral-3-14b without FP8, for the A100, which has no FP8 hardware and on whose generation (an A40) the FP8 version failed to compile. Apache-2.0. Same settings as the FP8 profile: vLLM v0.29.0 (v0.30.0 cannot load Mistral 3, vllm-project/vllm#58755), Mistral's own format, reasoning_effort none, temperature 0.05.",
+  "hf": "mistralai/Ministral-3-14B-Instruct-2512-BF16",
+  "image": "vllm/vllm-openai:v0.29.0",
+  "cards": [
+    "NVIDIA A100-SXM4-80GB",
+    "NVIDIA A100 80GB PCIe"
+  ],
+  "disk_gb": 90,
+  "vllm_args": [
+    "--max-model-len",
+    "8192",
+    "--gpu-memory-utilization",
+    "0.9",
+    "--max-num-seqs",
+    "64",
+    "--no-enable-prefix-caching",
+    "--tokenizer-mode",
+    "mistral",
+    "--config-format",
+    "mistral",
+    "--load-format",
+    "mistral"
+  ],
+  "extra_body": {
+    "temperature": 0.05,
+    "reasoning_effort": "none"
+  }
+}

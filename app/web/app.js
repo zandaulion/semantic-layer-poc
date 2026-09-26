@@ -403,7 +403,12 @@ async function loadTests() {
   $('tests-status').textContent = 'Loading recorded runs…';
   let data;
   try { data = await api('/api/bench'); } catch (error) { $('tests-status').textContent = error.message; return; }
-  const runs = [...data.runs].sort((a, b) => b.recorded_at.localeCompare(a.recorded_at));
+  // Best first: by the share of hard questions answered correctly. A run that
+  // did not measure the model (a note says why) goes last whatever its score;
+  // ties go to the newer run.
+  const runs = [...data.runs].sort((a, b) => Boolean(a.note) - Boolean(b.note)
+    || (b.summary.t1.accuracy_pct ?? -1) - (a.summary.t1.accuracy_pct ?? -1)
+    || b.recorded_at.localeCompare(a.recorded_at));
   const panels = document.querySelectorAll('.tests-panel');
   if (!runs.length) { $('tests-status').textContent = 'No recorded runs yet. Run eval/bench/bench.mjs to add one.'; panels.forEach((p) => { p.hidden = true; }); return; }
   $('tests-status').hidden = true;
@@ -430,14 +435,14 @@ function renderTestsTable(runs) {
     const name = row.insertCell();
     name.append(el('span', 'model', run.model));
     if (run.note) name.append(el('span', 'flag', 'NOT VALID'));
-    name.append(el('span', 'card', `${shortCard(run.card)} · ${run.recorded_at.slice(0, 10)}`));
+    name.append(el('span', 'card', `${run.card ? shortCard(run.card) : 'no GPU rented'} · ${run.server ?? 'server not recorded'} · ${run.recorded_at.slice(0, 10)}`));
     name.title = run.about || '';
     const cells = [
       [`${cellText(s.t1.accuracy_pct)}%`, `${s.t1.correct} of ${s.t1.answers}`, tone(s.t1.accuracy_pct, 90, 60)],
       [`${cellText(s.confidently_wrong.pct_of_t1_t2)}%`, `${s.confidently_wrong.count} answers`, s.confidently_wrong.count === 0 ? 'metric-good' : s.confidently_wrong.pct_of_t1_t2 >= 5 ? 'metric-bad' : 'metric-warn'],
       [`${cellText(s.t2.asked_pct)}%`, `${s.t2.asked} of ${s.t2.answers}`, tone(s.t2.asked_pct, 90, 60)],
       [String(s.t3.unsafe), `of ${s.t3.answers}`, s.t3.unsafe === 0 ? 'metric-good' : 'metric-bad'],
-      [s.latency_ms.p50 ? `${(s.latency_ms.p50 / 1000).toFixed(1)} s` : '—', '16 in flight', ''],
+      [s.latency_ms.p50 ? `${(s.latency_ms.p50 / 1000).toFixed(1)} s` : '—', `${run.concurrency ?? '?'} in flight`, ''],
       [cellText(run.questions_per_minute), 'questions', ''],
       [run.cost_per_1000 === null ? '—' : `$${run.cost_per_1000.toFixed(3)}`, 'GPU cost', ''],
       [run.minutes === null ? '—' : `${run.minutes} min`, run.cost_usd === null ? '' : `$${run.cost_usd.toFixed(2)}`, ''],
@@ -458,7 +463,7 @@ function renderTestsMatrix(runs, questions) {
   head.append(el('th', '', 'Question'));
   for (const run of runs) {
     const th = el('th', '', run.model);
-    th.append(el('span', 'card', shortCard(run.card)));
+    th.append(el('span', 'card', run.card ? shortCard(run.card) : (run.server ?? '').replace(/^API: /, '')));
     th.scope = 'col';
     head.append(th);
   }

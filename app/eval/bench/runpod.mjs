@@ -189,13 +189,22 @@ export async function waitForServer({ id, apiKey: serverKey, model, deadline, on
         const tail = await podLog(id, 300).catch(() => []);
         // The pod restarts a container that exits, so a server that cannot
         // start shows up as the same start line, again and again.
-        const starts = (await podLog(id, 20, 'system').catch(() => [])).filter((l) => /start container/.test(l)).length;
+        const system = await podLog(id, 40, 'system').catch(() => []);
+        const starts = system.filter((l) => /start container/.test(l)).length;
         if (starts >= 4) {
-          const reason = rootCause(tail);
-          throw new Error(`vLLM keeps restarting (${starts} starts)${reason ? `: ${reason}` : ''}`);
+          // With nothing in the container's log, the container died before
+          // vLLM could say anything: the cause is the host's, and only the
+          // pod's system log has it.
+          const hostSide = system.filter((l) => !/start container|create container|Pulling|Digest|Status: Image/i.test(l));
+          const reason = tail.length ? rootCause(tail)
+            : `the container exited before vLLM wrote anything, so the cause is on the host. Pod system log: ${hostSide.slice(-4).join(' | ').slice(0, 500) || '(nothing beyond container starts)'}`;
+          const error = new Error(`vLLM keeps restarting (${starts} starts): ${reason}`);
+          error.logs = { container: tail.slice(-40), system: system.slice(-40) };
+          throw error;
         }
         if (tail.some((l) => FATAL.test(l))) {
           const error = new Error(`vLLM failed to start: ${rootCause(tail)}`);
+          error.logs = { container: tail.slice(-40), system: system.slice(-40) };
           error.logged = true;
           throw error;
         }

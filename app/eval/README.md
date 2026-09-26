@@ -186,6 +186,12 @@ podman exec \
   banking-dwh node eval/run.mjs --label vllm-cuda-rtx4090 --out /tmp/vllm.json
 ```
 
+`gpt-oss-120b` runs on one 80 GB A100 with the same image: change the model
+and served name, raise `--gpu-memory-utilization` to 0.92, and give the pod
+160 GB of disk for the weights. It answered about six minutes after the pod
+started. `VLLM_API_KEY` in the pod's environment works in place of
+`--api-key`.
+
 llama.cpp works on a rented card too, with one precaution. The recorded
 llama.cpp GPU baseline used the image and flags of the CPU quadlet plus two
 that make the GPU explicit:
@@ -310,7 +316,10 @@ drift that a pass rate alone would hide.
 `sglang-cuda-rtx4090.json`, the same weights served six ways, plus four
 concurrency sweeps on an RTX 4090: `load-vllm-cuda-rtx4090.json`,
 `load-llamacpp-cuda-rtx4090.json`, and `load-sglang-cuda-rtx4090.json` and
-`load-sglang-cuda-rtx4090-nows.json`, before and after the whitespace flag. They are records of
+`load-sglang-cuda-rtx4090-nows.json`, before and after the whitespace flag. On one A100 there
+are `vllm-a100-gpt-oss-20b.json` and `vllm-a100-gpt-oss-120b.json`, with
+`-r2` and `-r3` repeats of the 120b, and a sweep of each
+(`load-vllm-a100-gpt-oss-20b.json`, `load-vllm-a100-gpt-oss-120b.json`). They are records of
 what each backend did on one day, not targets to hit.
 
 ## Results
@@ -333,7 +342,9 @@ llama.cpp CPU runs, whose runtime and prompt were the same, which marks it as
 sampling variation rather than a property of any backend. vLLM held the schema
 contract with 64 requests batched together, and one RTX 4090 saturated at about
 270 questions a minute. llama.cpp with 16 slots reached about half that, and
-SGLang was far slower on this card.
+SGLang was far slower on this card. On an A100, `gpt-oss-120b` gave the same
+answers as the 20b at more than twice the GPU time per question: every case is
+one the 20b already passes, so the set cannot show what the larger model adds.
 
 ## What it does not measure
 

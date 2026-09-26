@@ -95,7 +95,48 @@ const loads = [
     note: 'The same server restarted with `--constrained-json-disable-any-whitespace`, and nothing else changed.',
   },
 ];
-for (const sweep of loads) sweep.data = await read(sweep.file);
+// The larger model, and the same server on a datacenter card. Kept apart from
+// `runs` because every table above assumes the same weights on one model of card.
+// The 4090 run is repeated here as the point both A100 runs are read against.
+const scale = [
+  {
+    file: 'baselines/vllm-cuda-rtx4090.json',
+    load: 'baselines/load-vllm-cuda-rtx4090.json',
+    name: '20b on RTX 4090',
+    hardware: 'one RTX 4090 (24 GB), RunPod Secure Cloud',
+  },
+  {
+    file: 'baselines/vllm-a100-gpt-oss-20b.json',
+    load: 'baselines/load-vllm-a100-gpt-oss-20b.json',
+    name: '20b on A100',
+    hardware: 'one A100 SXM (80 GB), RunPod Secure Cloud',
+  },
+  {
+    file: 'baselines/vllm-a100-gpt-oss-120b.json',
+    repeats: ['baselines/vllm-a100-gpt-oss-120b-r2.json', 'baselines/vllm-a100-gpt-oss-120b-r3.json'],
+    load: 'baselines/load-vllm-a100-gpt-oss-120b.json',
+    name: '120b on A100',
+    hardware: 'one A100 SXM (80 GB), RunPod Secure Cloud',
+  },
+];
+const scaleLoads = [
+  {
+    file: 'baselines/load-vllm-a100-gpt-oss-20b.json',
+    name: 'gpt-oss-20b on one A100',
+    note: 'The same vLLM image and flags as the RTX 4090 sweep, on the larger card.',
+  },
+  {
+    file: 'baselines/load-vllm-a100-gpt-oss-120b.json',
+    name: 'gpt-oss-120b on one A100',
+    note: 'Started with `--gpu-memory-utilization 0.92`; the weights take most of the card, and the rest holds the KV cache.',
+  },
+];
+for (const run of scale) {
+  run.data = await read(run.file);
+  run.byId = Object.fromEntries(run.data.results.map((r) => [r.id, r]));
+  run.repeatData = await Promise.all((run.repeats ?? []).map(read));
+}
+for (const sweep of [...loads, ...scaleLoads]) sweep.data = await read(sweep.file);
 for (const run of runs) {
   run.data = await read(run.file);
   run.byId = Object.fromEntries(run.data.results.map((r) => [r.id, r]));
@@ -170,7 +211,7 @@ w('## Under concurrent load', '');
 w('From `eval/load.mjs`, each server on its own RTX 4090. Each level keeps that',
   `many requests in flight, cycling through the ${loads[0].data.questions.length} questions that reach the model;`,
   'latency is per request, throughput is over the whole level.', '');
-for (const sweep of loads) {
+const sweepTable = (sweep) => {
   w(`### ${sweep.name}`, '', sweep.note, '');
   w('| Users in flight | Requests | Latency p50 | Latency p95 | Requests / min | Output tokens / s | Failures |');
   w('| --- | --- | --- | --- | --- | --- | --- |');
@@ -179,7 +220,43 @@ for (const sweep of loads) {
     w(`| ${l.concurrency} | ${l.requests} | ${time(l.latency_ms.p50)} | ${time(l.latency_ms.p95)} | ${l.requests_per_minute} | ${l.completion_tokens_per_second} | ${failed} |`);
   }
   w('');
+};
+loads.forEach(sweepTable);
+
+w('## A larger model, and a datacenter card', '');
+w('`gpt-oss-120b` fits on one 80 GB A100 in the MXFP4 it ships in. Both A100 runs',
+  'used vLLM 0.30.0 with the flags of the RTX 4090 recipe, so the 20b column',
+  'separates the card from the model.', '');
+const scaleRow = (label, cell) => w(`| ${label} | ${scale.map(cell).join(' | ')} |`);
+w(`| Measure | ${scale.map((r) => r.name).join(' | ')} |`, `| --- |${' --- |'.repeat(scale.length)}`);
+scaleRow('Label', (r) => `\`${r.data.label}\``);
+scaleRow('Hardware', (r) => r.hardware);
+scaleRow('Recorded', (r) => r.data.recorded_at.slice(0, 10));
+scaleRow('Cases passed', (r) => `${r.data.summary.passed}/${r.data.summary.cases}`);
+scaleRow('Table grounding', (r) => `${r.data.summary.grounding_ok}/${r.data.summary.answered} answered`);
+scaleRow('Schema violations', (r) => r.data.summary.failures.schema_violation ?? 0);
+scaleRow('Model emitted a write', (r) => r.data.summary.model_emitted_write ?? 0);
+scaleRow('Latency p50', (r) => time(r.data.summary.latency_ms.p50));
+scaleRow('Latency p95', (r) => time(r.data.summary.latency_ms.p95));
+scaleRow('Completion tokens, mean', (r) => r.data.summary.tokens.completion_mean);
+scaleRow('Peak requests / min', (r) => Math.max(...[...loads, ...scaleLoads]
+  .find((s) => s.file === r.load).data.levels.map((l) => l.requests_per_minute)));
+w('');
+const [reference] = scale;
+for (const run of scale.slice(1)) {
+  const changed = cases.filter(({ id }) => answered(run.byId[id]) && answered(reference.byId[id])
+    && !agrees(reference.byId[id], run.byId[id]));
+  w(`${run.name} against ${reference.name}: ${changed.length ? changed.map(({ id }) => `\`${id}\` used ${list(run.byId[id].tables_used)} where the reference used ${list(reference.byId[id].tables_used)}`).join('; ') : 'no case changed status or tables'}.`, '');
 }
+for (const run of scale.filter((r) => r.repeatData.length)) {
+  const all = [run.data, ...run.repeatData];
+  const unstable = cases.filter(({ id }) => new Set(all.map((d) => {
+    const r = d.results.find((x) => x.id === id);
+    return JSON.stringify([r?.status, r?.tables_used ?? []]);
+  })).size > 1);
+  w(`${run.name} was run ${all.length} times (\`${all.map((d) => d.label).join('`, `')}\`). ${unstable.length ? `Cases that varied between runs: ${unstable.map(({ id }) => `\`${id}\``).join(', ')}.` : 'Every case had the same status and tables in every run.'}`, '');
+}
+scaleLoads.forEach(sweepTable);
 
 w('## Where the runs disagreed', '');
 const byId = Object.fromEntries(cases.map((c) => [c.id, c]));

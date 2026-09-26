@@ -61,7 +61,10 @@ RTX 4090 saturated at about 270 questions a minute; llama.cpp reached about
 half that. SGLang broke the contract under load, about one reply in fifty
 running on in whitespace until the token limit, until it was started with
 `--constrained-json-disable-any-whitespace`. The failure never appeared one
-request at a time.
+request at a time. On a rented A100, `gpt-oss-120b` matched the 20b on every
+case at more than twice the GPU time per question, which says the twelve
+cases are too easy to separate the two models rather than that the larger one
+adds nothing; the 20b ran no faster on the A100 than on the RTX 4090.
 
 It reports table grounding, status behaviour, read-only safety, inference latency
 and prompt size, and it classifies failures — a schema violation, meaning the

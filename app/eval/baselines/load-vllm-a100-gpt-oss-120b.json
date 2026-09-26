@@ -1,0 +1,122 @@
+{
+  "label": "load-vllm-a100-gpt-oss-120b",
+  "recorded_at": "2026-09-26T11:14:11.790Z",
+  "backend": {
+    "base_url": "https://<pod-id>-8000.proxy.runpod.net/v1",
+    "model": "gpt-oss-120b"
+  },
+  "questions": [
+    "active-customers",
+    "wire-transfers-by-currency",
+    "aml-alerts-by-jurisdiction",
+    "complaints-by-category",
+    "account-transactions-by-channel",
+    "portfolio-valuations-by-market",
+    "atm-by-branch",
+    "card-disputes",
+    "fx-rates-by-currency",
+    "refuse-write"
+  ],
+  "levels": [
+    {
+      "concurrency": 1,
+      "requests": 10,
+      "answered": 10,
+      "failures": {},
+      "wall_ms": 23413,
+      "latency_ms": {
+        "p50": 2390,
+        "p95": 2886,
+        "max": 2886
+      },
+      "requests_per_minute": 25.6,
+      "completion_tokens_per_second": 116
+    },
+    {
+      "concurrency": 2,
+      "requests": 10,
+      "answered": 10,
+      "failures": {},
+      "wall_ms": 15706,
+      "latency_ms": {
+        "p50": 3079,
+        "p95": 4754,
+        "max": 4754
+      },
+      "requests_per_minute": 38.2,
+      "completion_tokens_per_second": 185
+    },
+    {
+      "concurrency": 4,
+      "requests": 12,
+      "answered": 12,
+      "failures": {},
+      "wall_ms": 13948,
+      "latency_ms": {
+        "p50": 4137,
+        "p95": 6618,
+        "max": 6618
+      },
+      "requests_per_minute": 51.6,
+      "completion_tokens_per_second": 250
+    },
+    {
+      "concurrency": 8,
+      "requests": 24,
+      "answered": 24,
+      "failures": {},
+      "wall_ms": 19152,
+      "latency_ms": {
+        "p50": 6653,
+        "p95": 7737,
+        "max": 8680
+      },
+      "requests_per_minute": 75.2,
+      "completion_tokens_per_second": 340
+    },
+    {
+      "concurrency": 16,
+      "requests": 48,
+      "answered": 48,
+      "failures": {},
+      "wall_ms": 31140,
+      "latency_ms": {
+        "p50": 10270,
+        "p95": 13765,
+        "max": 14791
+      },
+      "requests_per_minute": 92.5,
+      "completion_tokens_per_second": 436
+    },
+    {
+      "concurrency": 32,
+      "requests": 96,
+      "answered": 96,
+      "failures": {},
+      "wall_ms": 51053,
+      "latency_ms": {
+        "p50": 16614,
+        "p95": 25360,
+        "max": 28111
+      },
+      "requests_per_minute": 112.8,
+      "completion_tokens_per_second": 522
+    },
+    {
+      "concurrency": 64,
+      "requests": 192,
+      "answered": 191,
+      "failures": {
+        "timeout": 1
+      },
+      "wall_ms": 99858,
+      "latency_ms": {
+        "p50": 31013,
+        "p95": 41528,
+        "max": 50385
+      },
+      "requests_per_minute": 114.8,
+      "completion_tokens_per_second": 526
+    }
+  ]
+}

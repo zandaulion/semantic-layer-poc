@@ -1,0 +1,9 @@
+{
+  "name": "gpt-oss-120b",
+  "about": "OpenAI, mixture of experts (117B, 5.1B active), MXFP4 as released; the larger sibling of the approved 20b. Fits one 80 GB card. Measured on 2026-09-26 with the original harness (eval/RESULTS.md): same answers as the 20b on the twelve original questions, more than twice the GPU time per question, and no wrong draft on the stripped catalog where the 20b made one.",
+  "hf": "openai/gpt-oss-120b",
+  "cards": ["NVIDIA A100-SXM4-80GB", "NVIDIA A100 80GB PCIe", "NVIDIA H100 80GB HBM3", "NVIDIA RTX PRO 6000 Blackwell Server Edition"],
+  "disk_gb": 160,
+  "vllm_args": ["--max-model-len", "8192", "--gpu-memory-utilization", "0.92", "--no-enable-prefix-caching"],
+  "extra_body": {}
+}

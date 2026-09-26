@@ -1,0 +1,30 @@
+{
+  "name": "mistral-small-3.2-24b",
+  "about": "Mistral AI Mistral Small 3.2 24B Instruct (2506), BF16 as published by Mistral. Apache-2.0, EU vendor. The larger Mistral that fits one A100 (48 GB of weights). vLLM v0.29.0, Mistral's own format and reasoning_effort none, as for Ministral 3; temperature 0.15, the value its model card recommends.",
+  "hf": "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
+  "image": "vllm/vllm-openai:v0.29.0",
+  "cards": [
+    "NVIDIA A100-SXM4-80GB",
+    "NVIDIA A100 80GB PCIe"
+  ],
+  "disk_gb": 140,
+  "vllm_args": [
+    "--max-model-len",
+    "8192",
+    "--gpu-memory-utilization",
+    "0.9",
+    "--max-num-seqs",
+    "64",
+    "--no-enable-prefix-caching",
+    "--tokenizer-mode",
+    "mistral",
+    "--config-format",
+    "mistral",
+    "--load-format",
+    "mistral"
+  ],
+  "extra_body": {
+    "temperature": 0.15,
+    "reasoning_effort": "none"
+  }
+}

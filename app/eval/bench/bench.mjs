@@ -153,7 +153,7 @@ async function inRunner(script, args, env, outDir, onLine) {
       ]);
       let output = '';
       let partial = '';
-      const timer = setTimeout(() => child.kill('SIGTERM'), 15 * 60_000);
+      const timer = setTimeout(() => child.kill('SIGTERM'), Number(flag('--runner-minutes', 15)) * 60_000);
       const take = (chunk) => {
         output += chunk;
         partial += chunk;
@@ -275,6 +275,11 @@ async function allResults() {
   return Promise.all(files.filter((f) => f.endsWith('.json')).sort().map(async (f) => ({ file: f, ...JSON.parse(await readFile(path.join(resultsDir, f), 'utf8')) })));
 }
 
+/** Most correct first, as the PWA orders them; runs with a note go last. */
+const ranked = (results) => [...results].sort((a, b) => Boolean(a.note) - Boolean(b.note)
+  || (b.summary.t1.accuracy_pct ?? -1) - (a.summary.t1.accuracy_pct ?? -1)
+  || b.recorded_at.localeCompare(a.recorded_at));
+
 function table(results) {
   const header = ['Date', 'Model', 'Card', 'T1 correct', 'Confidently wrong', 'T2 asked', 'T3 unsafe', 'T0 pass', 'p50', 'q/min', '$ / 1k q', 'Run', 'Cost'];
   const rows = results.map((r) => {
@@ -304,7 +309,7 @@ function table(results) {
 
 async function main() {
   if (has('--report')) {
-    console.log(table(await allResults()));
+    console.log(table(ranked(await allResults())));
     return;
   }
   const pods = ledger(cacheDir);
@@ -436,6 +441,9 @@ async function main() {
     const env = {
       MODEL_BASE_URL: baseUrl, MODEL_NAME: profile.name, MODEL_API_KEY: serverKey,
       MODEL_TIMEOUT_MS: '120000', MODEL_EXTRA_BODY: JSON.stringify(profile.extra_body ?? {}),
+      // A rate-limited provider (a free API tier) is waited out, not scored:
+      // --rate-limit-attempts raises how long a question may wait for room.
+      MODEL_RATE_LIMIT_ATTEMPTS: flag('--rate-limit-attempts', '4'),
     };
     await probe(baseUrl, serverKey, profile);
     let started = Date.now();
@@ -490,7 +498,10 @@ async function main() {
   const result = {
     recorded_at: recordedAt,
     model: { name: profile.name, hf: profile.hf, about: profile.about, vllm_args: profile.vllm_args ?? null, extra_body: profile.extra_body ?? {} },
-    server: external ? 'external' : `vLLM (${profile.image ?? IMAGE})`,
+    // How the model was served: the vLLM image (whose tag is the vLLM version)
+    // for a rented pod, or the API's host for an existing endpoint.
+    server: external ? `API: ${flag('--provider', new URL(external).host)}` : `vLLM ${(profile.image ?? IMAGE).split(':').pop()}`,
+    server_image: external ? null : profile.image ?? IMAGE,
     card, cloud: external ? null : cloud, price_per_hour: price,
     cost_usd: price && timings.pod_s ? Math.round(price * timings.pod_s / 36) / 100 : null,
     seed: seedVersion, repeats: drafts.repeats, concurrency: drafts.concurrency, timings, summary,
@@ -528,7 +539,7 @@ async function main() {
   cost                ${result.cost_usd === null ? '—' : `$${result.cost_usd.toFixed(2)}`}
   wrote ${path.relative(process.cwd(), file)}
 `);
-  console.log(table(await allResults()));
+  console.log(table(ranked(await allResults())));
 }
 
 main().catch(async (error) => {

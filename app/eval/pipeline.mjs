@@ -82,16 +82,21 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * malformed answer is a result, and retrying it would hide exactly what this
  * harness exists to find.
  */
-export async function withRateLimitRetry(work, attempts = 4) {
+export async function withRateLimitRetry(work, attempts = Number(process.env.MODEL_RATE_LIMIT_ATTEMPTS) || 4) {
   for (let attempt = 0; ; attempt += 1) {
     const startedAt = Date.now();
     try {
       return { value: await work(), startedAt };
     } catch (error) {
-      const limited = /429|rate_limit/i.test(String(error?.message || ''));
+      const message = String(error?.message || '');
+      const limited = /429|rate_limit/i.test(message);
       if (!limited || attempt >= attempts - 1) throw error;
-      const wait = 5_000 * 2 ** attempt;
-      process.stderr.write(`rate limited, waiting ${wait / 1000}s ... `);
+      // Providers say how long to wait ("Please try again in 7.66s"); take
+      // them at their word, plus a margin, and back off only without it.
+      const hint = message.match(/try again in (?:(\d+)m)?([\d.]+)(ms|s)/i);
+      const told = hint ? (Number(hint[1] ?? 0) * 60 + Number(hint[2]) / (hint[3] === 'ms' ? 1000 : 1)) * 1000 : null;
+      const wait = Math.min(90_000, told ? told + 1_000 : 5_000 * 2 ** attempt);
+      process.stderr.write(`rate limited, waiting ${Math.round(wait / 1000)}s ... `);
       await sleep(wait);
     }
   }

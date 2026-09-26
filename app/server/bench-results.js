@@ -38,6 +38,9 @@ export function loadBenchResults(appDir) {
       hf: r.model.hf,
       about: r.model.about,
       card: r.card,
+      // Older result files recorded "vLLM (image)"; newer ones "vLLM v0.30.0".
+      server: String(r.server ?? '').replace(/^vLLM \((?:[^:]+):([^)]+)\)$/, 'vLLM $1') || null,
+      server_image: r.server_image ?? r.server?.match(/^vLLM \(([^)]+)\)$/)?.[1] ?? null,
       cloud: r.cloud,
       price_per_hour: r.price_per_hour,
       cost_usd: r.cost_usd,

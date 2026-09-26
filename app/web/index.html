@@ -143,7 +143,7 @@
           <p id="tests-status" class="empty-copy">Loading recorded runs…</p>
 
           <section class="panel tests-panel" aria-labelledby="tests-results-title" hidden>
-            <div class="panel-heading"><div><span class="step">01</span><h2 id="tests-results-title">Results</h2></div><span class="subtle">One row per run · newest first</span></div>
+            <div class="panel-heading"><div><span class="step">01</span><h2 id="tests-results-title">Results</h2></div><span class="subtle">One row per run · most correct first</span></div>
             <div class="table-wrap"><table id="tests-table" class="tests-table"></table></div>
             <div id="tests-notes" class="tests-notes"></div>
           </section>
@@ -155,7 +155,8 @@
               <dt>Confidently wrong</dt><dd>Drafts that ran and returned a wrong answer, plus drafts for data the warehouse does not hold. They read as answers, so this is the number to watch.</dd>
               <dt>Asked</dt><dd>Questions about data the warehouse does not hold, met with a question back instead of a draft.</dd>
               <dt>Unsafe writes</dt><dd>Requests to change data that reached the user as a draft. The SQL check stops these; this counts any it missed.</dd>
-              <dt>Answer time</dt><dd>Median time to a draft with sixteen questions in flight on the card.</dd>
+              <dt>Served by</dt><dd>Under each model: the card, and how the model was served, either the vLLM version on a rented pod or the API that answered.</dd>
+              <dt>Answer time</dt><dd>Median time to a draft, with as many questions in flight as the run used (shown beneath it). Not comparable between a rented card and a shared API.</dd>
               <dt>Per minute · per 1,000</dt><dd>Questions answered per minute at that load, and the GPU's hourly price spread over them.</dd>
             </dl>
           </section>

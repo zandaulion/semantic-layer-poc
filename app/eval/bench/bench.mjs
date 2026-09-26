@@ -107,6 +107,11 @@ async function loadProfile() {
     throw new Error(`No profile "${name}". Known: ${known.join(', ')}. Or pass --hf org/name.`);
   }));
   if (flag('--card')) profile.cards = [flag('--card')];
+  // For experiments: extra server arguments without editing the profile, e.g.
+  // --vllm-extra '["--attention-backend","FLEX_ATTENTION"]'. The result file
+  // records the arguments actually used.
+  if (flag('--vllm-extra')) profile.vllm_args = [...profile.vllm_args, ...JSON.parse(flag('--vllm-extra'))];
+  if (flag('--image')) profile.image = flag('--image');
   return profile;
 }
 
@@ -160,6 +165,38 @@ async function inRunner(script, args, env, outDir, onLine) {
       });
     });
   }
+}
+
+/**
+ * Two requests straight to the server before the benchmark: plain text, then
+ * a tiny JSON schema. They separate a model that is broken as served from one
+ * that only fails under the schema, which the pipeline's errors cannot.
+ */
+async function probe(baseUrl, key, profile) {
+  const ask = async (label, body) => {
+    try {
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ model: profile.name, temperature: 0.1, max_tokens: 120, ...body, ...(profile.extra_body ?? {}) }),
+        signal: AbortSignal.timeout(60_000),
+      });
+      const payload = await response.json();
+      const choice = payload.choices?.[0];
+      const text = String(choice?.message?.content ?? payload.error?.message ?? payload.message ?? '').replace(/\s+/g, ' ');
+      say(`probe, ${label}: ${response.status} ${choice?.finish_reason ?? ''} ${JSON.stringify(text.slice(0, 160))}`);
+    } catch (error) {
+      say(`probe, ${label}: ${error.message}`);
+    }
+  };
+  await ask('plain text', { messages: [{ role: 'user', content: 'Name three colours of the rainbow, comma separated.' }] });
+  // As long as a benchmark prompt, about 3,000 tokens: a model that fails only
+  // on long prompts passes the two short probes and fails this one.
+  const filler = Array.from({ length: 120 }, (_, i) => `Table t${i} has columns id, name, amount and created_at.`).join(' ');
+  await ask('long prompt', { messages: [{ role: 'user', content: `${filler}\n\nIgnoring everything above, name three colours of the rainbow, comma separated.` }] });
+  await ask('JSON schema', {
+    messages: [{ role: 'user', content: 'What is the capital of France? Reply as JSON.' }],
+    response_format: { type: 'json_schema', json_schema: { name: 'probe', strict: true, schema: { type: 'object', properties: { answer: { type: 'string' } }, required: ['answer'], additionalProperties: false } } },
+  });
 }
 
 /** Why replies were cut off, from what the truncated ones held. */
@@ -230,7 +267,8 @@ async function main() {
   const profile = external
     ? { name: flag('--served-name'), hf: null, about: 'An existing server.', cards: [], extra_body: JSON.parse(flag('--extra-body', '{}')) }
     : await loadProfile();
-  const repeats = Number(flag('--repeats', 3));
+  const quick = has('--quick');
+  const repeats = Number(flag('--repeats', quick ? 1 : 3));
   const concurrency = Number(flag('--concurrency', 16));
   const levels = flag('--load-levels', '1,8,32');
   const cloud = has('--community') ? 'COMMUNITY' : 'SECURE';
@@ -252,6 +290,7 @@ async function main() {
   const seedFile = path.join(cacheDir, 'seed.sql');
   const withLoad = has('--load');
   PHASES = flag('--drafts') ? 2 : external ? (withLoad ? 4 : 3) : (withLoad ? 7 : 6);
+  if (quick) say('quick run: the ten questions marked quick, once each; saved under results/quick');
   phase('seeding the benchmark database');
   await run('node', [path.join(here, 'seed.mjs'), '--out', seedFile], { maxBuffer: 1024 * 1024 });
   const seedVersion = await ensureDatabase(seedFile);
@@ -325,6 +364,10 @@ async function main() {
         throw error;
       }
       timings.ready_s = Math.round((Date.now() - podStarted) / 1000);
+      // Which kernels vLLM chose: the first suspect when a model misbehaves.
+      const chosen = (await podLog(podId, 1500, 'container').catch(() => []))
+        .filter((l) => /attention backend|MoE backend|Using .*backend/i.test(l)).map((l) => l.replace(/^.*\] /, ''));
+      for (const line of [...new Set(chosen)].slice(0, 4)) say(`vLLM: ${line.slice(0, 160)}`);
       say(`server answering after ${timings.ready_s} s`);
     }
 
@@ -338,9 +381,11 @@ async function main() {
       MODEL_BASE_URL: baseUrl, MODEL_NAME: profile.name, MODEL_API_KEY: serverKey,
       MODEL_TIMEOUT_MS: '120000', MODEL_EXTRA_BODY: JSON.stringify(profile.extra_body ?? {}),
     };
+    await probe(baseUrl, serverKey, profile);
     let started = Date.now();
     phase(`asking the benchmark questions, ${repeats} times each, ${concurrency} at once`);
-    await inRunner('eval/bench/drafts.mjs', ['--out', '/out/drafts.json', '--repeats', String(repeats), '--concurrency', String(concurrency)], env, outDir, (line) => {
+    await inRunner('eval/bench/drafts.mjs', ['--out', '/out/drafts.json', '--repeats', String(repeats), '--concurrency', String(concurrency), ...(quick ? ['--quick'] : [])], env, outDir, (line) => {
+      if (line.startsWith('STOPPED')) { say(`stopping early: ${line.slice(8)} replies so far failed`); return; }
       const m = line.match(/^PROGRESS (\d+) (\d+)$/);
       if (!m) return;
       const [done, total] = [Number(m[1]), Number(m[2])];
@@ -400,9 +445,14 @@ async function main() {
     load: load ? { levels: load.levels.map(({ concurrency: c, requests, requests_per_minute, completion_tokens_per_second, latency_ms, failures }) => ({ concurrency: c, requests, requests_per_minute, completion_tokens_per_second, latency_ms, failures })) } : null,
     answers: scored,
   };
-  await mkdir(resultsDir, { recursive: true });
+  // A quick run or one stopped early is a smoke test, not a result: kept, but
+  // out of the table.
+  const target = quick || drafts.stopped_early ? path.join(resultsDir, 'quick') : resultsDir;
+  if (drafts.stopped_early) result.stopped_early = drafts.stopped_early;
+  result.quick = quick;
+  await mkdir(target, { recursive: true });
   const slug = (text) => text.replace(/^NVIDIA (GeForce )?/, '').replace(/[^A-Za-z0-9.]+/g, '-');
-  const file = path.join(resultsDir, `${recordedAt.slice(0, 16).replace(/[:T-]/g, '')}-${slug(profile.name)}-${slug(card ?? 'external')}.json`);
+  const file = path.join(target, `${recordedAt.slice(0, 16).replace(/[:T-]/g, '')}-${slug(profile.name)}-${slug(card ?? 'external')}.json`);
   await writeFile(file, `${JSON.stringify(result, null, 2)}\n`);
   await rm(outDir, { recursive: true, force: true });
   if (!has('--keep-db')) await stopDatabase();
@@ -415,7 +465,7 @@ async function main() {
   T3 writes           ${s.t3.unsafe} unsafe of ${s.t3.answers}, model wrote DML ${s.t3.emitted_write} times (caught)
   T0 original twelve  ${s.t0.pass}/${s.t0.answers} (${pct(s.t0.pass_pct)})
   confidently wrong   ${s.confidently_wrong.count} (${pct(s.confidently_wrong.pct_of_t1_t2)} of T1+T2)
-  failures            ${Object.entries(s.failures).map(([k, v]) => `${v} ${k}`).join(', ') || 'none'}${truncation(scored)}
+  ${drafts.stopped_early ? `STOPPED EARLY       ${drafts.stopped_early.failed} of ${drafts.stopped_early.answered} replies failed (${drafts.stopped_early.kinds.join(', ')}); the rest were not asked\n  ` : ''}failures            ${Object.entries(s.failures).map(([k, v]) => `${v} ${k}`).join(', ') || 'none'}${truncation(scored)}
   latency             p50 ${s.latency_ms.p50} ms, p95 ${s.latency_ms.p95} ms at ${drafts.concurrency} in flight
   throughput          ${result.throughput_qpm} questions a minute at ${drafts.concurrency} in flight
   time                ${Object.entries(timings).map(([k, v]) => `${k.replace(/_s$/, '')} ${v}s`).join(', ')}

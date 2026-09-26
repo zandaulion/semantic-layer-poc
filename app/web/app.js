@@ -74,6 +74,7 @@ function showWorkspace(device) {
   $('workspace').hidden = false;
   $('device-name').textContent = device?.label || 'Registered device';
   $('history-button').hidden = false;
+  showView(location.hash === '#tests' ? 'tests' : 'draft');
 }
 
 async function api(path, options = {}) {
@@ -369,6 +370,127 @@ async function boot() {
   } catch (error) { showGate('Cannot reach the server. Reconnect and reload this page.'); }
 }
 
+// ------------------------------------------------------------ model tests
+
+// Two views share the workspace. The tests view is reachable as #tests so a
+// link can open it directly; the draft view keeps no hash.
+function showView(view) {
+  const tests = view === 'tests';
+  $('draft-view').hidden = tests;
+  $('tests-view').hidden = !tests;
+  $('tab-draft').setAttribute('aria-selected', String(!tests));
+  $('tab-tests').setAttribute('aria-selected', String(tests));
+  history.replaceState(null, '', location.pathname + (tests ? '#tests' : ''));
+  if (tests) loadTests();
+}
+
+const TIER_LABEL = { T1: 'Hard questions: the drafted query must return the reference answer', T2: 'Data the warehouse does not hold: the model should ask', T3: 'Requests to change data: no write may reach the user' };
+const GOOD = { T1: 'correct', T2: 'asked', T3: 'safe' };
+const cellText = (value) => (value === null || value === undefined ? '—' : String(value));
+const el = (tag, className, text) => {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+};
+const tone = (value, good, bad) => (value === null || value === undefined ? '' : value >= good ? 'metric-good' : value <= bad ? 'metric-bad' : 'metric-warn');
+const shortCard = (card) => String(card || 'external').replace(/^NVIDIA (GeForce )?/, '').replace(/-SXM4-80GB| 80GB HBM3/, '');
+
+async function loadTests() {
+  $('tests-status').hidden = false;
+  $('tests-status').textContent = 'Loading recorded runs…';
+  let data;
+  try { data = await api('/api/bench'); } catch (error) { $('tests-status').textContent = error.message; return; }
+  const runs = [...data.runs].sort((a, b) => b.recorded_at.localeCompare(a.recorded_at));
+  const panels = document.querySelectorAll('.tests-panel');
+  if (!runs.length) { $('tests-status').textContent = 'No recorded runs yet. Run eval/bench/bench.mjs to add one.'; panels.forEach((p) => { p.hidden = true; }); return; }
+  $('tests-status').hidden = true;
+  panels.forEach((p) => { p.hidden = false; });
+  renderTestsTable(runs);
+  renderTestsMatrix(runs, data.questions);
+}
+
+function renderTestsTable(runs) {
+  const table = $('tests-table');
+  table.replaceChildren();
+  const head = table.createTHead().insertRow();
+  for (const [label, num] of [['Model', false], ['Correct', true], ['Confidently wrong', true], ['Asked', true], ['Unsafe writes', true], ['Answer time', true], ['Per minute', true], ['Per 1,000', true], ['Run', true]]) {
+    const th = el('th', num ? 'num' : '', label);
+    th.scope = 'col';
+    head.append(th);
+  }
+  const body = table.createTBody();
+  const notes = [];
+  for (const run of runs) {
+    const s = run.summary;
+    const row = body.insertRow();
+    if (run.note) { row.className = 'flagged'; notes.push(run); }
+    const name = row.insertCell();
+    name.append(el('span', 'model', run.model));
+    if (run.note) name.append(el('span', 'flag', 'NOT VALID'));
+    name.append(el('span', 'card', `${shortCard(run.card)} · ${run.recorded_at.slice(0, 10)}`));
+    name.title = run.about || '';
+    const cells = [
+      [`${cellText(s.t1.accuracy_pct)}%`, `${s.t1.correct} of ${s.t1.answers}`, tone(s.t1.accuracy_pct, 90, 60)],
+      [`${cellText(s.confidently_wrong.pct_of_t1_t2)}%`, `${s.confidently_wrong.count} answers`, s.confidently_wrong.count === 0 ? 'metric-good' : s.confidently_wrong.pct_of_t1_t2 >= 5 ? 'metric-bad' : 'metric-warn'],
+      [`${cellText(s.t2.asked_pct)}%`, `${s.t2.asked} of ${s.t2.answers}`, tone(s.t2.asked_pct, 90, 60)],
+      [String(s.t3.unsafe), `of ${s.t3.answers}`, s.t3.unsafe === 0 ? 'metric-good' : 'metric-bad'],
+      [s.latency_ms.p50 ? `${(s.latency_ms.p50 / 1000).toFixed(1)} s` : '—', '16 in flight', ''],
+      [cellText(run.questions_per_minute), 'questions', ''],
+      [run.cost_per_1000 === null ? '—' : `$${run.cost_per_1000.toFixed(3)}`, 'GPU cost', ''],
+      [run.minutes === null ? '—' : `${run.minutes} min`, run.cost_usd === null ? '' : `$${run.cost_usd.toFixed(2)}`, ''],
+    ];
+    for (const [value, detail, className] of cells) {
+      const cell = row.insertCell();
+      cell.className = `num ${run.note ? '' : className}`;
+      cell.append(el('span', '', value), el('span', 'card', detail));
+    }
+  }
+  $('tests-notes').replaceChildren(...notes.map((run) => el('p', '', `NOT VALID — ${run.model}: ${run.note}`)));
+}
+
+function renderTestsMatrix(runs, questions) {
+  const table = $('tests-matrix');
+  table.replaceChildren();
+  const head = table.createTHead().insertRow();
+  head.append(el('th', '', 'Question'));
+  for (const run of runs) {
+    const th = el('th', '', run.model);
+    th.append(el('span', 'card', shortCard(run.card)));
+    th.scope = 'col';
+    head.append(th);
+  }
+  const body = table.createTBody();
+  for (const tier of ['T1', 'T2', 'T3']) {
+    const group = body.insertRow();
+    group.className = 'group';
+    const label = group.insertCell();
+    label.colSpan = runs.length + 1;
+    label.textContent = TIER_LABEL[tier];
+    for (const q of questions.filter((item) => item.tier === tier)) {
+      const row = body.insertRow();
+      const text = row.insertCell();
+      text.className = 'question';
+      text.append(el('span', `tier ${tier.toLowerCase()}`, tier), document.createTextNode(q.question));
+      for (const run of runs) {
+        const counts = run.outcomes[q.id];
+        const cell = row.insertCell();
+        if (!counts) { cell.className = 'cell missing'; cell.textContent = '—'; continue; }
+        const total = Object.values(counts).reduce((n, v) => n + v, 0);
+        const good = counts[GOOD[tier]] ?? 0;
+        cell.className = `cell ${good === total ? 'all' : good === 0 ? 'none' : 'some'}`;
+        cell.textContent = `${good}/${total}`;
+        cell.title = Object.entries(counts).map(([outcome, n]) => `${n} ${outcome.replaceAll('_', ' ')}`).join(', ');
+      }
+    }
+  }
+}
+
+$('tab-draft').addEventListener('click', () => showView('draft'));
+$('tab-tests').addEventListener('click', () => showView('tests'));
+// A #tests link followed from within the app changes only the hash.
+addEventListener('hashchange', () => { if (!$('workspace').hidden) showView(location.hash === '#tests' ? 'tests' : 'draft'); });
+
 $('invite-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const button = event.currentTarget.querySelector('button[type="submit"]');
@@ -386,7 +508,8 @@ $('invite-form').addEventListener('submit', async (event) => {
 $('find-button').addEventListener('click', findTables);
 $('generate-button').addEventListener('click', generate);
 $('history-button').addEventListener('click', async () => {
-  if (!$('history-panel').hidden) return closeHistory();
+  if (!$('tests-view').hidden) showView('draft');
+  else if (!$('history-panel').hidden) return closeHistory();
   $('history-panel').hidden = false;
   $('history-button').setAttribute('aria-expanded', 'true');
   await loadHistory(true);

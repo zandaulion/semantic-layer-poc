@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AuthStore, clearCookie, constantTimeTokenMatch, cookieForToken, tokenFromCookie } from './auth.js';
 import { config } from './config.js';
+import { loadBenchResults } from './bench-results.js';
 import { domains, tables, DOCUMENT_STATUS } from './catalog.js';
 import { elasticHealth, searchTables } from './elastic.js';
 import { generateDraft } from './model.js';
@@ -155,6 +156,7 @@ export function createAppServer({ auth = new AuthStore(path.join(config.dataDir,
           return json(res, 200, { elasticsearch: await elasticHealth(), model_configured: Boolean(config.modelApiKey), model: config.modelName, tables: tables.length, metadata_status: DOCUMENT_STATUS });
         }
         if (pathname === '/api/domains' && req.method === 'GET') return json(res, 200, { domains });
+        if (pathname === '/api/bench' && req.method === 'GET') return json(res, 200, loadBenchResults(config.appDir));
         if (pathname === '/api/history' && req.method === 'GET') {
           const limitText = url.searchParams.get('limit') || '20';
           const beforeText = url.searchParams.get('before');

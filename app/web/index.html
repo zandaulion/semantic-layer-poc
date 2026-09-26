@@ -71,6 +71,12 @@
       </aside>
 
       <div class="content">
+        <nav class="view-tabs" aria-label="Views">
+          <button id="tab-draft" class="view-tab" type="button" aria-controls="draft-view" aria-selected="true">Draft SQL</button>
+          <button id="tab-tests" class="view-tab" type="button" aria-controls="tests-view" aria-selected="false">Model tests</button>
+        </nav>
+
+        <div id="draft-view">
         <div class="page-heading">
           <div><span class="eyebrow">NATURAL LANGUAGE → REVIEWABLE SQL</span><h1>Draft a better query.</h1><p>Describe what you need. Review every assumption before taking SQL to your database client.</p></div>
           <span class="draft-badge">DRAFT ONLY</span>
@@ -124,6 +130,39 @@
               <div id="checks-list" class="checks-list"><span class="empty-copy">Generate or check a draft to see findings.</span></div>
             </section>
           </aside>
+        </div>
+
+        </div>
+
+        <div id="tests-view" hidden>
+          <div class="page-heading">
+            <div><span class="eyebrow">MODEL BENCHMARK</span><h1>Which model drafts SQL you can trust?</h1><p>Each run rents a GPU, serves one model, asks the benchmark questions three times and runs every drafted query against a seeded copy of the warehouse.</p></div>
+            <span class="draft-badge">RECORDED RUNS</span>
+          </div>
+          <p id="tests-status" class="empty-copy">Loading recorded runs…</p>
+
+          <section class="panel tests-panel" aria-labelledby="tests-results-title" hidden>
+            <div class="panel-heading"><div><span class="step">01</span><h2 id="tests-results-title">Results</h2></div><span class="subtle">One row per run · newest first</span></div>
+            <div class="table-wrap"><table id="tests-table" class="tests-table"></table></div>
+            <div id="tests-notes" class="tests-notes"></div>
+          </section>
+
+          <section class="panel tests-panel" aria-labelledby="tests-legend-title" hidden>
+            <div class="panel-heading"><div><span class="step">02</span><h2 id="tests-legend-title">Reading the columns</h2></div></div>
+            <dl class="tests-legend">
+              <dt>Correct</dt><dd>Hard questions with one right answer. The drafted query is run on the seeded warehouse and its result compared with the reference.</dd>
+              <dt>Confidently wrong</dt><dd>Drafts that ran and returned a wrong answer, plus drafts for data the warehouse does not hold. They read as answers, so this is the number to watch.</dd>
+              <dt>Asked</dt><dd>Questions about data the warehouse does not hold, met with a question back instead of a draft.</dd>
+              <dt>Unsafe writes</dt><dd>Requests to change data that reached the user as a draft. The SQL check stops these; this counts any it missed.</dd>
+              <dt>Answer time</dt><dd>Median time to a draft with sixteen questions in flight on the card.</dd>
+              <dt>Per minute · per 1,000</dt><dd>Questions answered per minute at that load, and the GPU's hourly price spread over them.</dd>
+            </dl>
+          </section>
+
+          <section class="panel tests-panel" aria-labelledby="tests-matrix-title" hidden>
+            <div class="panel-heading"><div><span class="step">03</span><h2 id="tests-matrix-title">Question by question</h2></div><span class="subtle">Right answers out of repeats</span></div>
+            <div class="table-wrap"><table id="tests-matrix" class="tests-matrix"></table></div>
+          </section>
         </div>
 
         <footer class="page-footer">Synthetic banking metadata for a personal proof of concept. Confirm joins, metrics, and results with a domain expert before use.</footer>

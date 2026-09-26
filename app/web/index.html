@@ -148,6 +148,11 @@
             <div id="tests-notes" class="tests-notes"></div>
           </section>
 
+          <section id="tests-quick-panel" class="panel tests-panel" aria-labelledby="tests-quick-title" hidden>
+            <div class="panel-heading"><div><span class="step">↯</span><h2 id="tests-quick-title">Fast checks</h2></div><span class="subtle">Ten questions once each · not comparable with the table above · newest first</span></div>
+            <div class="table-wrap"><table id="tests-quick" class="tests-table"></table></div>
+          </section>
+
           <section class="panel tests-panel" aria-labelledby="tests-legend-title" hidden>
             <div class="panel-heading"><div><span class="step">02</span><h2 id="tests-legend-title">Reading the columns</h2></div></div>
             <dl class="tests-legend">
@@ -198,7 +203,7 @@
               <div class="panel-heading run-gap"><div><span class="step">02</span><h2>GPU</h2></div><span class="subtle">Secure Cloud · price per hour</span></div>
               <label for="run-gpu" class="field-label">Card</label>
               <select id="run-gpu" class="run-input" disabled><option value="">Check a model first</option></select>
-              <p class="input-hint run-hint">Cards without enough memory for the model, or without stock right now, cannot be chosen. An FP8 model on an A100 or other Ampere card runs through a slower fallback; it usually works, but Ministral 3 failed that way on an A40.</p>
+              <p class="input-hint run-hint">The A100 is chosen by default: it is the card the bank runs. Cards without enough memory for the model, or without stock right now, cannot be chosen. An FP8 model on an A100 or other Ampere card runs through a slower fallback; it usually works, but Ministral 3 failed that way on an A40.</p>
 
               <div class="panel-heading run-gap"><div><span class="step">03</span><h2>Test</h2></div></div>
               <fieldset class="run-modes">

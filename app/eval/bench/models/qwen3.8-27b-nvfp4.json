@@ -1,9 +1,29 @@
 {
   "name": "qwen3.8-27b-nvfp4",
-  "about": "Qwen3.8-27B quantised by NVIDIA to NVFP4 (MLP layers) and FP8 (attention), with nvidia-modelopt. Apache-2.0. 21.9 GB against 30.9 GB for Qwen's FP8, so it fits a 32 GB card; NVFP4 runs natively only on Blackwell, hence the card list. The question it answers: does the leading model keep its accuracy at a quarter of the memory and cost. Same settings as the qwen3.8-27b profile.",
+  "about": "Qwen3.8-27B quantised by NVIDIA to NVFP4 (MLP layers) and FP8 (attention), with nvidia-modelopt. Apache-2.0. 21.9 GB against 30.9 GB for Qwen's FP8, so it fits a 32 GB card; NVFP4 runs natively only on Blackwell (RTX PRO 4500, RTX 5090); on the A100, the default card, vLLM needs a fallback path, and whether it serves there at all is part of the test. The question it answers: does the leading model keep its accuracy at a quarter of the memory and cost. Same settings as the qwen3.8-27b profile.",
   "hf": "nvidia/Qwen3.8-27B-NVFP4",
-  "cards": ["NVIDIA RTX PRO 4500 Blackwell", "NVIDIA GeForce RTX 5090", "NVIDIA RTX PRO 6000 Blackwell Server Edition"],
+  "cards": [
+    "NVIDIA A100-SXM4-80GB",
+    "NVIDIA A100 80GB PCIe",
+    "NVIDIA RTX PRO 4500 Blackwell",
+    "NVIDIA GeForce RTX 5090",
+    "NVIDIA RTX PRO 6000 Blackwell Server Edition"
+  ],
   "disk_gb": 70,
-  "vllm_args": ["--max-model-len", "8192", "--gpu-memory-utilization", "0.9", "--max-num-seqs", "64", "--no-enable-prefix-caching", "--reasoning-parser", "qwen3"],
-  "extra_body": { "chat_template_kwargs": { "enable_thinking": false } }
+  "vllm_args": [
+    "--max-model-len",
+    "8192",
+    "--gpu-memory-utilization",
+    "0.9",
+    "--max-num-seqs",
+    "64",
+    "--no-enable-prefix-caching",
+    "--reasoning-parser",
+    "qwen3"
+  ],
+  "extra_body": {
+    "chat_template_kwargs": {
+      "enable_thinking": false
+    }
+  }
 }

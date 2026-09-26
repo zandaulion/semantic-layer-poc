@@ -89,7 +89,9 @@ function progressLog(since) {
 
 function view(run) {
   if (!run) return null;
-  const lines = progressLog(run.started_at).filter((l) => !l.startsWith('#'));
+  // A finished run shows the log it had when it finished: the file is shared,
+  // and the next run, from here or the command line, rewrites it.
+  const lines = (run.lines ?? progressLog(run.started_at)).filter((l) => !l.startsWith('#'));
   const phases = lines.map((l) => l.match(/^\[[\d:]+\] \[(\d+)\/(\d+)\] (.*)$/)).filter(Boolean)
     .map((m) => ({ step: Number(m[1]), of: Number(m[2]), text: m[3] }));
   const lastProgress = [...lines].reverse().find((l) => /^\[[\d:]+\] {3}/.test(l));
@@ -145,6 +147,7 @@ async function startRun({ model: name, gpu: gpuId, mode, requested_by: requested
   child.stdout.on('data', take);
   child.stderr.on('data', take);
   child.on('close', async (code, signal) => {
+    run.lines = progressLog(run.started_at);
     run.finished_ms = Date.now();
     run.finished_at = new Date().toISOString();
     const podSeconds = Number(output.match(/deleted pod \S+ after (\d+) s/)?.[1] ?? 0);

@@ -4,6 +4,7 @@
   "hf": "google/gemma-4-26B-A4B-it",
   "cards": [
     "NVIDIA A100-SXM4-80GB",
+    "NVIDIA A100 80GB PCIe",
     "NVIDIA H100 80GB HBM3"
   ],
   "disk_gb": 120,

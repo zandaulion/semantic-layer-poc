@@ -104,12 +104,14 @@ const scale = [
     load: 'baselines/load-vllm-cuda-rtx4090.json',
     name: '20b on RTX 4090',
     hardware: 'one RTX 4090 (24 GB), RunPod Secure Cloud',
+    hourly: 0.74,
   },
   {
     file: 'baselines/vllm-a100-gpt-oss-20b.json',
     load: 'baselines/load-vllm-a100-gpt-oss-20b.json',
     name: '20b on A100',
     hardware: 'one A100 SXM (80 GB), RunPod Secure Cloud',
+    hourly: 1.59,
   },
   {
     file: 'baselines/vllm-a100-gpt-oss-120b.json',
@@ -117,6 +119,7 @@ const scale = [
     load: 'baselines/load-vllm-a100-gpt-oss-120b.json',
     name: '120b on A100',
     hardware: 'one A100 SXM (80 GB), RunPod Secure Cloud',
+    hourly: 1.59,
   },
 ];
 const scaleLoads = [
@@ -152,6 +155,10 @@ w('# Backend comparison results', '');
 w('Generated from the recorded runs in [`baselines/`](baselines) by',
   '`node eval/build-results.mjs`. Every figure in the tables comes out of those',
   'files; none is retyped. Rerun it after recording a new run.', '');
+
+// The overview is built last, once every section's data is loaded, and spliced
+// in here so it is the first thing a reader meets.
+const glanceAt = lines.length;
 
 w('## The runs', '');
 header('');
@@ -308,6 +315,50 @@ for (const c of cryptic) {
     }
   });
 }
+
+// One row per comparison. The findings are words, but every figure beside them
+// is computed from the same files as the sections they link to.
+const peak = (file) => Math.round(Math.max(...[...loads, ...scaleLoads].find((s) => s.file === file).data.levels
+  .map((l) => l.requests_per_minute)));
+const perThousand = (run) => `$${(run.hourly / (peak(run.load) * 60) * 1000).toFixed(3)}`;
+const passedCell = (entries) => {
+  // entries: [name, result file]. Runs with the same outcome are counted
+  // together; a lone run with a different one is named.
+  const outcome = (d) => {
+    const why = Object.entries(d.summary.failures).map(([kind, n]) => `${n} ${kind}`).join(', ');
+    return `${d.summary.passed}/${d.summary.cases}${why ? ` (${why})` : ''}`;
+  };
+  const groups = new Map();
+  for (const [name, d] of entries) groups.set(outcome(d), [...(groups.get(outcome(d)) ?? []), name]);
+  const count = (n) => (n === entries.length ? (n === 2 ? 'both runs' : `all ${n} runs`) : `${n} runs`);
+  return [...groups].map(([result, names]) => (names.length === 1 && entries.length > 1
+    ? `${names[0]} ${result}` : `${result} in ${count(names.length)}`)).join('; ');
+};
+const [on4090, a100small, a100large] = scale;
+const byCatalog = (id) => cryptic.filter((c) => c.catalog.id === id);
+const crypticPassed = (id) => byCatalog(id).map((c) => `${c.model.replace('gpt-oss-', '')}: ${passedCell(c.runs.map((d) => [d.label, d]))}`).join('<br>');
+const crypticWrong = (id) => byCatalog(id).map((c) => `${c.model.replace('gpt-oss-', '')} ${c.runs.reduce((n, d) => n + wrongDrafts(d).length, 0)}`).join(', ');
+const glance = [];
+const g = (...text) => glance.push(...text);
+g('## At a glance', '');
+g('Every comparison made so far, one row each. The linked section has the',
+  'detail; the reading of it is under [Reading the results](#reading-the-results).', '');
+g('| Comparison | Varied | Held the same | Cases passed | Peak questions / min | GPU cost per 1,000 questions | Finding |');
+g('| --- | --- | --- | --- | --- | --- | --- |');
+g(`| [Model server](#summary) | ${runs.map((r) => r.name).join(', ')} | \`gpt-oss-20b\`, original catalog | ${passedCell(runs.map((r) => [r.name, r.data]))} | — | — | Every server grounded every answered case in the right tables. Optional joins drifted even between runs of one server. Only the hosted run wrote the \`DELETE\`; the SQL check caught it |`);
+g(`| [Load on one RTX 4090](#under-concurrent-load) | server, 1 to 64 requests in flight | \`gpt-oss-20b\`, one RTX 4090 | — | ${loads.map((l) => `${l.name}: ${peak(l.file)}`).join('<br>')} | vLLM ${perThousand(on4090)} | vLLM is the one to size with. SGLang broke the JSON contract under load until started with \`--constrained-json-disable-any-whitespace\` |`);
+g(`| [Card](#a-larger-model-and-a-datacenter-card) | RTX 4090 vs A100 | vLLM, \`gpt-oss-20b\` | ${passedCell([[on4090.name, on4090.data], [a100small.name, a100small.data]])} | ${on4090.name}: ${peak(on4090.load)}<br>${a100small.name}: ${peak(a100small.load)} | ${on4090.name}: ${perThousand(on4090)}<br>${a100small.name}: ${perThousand(a100small)} | Same speed; the 20b does not need the A100's memory, so the RTX 4090 is the cheaper card for it |`);
+g(`| [Model size](#a-larger-model-and-a-datacenter-card) | \`gpt-oss-20b\` vs \`gpt-oss-120b\` | vLLM, one A100, original catalog | ${passedCell([[a100small.name, a100small.data], ...[a100large.data, ...a100large.repeatData].map((d) => [d.label, d])])} | ${a100small.name}: ${peak(a100small.load)}<br>${a100large.name}: ${peak(a100large.load)} | ${a100small.name}: ${perThousand(a100small)}<br>${a100large.name}: ${perThousand(a100large)} | Same answers. Every case is one the 20b already passes, so this set cannot show what the 120b adds |`);
+g(`| [Abbreviated names](#abbreviated-names), descriptions kept (B) | table and column names | both models, vLLM, one A100 | ${crypticPassed('cryptic')} | — | — | Descriptions carry what the names lost; prompts grow by about half. Wrong drafts: ${crypticWrong('cryptic')} |`);
+g(`| [Abbreviated names](#abbreviated-names), descriptions stripped (C) | names and descriptions | both models, vLLM, one A100 | ${crypticPassed('cryptic-bare')} | — | — | Search finds nothing for three questions. Where the model lacked the right table, the 120b always asked; the 20b once drafted a plausible query from the wrong one. Wrong drafts: ${crypticWrong('cryptic-bare')} |`);
+g('');
+g('Cost per 1,000 questions is the pod\'s hourly price divided by its peak throughput:',
+  'the GPU alone, at full load, with nothing idle.', '');
+g('**Not yet compared** (see [What this does not settle](#what-this-does-not-settle)):',
+  'whether the generated SQL is correct, questions written to be hard, other model',
+  'families, NIM, SGLang on a datacenter card, more than one card or newer ones, and',
+  'the application itself under load, which still generates one draft at a time.', '');
+lines.splice(glanceAt, 0, ...glance);
 
 w('## Where the runs disagreed', '');
 const byId = Object.fromEntries(cases.map((c) => [c.id, c]));

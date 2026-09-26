@@ -53,7 +53,8 @@ weights were also served on a rented RTX 4090 by llama.cpp, by SGLang and by
 vLLM, the server an on-prem deployment would most likely use, and
 `app/eval/load.mjs` measured each under rising concurrency. The runs are
 recorded in `app/eval/baselines/` and compared in
-[app/eval/RESULTS.md](app/eval/RESULTS.md). The backends agreed on every
+[app/eval/RESULTS.md](app/eval/RESULTS.md), which opens with a one-table
+overview. The backends agreed on every
 required table, but they differed on which dimensions they joined and on
 whether a destructive request was refused outright or caught downstream by the
 SQL check. vLLM held the JSON schema contract with 64 requests batched, and one

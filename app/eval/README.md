@@ -340,7 +340,8 @@ what each backend did on one day, not targets to hit.
 
 ## Results
 
-[RESULTS.md](RESULTS.md) holds the recorded comparison: the same `gpt-oss-20b`
+[RESULTS.md](RESULTS.md) opens with a one-table overview of every comparison
+made, and then holds the recorded comparison in detail: the same `gpt-oss-20b`
 weights served by a hosted provider, by llama.cpp on two different CPUs and on
 a rented RTX 4090, and by vLLM and SGLang on the same model of card, plus the
 concurrency sweeps. Its

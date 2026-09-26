@@ -451,7 +451,11 @@ async function main() {
     await probe(baseUrl, serverKey, profile);
     let started = Date.now();
     phase(`asking the benchmark questions, ${repeats === 1 ? 'once' : `${repeats} times`} each, ${concurrency} at once`);
-    await inRunner('eval/bench/drafts.mjs', ['--out', '/out/drafts.json', '--repeats', String(repeats), '--concurrency', String(concurrency), ...(quick ? ['--quick'] : [])], env, outDir, (line) => {
+    // --resume FILE: a stopped run's saved answers, kept rather than asked again.
+    const resume = flag('--resume');
+    if (resume) await writeFile(path.join(outDir, 'previous.json'), await readFile(resume));
+    await inRunner('eval/bench/drafts.mjs', ['--out', '/out/drafts.json', '--repeats', String(repeats), '--concurrency', String(concurrency), ...(quick ? ['--quick'] : []), ...(resume ? ['--resume', '/out/previous.json'] : [])], env, outDir, (line) => {
+      if (/STOPPED quota/.test(line)) { say('stopping: the provider\'s daily allowance is used up'); return; }
       if (/STOPPED \d/.test(line)) { say(`stopping early: ${line.slice(line.indexOf('STOPPED') + 8)} replies so far failed`); return; }
       // Anywhere in the line: a rate-limit notice ("rate limited, waiting
       // 28s ... ") is written without a newline, and the next progress
@@ -464,6 +468,12 @@ async function main() {
       progress(`${bar(done, total)} ${done}/${total} answered, ${Math.round(spent)} s${left !== null ? `, about ${left} s left` : ''}`);
     });
     drafts = JSON.parse(await readFile(path.join(outDir, 'drafts.json'), 'utf8'));
+    if (drafts.stopped_early) {
+      // Kept where a later run can pick it up, and said so.
+      const keep = path.join(cacheDir, `resume-${profile.name.replace(/[^\w.-]+/g, '-')}.json`);
+      await writeFile(keep, JSON.stringify(drafts));
+      say(`${drafts.results.length} answers kept; to carry on later, run the same command with --resume ${path.relative(appDir, keep)}`);
+    }
     timings.drafts_s = Math.round((Date.now() - started) / 1000);
     say(`${drafts.results.length} answers in ${timings.drafts_s} s`);
 

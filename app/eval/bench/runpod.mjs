@@ -13,6 +13,8 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
+import { isAmpere } from './validate.mjs';
+
 const API = 'https://api.runpod.io/v2';
 
 export async function apiKey() {
@@ -55,7 +57,7 @@ export async function listGpus() {
   const { gpus } = await call('GET', '/catalog/gpus?include=AVAILABILITY&product=POD&cloud=SECURE&minCudaVersion=12.8');
   return gpus
     .filter((g) => g.secure && g.manufacturer !== 'AMD' && !/MIG/.test(g.id) && g.memory >= 24 && g.price?.secure > 0)
-    .map((g) => ({ id: g.id, name: g.name ?? g.id, memory_gb: g.memory, price: g.price.secure, stock: g.availability ?? 'NONE' }))
+    .map((g) => ({ id: g.id, name: g.name ?? g.id, memory_gb: g.memory, price: g.price.secure, stock: g.availability ?? 'NONE', ampere: isAmpere(g.name ?? g.id) }))
     .sort((a, b) => a.price - b.price);
 }
 
@@ -151,6 +153,20 @@ export async function podLog(id, lines = 25, source = 'container') {
  * Waits until the server on the pod answers /v1/models with the model loaded.
  * Fails early if the pod itself stops.
  */
+/**
+ * The exception that started a failed start-up. vLLM's last lines are
+ * wrappers -- "Engine core initialization failed", a pydantic "failed to be
+ * inspected" -- and the cause is the first real exception above them.
+ */
+function rootCause(lines) {
+  const clean = lines.map((l) => l.replace(/^\([A-Za-z]+ pid=\d+\)\s*(?:ERROR [^\]]*\] )?/, '').trim());
+  const exception = /^(?:[\w.]*(?:Error|Exception)|torch\.OutOfMemoryError|AssertionError)\b[:(]?/;
+  const wrapper = /Engine core initialization failed|failed to be inspected|See root cause above|errors\.pydantic\.dev/;
+  const real = clean.filter((l) => exception.test(l) && !wrapper.test(l));
+  const chosen = real.length ? real.slice(0, 2) : clean.filter((l) => /error/i.test(l)).slice(-2);
+  return [...new Set(chosen)].join(' | ').slice(0, 600) || 'no error line found in the log';
+}
+
 const FATAL = /Engine core initialization failed|EngineCore failed to start|CUDA out of memory|OutOfMemoryError|vllm serve: error|error: argument|error: unrecognized arguments/;
 
 export async function waitForServer({ id, apiKey: serverKey, model, deadline, onTick }) {
@@ -170,16 +186,16 @@ export async function waitForServer({ id, apiKey: serverKey, model, deadline, on
       // while the pod itself reports RUNNING. Its log says so at once; waiting
       // out the deadline would only pay for the retries.
       if (i > 0) {
-        const tail = await podLog(id, 80).catch(() => []);
+        const tail = await podLog(id, 300).catch(() => []);
         // The pod restarts a container that exits, so a server that cannot
         // start shows up as the same start line, again and again.
         const starts = (await podLog(id, 20, 'system').catch(() => [])).filter((l) => /start container/.test(l)).length;
         if (starts >= 4) {
-          const reason = tail.filter((l) => /error|Error/.test(l)).slice(-2).join(' | ').slice(0, 600);
+          const reason = rootCause(tail);
           throw new Error(`vLLM keeps restarting (${starts} starts)${reason ? `: ${reason}` : ''}`);
         }
         if (tail.some((l) => FATAL.test(l))) {
-          const error = new Error(`vLLM failed to start: ${tail.filter((l) => /Error:|error:/.test(l)).slice(-2).join(' | ').slice(0, 600)}`);
+          const error = new Error(`vLLM failed to start: ${rootCause(tail)}`);
           error.logged = true;
           throw error;
         }

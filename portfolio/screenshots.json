@@ -1,72 +1,92 @@
 [
   {
-    "file": "01-active-customers-desktop.png",
-    "prompt": "Number of active customers last month",
+    "file": "01-top5-wire-customers-desktop.png",
+    "prompt": "Which 5 customers sent the highest total wire transfer amount in 2025? Give each customer's business id and their total.",
+    "benchmark_case": "t1-top5-wire-customers-2025",
+    "verified_correct": true,
     "viewport": "1440×900",
     "status": "draft",
-    "sql": "SELECT COUNT(DISTINCT c.business_id) AS active_customers_last_month\nFROM bank_dwh.dim_customer AS c\nWHERE c.is_active = TRUE\n  AND c.effective_from_date <= (date_trunc('month', CURRENT_DATE)::date - 1)\n  AND (c.effective_to_date IS NULL OR c.effective_to_date > (date_trunc('month', CURRENT_DATE)::date - 1));\n"
+    "sql": "SELECT d.business_id,\n       SUM(f.original_amount) AS total_wire_amount\nFROM bank_dwh.fact_wire_transfer f\nJOIN bank_dwh.dim_date dd ON f.business_date_key = dd.date_key\nJOIN bank_dwh.dim_customer d ON f.customer_key = d.customer_key\nWHERE dd.calendar_year_number = 2025\nGROUP BY d.business_id\nORDER BY total_wire_amount DESC\nLIMIT 5;"
   },
   {
-    "file": "02-default-clients-desktop-wide.png",
-    "prompt": "Clients in default at end of August 2026",
+    "file": "02-wire-and-atm-customers-desktop-wide.png",
+    "prompt": "How many distinct customers made both a wire transfer and an ATM transaction in 2025?",
+    "benchmark_case": "t1-wire-and-atm-customers-2025",
+    "verified_correct": true,
     "viewport": "1600×1000",
     "status": "draft",
-    "sql": "SELECT DISTINCT c.business_id AS client_id, c.display_name AS client_name\nFROM bank_dwh.fact_loan_delinquency_daily AS f\nJOIN bank_dwh.dim_date AS d ON d.date_key = f.business_date_key\nJOIN bank_dwh.dim_customer AS c ON c.customer_key = f.customer_key\nWHERE f.default_flag = TRUE\n  AND d.calendar_date = (\n    SELECT MAX(snapshot_day.calendar_date)\n    FROM bank_dwh.fact_loan_delinquency_daily AS snapshot_fact\n    JOIN bank_dwh.dim_date AS snapshot_day ON snapshot_day.date_key = snapshot_fact.business_date_key\n    WHERE snapshot_day.calendar_year_number = 2026\n      AND snapshot_day.month_number = 8\n  )\nORDER BY client_name, client_id;\n"
+    "sql": "WITH wire_customers AS (\n    SELECT DISTINCT fwt.customer_key\n    FROM bank_dwh.fact_wire_transfer fwt\n    JOIN bank_dwh.dim_date d ON fwt.business_date_key = d.date_key\n    WHERE d.calendar_year_number = 2025\n), atm_customers AS (\n    SELECT DISTINCT fta.customer_key\n    FROM bank_dwh.fact_atm_transaction fta\n    JOIN bank_dwh.dim_date d ON fta.business_date_key = d.date_key\n    WHERE d.calendar_year_number = 2025\n)\nSELECT COUNT(*) AS distinct_customers\nFROM wire_customers wc\nJOIN atm_customers ac ON wc.customer_key = ac.customer_key;"
   },
   {
-    "file": "03-loan-repayments-laptop.png",
-    "prompt": "Show total actual loan repayments by customer for January 2026",
+    "file": "03-loans-90-days-past-due-laptop.png",
+    "prompt": "How many loans were more than 90 days past due on 31 August 2025?",
+    "benchmark_case": "t1-loans-90dpd-2025-08-31",
+    "verified_correct": true,
     "viewport": "1280×800",
     "status": "draft",
-    "sql": "SELECT\n    f.customer_key,\n    SUM(f.actual_payment_amount) AS total_actual_repayments\nFROM\n    bank_dwh.fact_loan_repayment f\nJOIN\n    bank_dwh.dim_date d\n    ON f.business_date_key = d.date_key\nWHERE\n    d.calendar_date >= DATE '2026-01-01'\n    AND d.calendar_date <= DATE '2026-01-31'\nGROUP BY\n    f.customer_key\nORDER BY\n    total_actual_repayments DESC;"
+    "sql": "SELECT COUNT(DISTINCT loan_id) AS loans_over_90_days_past_due\nFROM bank_dwh.fact_loan_delinquency_daily fld\nJOIN bank_dwh.dim_date dd\n  ON fld.business_date_key = dd.date_key\nWHERE dd.calendar_date = DATE '2025-08-31'\n  AND fld.days_past_due > 90;"
   },
   {
-    "file": "04-card-authorizations-tablet-landscape.png",
-    "prompt": "Count card authorizations by merchant in August 2026",
+    "file": "04-top-merchant-categories-tablet-landscape.png",
+    "prompt": "Which 3 merchant category codes had the highest total card authorization amount in 2025? Give the merchant category code and the total.",
+    "benchmark_case": "t1-top3-merchant-categories-2025",
+    "verified_correct": true,
     "viewport": "1024×768",
     "status": "draft",
-    "sql": "SELECT\n    m.display_name AS merchant_name,\n    COUNT(*) AS authorization_count\nFROM bank_dwh.fact_card_authorization fca\nJOIN bank_dwh.dim_date dd\n  ON fca.business_date_key = dd.date_key\nJOIN bank_dwh.dim_merchant m\n  ON fca.merchant_key = m.merchant_key\nWHERE dd.calendar_date >= DATE '2026-08-01'\n  AND dd.calendar_date <= DATE '2026-08-31'\nGROUP BY m.display_name\nORDER BY authorization_count DESC;"
+    "sql": "SELECT\n    m.merchant_category_code,\n    SUM(f.original_amount) AS total_authorized_amount\nFROM bank_dwh.fact_card_authorization f\nJOIN bank_dwh.dim_merchant m\n  ON f.merchant_key = m.merchant_key\nWHERE EXTRACT(YEAR FROM f.authorized_at) = 2025\nGROUP BY m.merchant_category_code\nORDER BY total_authorized_amount DESC\nLIMIT 3;"
   },
   {
-    "file": "05-deposit-balances-tablet-portrait.png",
-    "prompt": "Show total closing deposit balance by branch on August 31, 2026",
+    "file": "05-declined-card-share-tablet-portrait.png",
+    "prompt": "What percentage of card authorizations in 2025 had payment status code DECLINED? Answer as a percentage between 0 and 100.",
+    "benchmark_case": "t1-declined-card-share-2025",
+    "verified_correct": true,
     "viewport": "820×1180",
     "status": "draft",
-    "sql": "SELECT\n    b.display_name AS branch_name,\n    SUM(f.closing_balance_amount) AS total_closing_balance\nFROM\n    bank_dwh.fact_deposit_balance_daily f\nJOIN\n    bank_dwh.dim_branch b\n    ON f.branch_key = b.branch_key\nJOIN\n    bank_dwh.dim_date d\n    ON f.business_date_key = d.date_key\nWHERE\n    d.calendar_date = DATE '2026-08-31'\nGROUP BY\n    b.display_name\nORDER BY\n    total_closing_balance DESC;"
+    "sql": "SELECT\n  ROUND(\n    100.0 * SUM(CASE WHEN f.payment_status_code = 'DECLINED' THEN 1 ELSE 0 END) / COUNT(*)\n  , 2) AS declined_percentage\nFROM bank_dwh.fact_card_authorization f\nJOIN bank_dwh.dim_date d ON f.business_date_key = d.date_key\nWHERE d.calendar_year_number = 2025;"
   },
   {
-    "file": "06-fraud-alerts-tablet-compact.png",
-    "prompt": "Count fraud alerts by alert_severity_code",
+    "file": "06-escalated-complaints-tablet-compact.png",
+    "prompt": "How many escalated complaints were recorded in 2025 per complaint category name? One row per category.",
+    "benchmark_case": "t1-escalated-complaints-by-category-2025",
+    "verified_correct": true,
     "viewport": "768×1024",
     "status": "draft",
-    "sql": "SELECT alert_severity_code,\n       COUNT(*) AS fraud_alert_count\nFROM bank_dwh.fact_fraud_alert\nGROUP BY alert_severity_code\nORDER BY fraud_alert_count DESC;"
+    "sql": "SELECT\n    dc.display_name AS complaint_category_name,\n    COUNT(*) AS escalated_complaint_count\nFROM\n    bank_dwh.fact_complaint fc\nJOIN\n    bank_dwh.dim_date dd ON fc.business_date_key = dd.date_key\nJOIN\n    bank_dwh.dim_complaint_category dc ON fc.complaint_category_key = dc.complaint_category_key\nWHERE\n    dd.calendar_year_number = 2025\n    AND fc.is_escalated = TRUE\nGROUP BY\n    dc.display_name\nORDER BY\n    escalated_complaint_count DESC;"
   },
   {
-    "file": "07-credit-risk-phone-large.png",
-    "prompt": "Using fact_credit_risk_exposure_daily, show average probability_of_default_rate by branch on August 31, 2026",
+    "file": "07-high-aml-alerts-phone-large.png",
+    "prompt": "How many AML alerts with alert severity code HIGH were raised in 2025 per jurisdiction name? One row per jurisdiction.",
+    "benchmark_case": "t1-high-aml-by-jurisdiction-2025",
+    "verified_correct": true,
     "viewport": "430×932",
     "status": "draft",
-    "sql": "SELECT\n    b.display_name AS branch_name,\n    AVG(f.probability_of_default_rate) AS avg_pdr\nFROM bank_dwh.fact_credit_risk_exposure_daily f\nJOIN bank_dwh.dim_date d\n    ON f.business_date_key = d.date_key\nJOIN bank_dwh.dim_branch b\n    ON f.branch_key = b.branch_key\nWHERE d.calendar_date = DATE '2026-08-31'\nGROUP BY b.display_name\nORDER BY b.display_name;"
+    "sql": "SELECT j.display_name AS jurisdiction_name,\n       COUNT(*) AS high_severity_alerts_2025\nFROM bank_dwh.fact_aml_alert a\nJOIN bank_dwh.dim_date d ON a.business_date_key = d.date_key\nJOIN bank_dwh.dim_jurisdiction j ON a.jurisdiction_key = j.jurisdiction_key\nWHERE d.calendar_year_number = 2025\n  AND a.alert_severity_code = 'HIGH'\nGROUP BY j.display_name\nORDER BY high_severity_alerts_2025 DESC;"
   },
   {
-    "file": "08-payment-volume-phone.png",
-    "prompt": "Using fact_payment_transaction, show total amount by currency using currency_key and dim_currency.currency_code",
+    "file": "08-mobile-transactions-phone.png",
+    "prompt": "How many account transactions were made through the Mobile App channel in 2024 and in 2025? One row per year.",
+    "benchmark_case": "t1-mobile-transactions-per-year",
+    "verified_correct": true,
     "viewport": "390×844",
     "status": "draft",
-    "sql": "SELECT\n    d.currency_code,\n    SUM(f.original_amount) AS total_amount\nFROM bank_dwh.fact_payment_transaction f\nJOIN bank_dwh.dim_currency d\n    ON f.currency_key = d.currency_key\nGROUP BY d.currency_code\nORDER BY total_amount DESC;"
+    "sql": "SELECT d.calendar_year_number AS year,\n       COUNT(*) AS mobile_app_transactions\nFROM bank_dwh.fact_account_transaction f\nJOIN bank_dwh.dim_channel c\n  ON f.channel_key = c.channel_key\nJOIN bank_dwh.dim_date d\n  ON f.business_date_key = d.date_key\nWHERE c.display_name = 'Mobile App'\n  AND d.calendar_year_number IN (2024, 2025)\nGROUP BY d.calendar_year_number\nORDER BY d.calendar_year_number;"
   },
   {
-    "file": "09-account-balances-phone-compact.png",
-    "prompt": "Using fact_account_balance_daily, show daily total closing_balance_amount by currency from August 1 through 7, 2026",
+    "file": "09-closing-balance-phone-compact.png",
+    "prompt": "What was the average account closing balance on 30 June 2025?",
+    "benchmark_case": "t1-avg-closing-balance-2025-06-30",
+    "verified_correct": true,
     "viewport": "375×812",
     "status": "draft",
-    "sql": "SELECT\n    d.calendar_date,\n    c.currency_code,\n    SUM(f.closing_balance_amount) AS total_closing_balance\nFROM bank_dwh.fact_account_balance_daily f\nJOIN bank_dwh.dim_date d\n    ON f.business_date_key = d.date_key\nJOIN bank_dwh.dim_currency c\n    ON f.currency_key = c.currency_key\nWHERE d.calendar_date BETWEEN '2026-08-01' AND '2026-08-07'\nGROUP BY d.calendar_date, c.currency_code\nORDER BY d.calendar_date, c.currency_code;"
+    "sql": "SELECT AVG(f.closing_balance_amount) AS avg_closing_balance\nFROM bank_dwh.fact_account_balance_daily f\nJOIN bank_dwh.dim_date d ON f.business_date_key = d.date_key\nWHERE d.calendar_date = DATE '2025-06-30';"
   },
   {
-    "file": "10-aml-alerts-phone-small.png",
-    "prompt": "Count AML alerts by investigation_status_code",
+    "file": "10-sme-cross-border-phone-small.png",
+    "prompt": "How many distinct customers in the SME segment made at least one cross-border wire transfer in 2025?",
+    "benchmark_case": "t1-sme-cross-border-2025",
+    "verified_correct": true,
     "viewport": "360×800",
     "status": "draft",
-    "sql": "SELECT investigation_status_code,\n       COUNT(*) AS alert_count\n  FROM bank_dwh.fact_aml_alert\n GROUP BY investigation_status_code\n ORDER BY alert_count DESC;"
+    "sql": "SELECT COUNT(DISTINCT fw.customer_key) AS distinct_sme_crossborder_customers_2025\nFROM bank_dwh.fact_wire_transfer fw\nJOIN bank_dwh.dim_date d ON fw.business_date_key = d.date_key\nJOIN bank_dwh.dim_customer c ON fw.customer_key = c.customer_key\nWHERE c.customer_segment_code = 'SME'\n  AND fw.is_cross_border = TRUE\n  AND d.calendar_year_number = 2025;"
   }
 ]

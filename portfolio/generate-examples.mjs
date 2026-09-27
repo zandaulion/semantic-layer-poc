@@ -7,24 +7,33 @@ const outputPath = process.env.POC_OUTPUT || path.resolve('portfolio/examples.js
 const { searchTables } = await import(pathToFileURL(path.join(appDir, 'server/elastic.js')));
 const { generateDraft } = await import(pathToFileURL(path.join(appDir, 'server/model.js')));
 
-const examples = [
-  { slug: 'active-customers', question: 'Number of active customers last month', domain: 'conformed' },
-  { slug: 'default-clients', question: 'Clients in default at end of August 2026', domain: 'all' },
-  { slug: 'loan-repayments', question: 'Show total actual loan repayments by customer for January 2026', domain: 'lending' },
-  { slug: 'card-authorizations', question: 'Count card authorizations by merchant in August 2026', domain: 'payments' },
-  { slug: 'deposit-balances', question: 'Show total closing deposit balance by branch on August 31, 2026', domain: 'deposits' },
-  { slug: 'fraud-alerts', question: 'Count fraud alerts by alert_severity_code', domain: 'risk_compliance' },
-  { slug: 'credit-risk', question: 'Using fact_credit_risk_exposure_daily, show average probability_of_default_rate by branch on August 31, 2026', domain: 'risk_compliance' },
-  { slug: 'payment-volume', question: 'Using fact_payment_transaction, show total amount by currency using currency_key and dim_currency.currency_code', domain: 'payments' },
-  { slug: 'account-balances', question: 'Using fact_account_balance_daily, show daily total closing_balance_amount by currency from August 1 through 7, 2026', domain: 'deposits' },
-  { slug: 'aml-alerts', question: 'Count AML alerts by investigation_status_code', domain: 'risk_compliance' },
+// Ten of the model benchmark's hard questions: each has one right answer, and
+// the recorded draft is checked against it by verify-examples.mjs before any
+// screenshot is taken. Their wording is read from the benchmark, so the two
+// cannot drift apart. All retrieval runs across every domain, as in the
+// benchmark.
+const PICKS = [
+  ['top5-wire-customers', 't1-top5-wire-customers-2025'],
+  ['wire-and-atm-customers', 't1-wire-and-atm-customers-2025'],
+  ['loans-90-days-past-due', 't1-loans-90dpd-2025-08-31'],
+  ['top-merchant-categories', 't1-top3-merchant-categories-2025'],
+  ['declined-card-share', 't1-declined-card-share-2025'],
+  ['escalated-complaints', 't1-escalated-complaints-by-category-2025'],
+  ['high-aml-alerts', 't1-high-aml-by-jurisdiction-2025'],
+  ['mobile-transactions', 't1-mobile-transactions-per-year'],
+  ['closing-balance', 't1-avg-closing-balance-2025-06-30'],
+  ['sme-cross-border', 't1-sme-cross-border-2025'],
 ];
+const { cases } = JSON.parse(await fs.readFile(path.join(appDir, 'eval/bench/cases.json'), 'utf8'));
+const examples = PICKS.map(([slug, caseId]) => ({ slug, case_id: caseId, question: cases.find((c) => c.id === caseId).question, domain: 'all' }));
 
 const completed = JSON.parse(await fs.readFile(outputPath, 'utf8').catch(() => '[]'));
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 for (const [index, example] of examples.entries()) {
+  // Kept unless verify-examples.mjs found its result wrong; delete an entry
+  // to have it drafted again.
   if (completed.some((item) => item.slug === example.slug && item.question === example.question && item.result.status === 'draft'
-      && !/\b(?:detection_at|settled_at)\b/i.test(item.result.sql))) continue;
+      && item.verified?.correct !== false)) continue;
   let result;
   for (let attempt = 1; attempt <= 4; attempt++) {
     try {

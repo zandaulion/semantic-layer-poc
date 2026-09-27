@@ -37,6 +37,9 @@ export function loadBenchResults(appDir) {
     return {
       id: file.replace(/\.json$/, ''),
       names: r.names ?? 'descriptive',
+      // Older files predate the field: a model served from Hugging Face
+      // weights is open; anything else unknown, and left unmarked.
+      weights: r.weights ?? (r.model.hf ? 'open' : null),
       recorded_at: r.recorded_at,
       model: r.model.name,
       hf: r.model.hf,
@@ -72,7 +75,7 @@ export function loadBenchResults(appDir) {
     quick = fs.readdirSync(path.join(dir, 'quick')).filter((f) => f.endsWith('.json')).sort().reverse().map((file) => {
       const r = JSON.parse(fs.readFileSync(path.join(dir, 'quick', file), 'utf8'));
       return {
-        id: file.replace(/\.json$/, ''), names: r.names ?? 'descriptive', recorded_at: r.recorded_at, model: r.model.name, card: r.card,
+        id: file.replace(/\.json$/, ''), names: r.names ?? 'descriptive', weights: r.weights ?? (r.model.hf ? 'open' : null), recorded_at: r.recorded_at, model: r.model.name, card: r.card,
         server: String(r.server ?? '').replace(/^vLLM \((?:[^:]+):([^)]+)\)$/, 'vLLM $1') || null,
         summary: r.summary, stopped_early: r.stopped_early ?? null, cost_usd: r.cost_usd ?? null,
         minutes: r.timings?.total_s ? Math.round(r.timings.total_s / 6) / 10 : null,

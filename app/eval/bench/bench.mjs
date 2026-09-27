@@ -514,7 +514,7 @@ async function main() {
             card, cloud, price_per_hour: price,
             cost_usd: price && timings.pod_s ? Math.round(price * timings.pod_s / 36) / 100 : null,
             timings: { ...timings, total_s: Math.round((Date.now() - t0) / 1000) },
-            failed_start: { reason: error.message }, names,
+            failed_start: { reason: error.message }, names, weights: 'open',
             summary: null, answers: [],
           };
           const dir = cryptic ? crypticDir : resultsDir;
@@ -640,6 +640,10 @@ async function main() {
     // Which names the model was shown: the catalog as written, or the same
     // tables and columns abbreviated (cryptic-names.mjs), descriptions kept.
     names,
+    // Whether the bank could run this model itself: a rented GPU serves only
+    // open weights; OpenRouter says which of its models are; another API is
+    // whatever --weights says, or unknown.
+    weights: routed ? routed.weights : external ? flag('--weights', null) : 'open',
     seed: seedVersion, repeats: drafts.repeats, concurrency: drafts.concurrency, timings, summary,
     // Questions the model answered per minute while the benchmark kept
     // `concurrency` of them in flight: the capacity figure every run has,

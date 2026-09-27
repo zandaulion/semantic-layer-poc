@@ -19,6 +19,7 @@
   "price_per_hour": null,
   "cost_usd": 2.86,
   "names": "cryptic",
+  "weights": "closed",
   "seed": "959d4656ba2d845c",
   "repeats": 3,
   "concurrency": 4,

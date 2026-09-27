@@ -254,6 +254,7 @@ Guards, all enforced by the daemon, whatever the page shows:
 | `--load` | Adds a load test at 1, 8 and 32 requests in flight (`--load-levels`), stopped early if a level's median passes 30 s. Adds a few minutes |
 | `--max-minutes N` | Hard limit on the whole run, default 20 |
 | `--openrouter ID` | A closed model through OpenRouter; see [Closed models through OpenRouter](#closed-models-through-openrouter) |
+| `--weights open\|closed` | For `--endpoint`: whether the model's weights are published, which the Model tests tab marks. GPU runs are open and OpenRouter runs are looked up |
 | `--endpoint URL --served-name NAME --key-file F` | Benchmarks a server that already exists; rents nothing. `--provider NAME` labels it in the results |
 | `--hf ORG/NAME` | A model without a profile, with default vLLM settings; `--disk` and `--name` adjust it |
 | `--resume FILE` | Keeps the answers of a stopped run and asks only the rest. A stopped run prints the file to pass |

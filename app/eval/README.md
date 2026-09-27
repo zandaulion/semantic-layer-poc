@@ -23,6 +23,12 @@ matter of opinion.
 It is also the thing to run before accepting a model upgrade, a quantisation
 change, or a prompt edit. The backend question is only its first use.
 
+Its twelve questions are ones every capable model answers, so it separates
+servers better than models. To compare models, use the
+[model benchmark](bench/README.md) in `bench/`: harder questions with one right
+answer, scored by running each draft against a seeded copy of the warehouse,
+on a GPU it rents and deletes itself. The PWA's Model tests tab shows its runs.
+
 ## Running it
 
 Elasticsearch has no published port, so the harness runs inside the container
@@ -372,9 +378,11 @@ Honest limits, so the numbers are not read for more than they carry:
 - **Concurrency on one card, with one question mix.** `load.mjs` measures one
   server under rising load, cycling ten questions. Real traffic has a different
   mix and arrives unevenly, and a different card saturates elsewhere.
-- **Table selection, not SQL correctness.** Nothing executes the generated SQL.
-  Column choice, join direction, and business meaning are unverified — the same
-  limits the PWA itself declares.
+- **Table selection, not SQL correctness.** Nothing here executes the generated
+  SQL. Column choice, join direction, and business meaning are unverified — the
+  same limits the PWA itself declares. The [model benchmark](bench/README.md)
+  does execute drafts, against a seeded copy of the warehouse, with questions
+  that have one right answer.
 - **One fixture.** A synthetic 100-table warehouse with regular naming. A real
   warehouse with inconsistent names is a harder retrieval problem.
 - **Twelve questions.** Enough to detect a backend that behaves differently, not

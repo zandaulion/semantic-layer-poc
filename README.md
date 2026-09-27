@@ -63,9 +63,9 @@ half that. SGLang broke the contract under load, about one reply in fifty
 running on in whitespace until the token limit, until it was started with
 `--constrained-json-disable-any-whitespace`. The failure never appeared one
 request at a time. On a rented A100, `gpt-oss-120b` matched the 20b on every
-case at more than twice the GPU time per question, which says the twelve
-cases are too easy to separate the two models rather than that the larger one
-adds nothing; the 20b ran no faster on the A100 than on the RTX 4090. On a
+case at more than twice the GPU time per question, because the twelve cases
+are too easy to separate the two models; the harder benchmark below found the
+120b no better either. The 20b ran no faster on the A100 than on the RTX 4090. On a
 catalog with abbreviated names and no descriptions, the 20b once drafted a
 plausible query from the wrong table where the 120b asked instead.
 
@@ -73,6 +73,36 @@ It reports table grounding, status behaviour, read-only safety, inference latenc
 and prompt size, and it classifies failures — a schema violation, meaning the
 server did not honour the strict JSON schema the application depends on, is a
 different problem from a rate limit, and the report says which happened.
+
+## Which model
+
+Those twelve questions are ones any capable model answers, so they separate
+servers, not models. [The model benchmark](app/eval/bench/README.md) asks 46
+harder ones three times: 23 with a single right answer, scored by running each
+draft against a seeded PostgreSQL copy of the warehouse; six about data the
+warehouse does not hold, where the right answer is a question back; five
+requests to write, which must never reach the user. It rents a GPU on RunPod,
+serves the model with vLLM, and deletes the GPU when it is done, in 5 to 12
+minutes and for well under a dollar. It runs on an A100 by default, the card an
+on-prem deployment would use.
+
+The number it watches is **confidently wrong**: a draft that runs and answers
+wrongly, or an answer about data that does not exist. Both read as answers.
+On an A100, on 2026-09-26:
+
+| Model | Correct | Confidently wrong | Asked when it should | Questions/min |
+| --- | --- | --- | --- | --- |
+| Qwen3.8-27B (FP8) | 96% | 0 | 18 of 18 | 41 |
+| gpt-oss-20b | 86% | 5 | 18 of 18 | 198 |
+| gpt-oss-120b | 86% | 8 | 18 of 18 | 81 |
+| Qwen3.6-35B-A3B (FP8) | 86% | 11 | 14 of 18 | 128 |
+| Mistral Small 3.2 24B | 41% | 9 | 15 of 18 | 53 |
+
+Ministral 3 14B answered 45% with 40 confidently wrong, and Gemma 4 26B could
+not be served at all under strict JSON output, a known model regression. The
+PWA's **Model tests** tab shows every run and exports them as a PDF, and its
+**Run a test** tab checks a model on Hugging Face and runs it, for devices
+allowed to spend on GPUs.
 
 The browser never receives the model API key. The PWA does not connect to a banking warehouse or execute generated SQL. Its automated checks cover read-only statement shape and known table references; syntax, column references, and business meaning still need human review.
 
@@ -93,6 +123,7 @@ codebase. The two groups below are separated for that reason.
 - [Synthetic banking warehouse fixture](banking-poc/README.md): PostgreSQL DDL, catalog, relationships, and a small seed for 100 tables and 5,000 columns.
 - [Backend evaluation harness](app/eval/README.md): twelve schema-grounded questions, the scoring rules, and how to compare two inference backends.
 - [Backend comparison results](app/eval/RESULTS.md): the same model served hosted, on CPU, and by llama.cpp and vLLM on a rented GPU, how one card behaves under load, what agreed, what did not, and what it does not settle.
+- [Model benchmark](app/eval/bench/README.md): different models on a rented GPU, their SQL scored by running it against a seeded copy of the warehouse; how to add a model, what each profile needed to serve, and the guards on cost.
 - [Retrieval and naming](retrieval-and-naming.md): what happens to retrieval when the warehouse has bank-style abbreviated names instead of readable ones, and which metadata recovers it.
 
 **Designs for a possible full implementation**

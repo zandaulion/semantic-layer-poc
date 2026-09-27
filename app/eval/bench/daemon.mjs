@@ -25,6 +25,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { loadBenchResults } from '../../server/bench-results.js';
+import { openrouterKey, validateOpenRouterModel } from './openrouter.mjs';
 import { apiKey, billedToday, listGpus } from './runpod.mjs';
 import { fits, validateModel } from './validate.mjs';
 
@@ -45,20 +46,23 @@ const today = () => new Date().toISOString().slice(0, 10);
 async function spend() {
   try { return JSON.parse(await readFile(spendFile, 'utf8')); } catch { return {}; }
 }
-// Today's spend, for the cap: this daemon's own ledger or RunPod's bill,
-// whichever is higher. The bill includes pods started elsewhere, but lags; the
-// ledger is immediate, but knows only its own runs.
+// Today's spend, for the cap: on GPUs, this daemon's own ledger or RunPod's
+// bill, whichever is higher. The bill includes pods started elsewhere, but
+// lags; the ledger is immediate, but knows only its own runs. OpenRouter runs
+// are added on top, from their own ledger entry: RunPod's bill never has them.
 let billed = { at: 0, usd: 0 };
 async function spentToday() {
   if (Date.now() - billed.at > 300_000) {
     billed = { at: Date.now(), usd: await billedToday().catch(() => billed.usd) };
   }
-  return Math.round(Math.max((await spend())[today()] ?? 0, billed.usd) * 100) / 100;
+  const ledger = await spend();
+  return Math.round((Math.max(ledger[today()] ?? 0, billed.usd) + (ledger[`api ${today()}`] ?? 0)) * 100) / 100;
 }
 
-async function addSpend(usd) {
+async function addSpend(usd, kind = '') {
   const ledger = await spend();
-  ledger[today()] = Math.round(((ledger[today()] ?? 0) + usd) * 100) / 100;
+  const key = kind ? `${kind} ${today()}` : today();
+  ledger[key] = Math.round(((ledger[key] ?? 0) + usd) * 1000) / 1000;
   await mkdir(cacheDir, { recursive: true });
   await writeFile(spendFile, `${JSON.stringify(ledger, null, 2)}\n`);
 }
@@ -97,7 +101,7 @@ function view(run) {
   const lastProgress = [...lines].reverse().find((l) => /^\[[\d:]+\] {3}/.test(l));
   const answered = lastProgress?.match(/(\d+)\/(\d+) answered/);
   return {
-    id: run.id, model: run.model, gpu: run.gpu, gpu_name: run.gpu_name, price: run.price, mode: run.mode, names: run.names ?? 'descriptive',
+    id: run.id, model: run.model, gpu: run.gpu, gpu_name: run.gpu_name, price: run.price, mode: run.mode, names: run.names ?? 'descriptive', provider: run.provider ?? 'runpod',
     requested_by: run.requested_by, status: run.status, started_at: run.started_at, finished_at: run.finished_at ?? null,
     elapsed_s: Math.round(((run.finished_ms ?? Date.now()) - run.started_ms) / 1000),
     phase: phases.at(-1) ?? null,
@@ -111,10 +115,11 @@ function view(run) {
   };
 }
 
-async function startRun({ model: name, gpu: gpuId, mode, names = 'cryptic', requested_by: requestedBy }) {
+async function startRun({ model: name, gpu: gpuId, mode, names = 'cryptic', provider = 'runpod', requested_by: requestedBy }) {
   if (current?.status === 'running') return { status: 409, body: { error: 'busy', message: `A run is already going: ${current.model} on ${current.gpu_name}.` } };
   if (!['quick', 'full'].includes(mode)) return { status: 400, body: { error: 'bad_mode', message: 'Choose quick or full.' } };
   if (!['cryptic', 'descriptive'].includes(names)) return { status: 400, body: { error: 'bad_names', message: 'Choose cryptic or descriptive names.' } };
+  if (provider === 'openrouter') return startOpenRouterRun({ name, mode, names, requestedBy });
   if (!(await apiKey())) return { status: 503, body: { error: 'no_key', message: 'The host has no RunPod API key.' } };
 
   // Everything is checked again here, whatever the page already showed:
@@ -142,6 +147,47 @@ async function startRun({ model: name, gpu: gpuId, mode, names = 'cryptic', requ
     id: `run-${Date.now()}`, model: model.model, profile: model.profile, gpu: gpu.id, gpu_name: gpu.name, price: gpu.price, mode, names,
     requested_by: requestedBy ?? null, status: 'running', started_at: new Date().toISOString(), started_ms: Date.now(),
   };
+  return launch(run, args, {
+    cost: (output) => {
+      const podSeconds = Number(output.match(/deleted pod \S+ after (\d+) s/)?.[1] ?? 0);
+      return podSeconds ? Math.round((gpu.price * podSeconds) / 36) / 100 : 0;
+    },
+    // RunPod's stock moves by the minute, so a card listed a moment ago can
+    // be gone by the time it is asked for. Say that plainly.
+    explain: (reason) => {
+      gpuCache.at = 0;
+      return /^No card available/.test(reason)
+        ? `RunPod had no ${gpu.name} to rent after all: its stock changes by the minute. Nothing was charged. Choose another card and start again.`
+        : reason;
+    },
+  });
+}
+
+/**
+ * A closed model through OpenRouter: nothing is rented, and the run is
+ * priced from the model's list price per token. Its worst case, every answer
+ * thinking up to the app's token cap, counts against the same daily cap.
+ */
+async function startOpenRouterRun({ name, mode, names, requestedBy }) {
+  if (!(await openrouterKey())) return { status: 503, body: { error: 'no_key', message: 'The host has no OpenRouter key.' } };
+  const model = await validateOpenRouterModel(name);
+  if (!model.ok) return { status: 400, body: { error: 'bad_model', message: model.reason } };
+  const worst = model.estimate[mode].worst_usd;
+  const spent = await spentToday();
+  if (spent + worst > dailyCap) {
+    return { status: 402, body: { error: 'cap', message: `Today's runs have cost $${spent.toFixed(2)}; this one could cost up to $${worst.toFixed(2)}, past the daily cap of $${dailyCap.toFixed(2)}.` } };
+  }
+  const args = [path.join(here, 'bench.mjs'), '--openrouter', model.model, '--max-minutes', String(LIMIT_MINUTES[mode]), '--names', names];
+  if (mode === 'quick') args.push('--quick');
+  const run = {
+    id: `run-${Date.now()}`, model: model.model, provider: 'openrouter', gpu: null, gpu_name: 'OpenRouter', price: null, mode, names,
+    requested_by: requestedBy ?? null, status: 'running', started_at: new Date().toISOString(), started_ms: Date.now(),
+  };
+  return launch(run, args, { kind: 'api' });
+}
+
+/** Starts bench.mjs for a run and follows it to the end. */
+function launch(run, args, { cost = () => 0, explain = (reason) => reason, kind = '' }) {
   const child = spawn(process.execPath, args, { cwd: appDir, stdio: ['ignore', 'pipe', 'pipe'] });
   run.child = child;
   let output = '';
@@ -152,26 +198,19 @@ async function startRun({ model: name, gpu: gpuId, mode, names = 'cryptic', requ
     run.lines = progressLog(run.started_at);
     run.finished_ms = Date.now();
     run.finished_at = new Date().toISOString();
-    const podSeconds = Number(output.match(/deleted pod \S+ after (\d+) s/)?.[1] ?? 0);
-    run.cost_usd = podSeconds ? Math.round((gpu.price * podSeconds) / 36) / 100 : 0;
-    if (run.cost_usd) await addSpend(run.cost_usd).catch(() => {});
+    run.cost_usd = cost(output);
     const wrote = output.match(/wrote (\S+\.json)/)?.[1];
     if (wrote) {
       try {
         const result = JSON.parse(await readFile(path.resolve(appDir, wrote), 'utf8'));
         run.result = { file: path.basename(wrote), quick: result.quick, stopped_early: result.stopped_early ?? null, summary: result.summary, throughput_qpm: result.throughput_qpm, minutes: Math.round(result.timings.total_s / 6) / 10 };
+        // An API run's cost is in its result: what the key spent.
+        if (kind === 'api') run.cost_usd = result.cost_usd ?? 0;
       } catch { /* the run still happened */ }
     }
+    if (run.cost_usd) await addSpend(run.cost_usd, kind).catch(() => {});
     run.status = run.cancelled ? 'cancelled' : code === 0 ? 'done' : 'failed';
-    if (run.status === 'failed') {
-      const reason = output.match(/bench failed: ([^\n]+)/)?.[1] ?? `bench exited with ${code ?? signal}`;
-      // RunPod's stock moves by the minute, so a card listed a moment ago can
-      // be gone by the time it is asked for. Say that plainly.
-      run.error = /^No card available/.test(reason)
-        ? `RunPod had no ${gpu.name} to rent after all: its stock changes by the minute. Nothing was charged. Choose another card and start again.`
-        : reason;
-      gpuCache.at = 0;
-    }
+    if (run.status === 'failed') run.error = explain(output.match(/bench failed: ([^\n]+)/)?.[1] ?? `bench exited with ${code ?? signal}`);
     delete run.child;
   });
   current = run;
@@ -189,9 +228,9 @@ function cancelRun() {
 // ---------------------------------------------------------------- exchange
 
 const routes = {
-  'GET /status': async () => ({ status: 200, body: { ok: true, key: Boolean(await apiKey()), running: current?.status === 'running', spent_today: await spentToday(), daily_cap: dailyCap, typical_minutes: TYPICAL_MINUTES, limit_minutes: LIMIT_MINUTES } }),
+  'GET /status': async () => ({ status: 200, body: { ok: true, key: Boolean(await apiKey()), openrouter: Boolean(await openrouterKey()), running: current?.status === 'running', spent_today: await spentToday(), daily_cap: dailyCap, typical_minutes: TYPICAL_MINUTES, limit_minutes: LIMIT_MINUTES } }),
   'GET /gpus': async () => ({ status: 200, body: { gpus: await gpus() } }),
-  'POST /validate': async (body) => ({ status: 200, body: await validateModel(body.model) }),
+  'POST /validate': async (body) => ({ status: 200, body: body.provider === 'openrouter' ? await validateOpenRouterModel(body.model) : await validateModel(body.model) }),
   'POST /runs': async (body) => startRun(body),
   'GET /runs/current': async () => ({ status: 200, body: { run: view(current) } }),
   'POST /runs/cancel': async () => cancelRun(),

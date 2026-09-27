@@ -52,7 +52,10 @@ export function loadBenchResults(appDir) {
       concurrency: r.concurrency,
       minutes: r.timings?.total_s ? Math.round(r.timings.total_s / 6) / 10 : null,
       questions_per_minute: peak ? Math.round(peak) : null,
-      cost_per_1000: peak && r.price_per_hour ? Math.round((r.price_per_hour / (peak * 60)) * 1000 * 1000) / 1000 : null,
+      // A GPU's hourly price spread over the answers it managed per minute; an
+      // API's per-token bill spread over the answers it gave.
+      cost_per_1000: peak && r.price_per_hour ? Math.round((r.price_per_hour / (peak * 60)) * 1000 * 1000) / 1000
+        : !r.price_per_hour && r.cost_usd && r.summary ? Math.round((r.cost_usd / r.summary.answers) * 1000 * 1000) / 1000 : null,
       note: r.note ?? null,
       failed_start: r.failed_start ?? null,
       summary: r.summary,

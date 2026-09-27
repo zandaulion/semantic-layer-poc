@@ -28,7 +28,9 @@ on its card is listed last, flagged DID NOT RUN, with the reason. Fast checks
 have a table of their own, and a grid shows each question's outcome per run. **Export PDF** prints it
 as an A4 landscape report. Any registered device can see it.
 
-**Run a test** (`/#run`) checks a model on Hugging Face, offers the cards with
+**Run a test** (`/#run`) runs an open-weights model on a rented GPU or a
+closed model (Claude, Gemini, GPT) through OpenRouter. For a GPU run it checks
+the model on Hugging Face, offers the cards with
 room for it (the A100 by default), and starts a fast or full run with cryptic
 (the default) or descriptive names, with live
 progress and the result at the end. Only devices listed in

@@ -101,6 +101,8 @@ column descriptions kept), and once with the catalog's **descriptive names**
 | Qwen3.8-27B (FP8) | 70% | 8 | 96%, 0 wrong | 31 |
 | Claude Sonnet 5 (API, OpenRouter) | 70% | 12 | not run | rate-limited |
 | GPT-5.5 (API, OpenRouter) | 68% | 9 | not run | rate-limited |
+| GPT-4.1 (API, OpenRouter) | 68% | 18 | not run | rate-limited |
+| GPT-4.1 mini (API, OpenRouter) | 65% | 15 | not run | 95 |
 | Qwen3.6-35B-A3B (FP8) | 64% | 13 | 86%, 11 wrong | 90 |
 | gpt-oss-120b | 62% | 14 | 86%, 8 wrong | 69 |
 | gpt-oss-20b | 46% | 17 | 86%, 5 wrong | 153 |
@@ -109,8 +111,10 @@ column descriptions kept), and once with the catalog's **descriptive names**
 The closed models, reached through OpenRouter, are there for scale: they
 cannot run on the bank's hardware. Gemini 3.8 Flash was the most careful,
 asking back on 18 hard questions rather than guessing, and was wrong only once.
-GPT-6 Luna took caution too far, asking back on 53 of 69, and GPT-5.5 was the
-only model to draft answers for data the warehouse does not hold (3 of 18).
+GPT-6 Luna took caution too far, asking back on 53 of 69, GPT-5.5 was the
+only model to draft answers for data the warehouse does not hold (3 of 18),
+and GPT-4.1 matched its accuracy with twice the confident mistakes (18), its
+drafts rarely stopping to ask.
 Every open model lost 22 to 39 points to the cryptic names. The mistakes are the ones the names used to
 prevent: a guessed column (`D_CCY.CCY_CD1`, when the currency dimension's code
 is `BUS_CD1`), a table read wrongly from its abbreviation (loan disbursements

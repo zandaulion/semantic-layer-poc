@@ -365,9 +365,15 @@ async function main() {
     ? {
       name: openrouter ?? flag('--served-name'), hf: null, cards: [],
       about: routed ? `${routed.name}, through OpenRouter at $${routed.price_in_per_m} in and $${routed.price_out_per_m} out per million tokens.` : 'An existing server.',
-      // A model that takes no temperature gets none: with require_parameters,
+      // A model that takes no temperature gets none, and one that does not
+      // reason is not asked for a reasoning effort: with require_parameters,
       // one field no provider accepts leaves no provider at all.
-      extra_body: { ...(openrouter ? ROUTING : {}), ...(routed && !routed.temperature ? { temperature: null } : {}), ...JSON.parse(flag('--extra-body', '{}')) },
+      extra_body: {
+        ...(openrouter ? ROUTING : {}),
+        ...(routed && !routed.temperature ? { temperature: null } : {}),
+        ...(routed && !routed.reasoning ? { reasoning_effort: null } : {}),
+        ...JSON.parse(flag('--extra-body', '{}')),
+      },
     }
     : await loadProfile();
   const quick = has('--quick');

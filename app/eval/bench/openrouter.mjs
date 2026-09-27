@@ -84,6 +84,7 @@ export async function validateOpenRouterModel(id) {
   if (!(model.architecture?.output_modalities ?? ['text']).includes('text')) return { ok: false, reason: `${model.id} does not generate text.` };
   const warnings = [];
   if (!supported.has('temperature')) warnings.push('It takes no temperature, so none is sent: it answers at its own default sampling, not the 0.1 the other runs use.');
+  if (!supported.has('reasoning')) warnings.push('It does not reason, so no reasoning effort is sent.');
   if (name.endsWith(':batch')) warnings.push('A batch variant can take hours to answer.');
   const priced = { price_in: price_in, price_out: price_out };
   return {

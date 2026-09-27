@@ -10,6 +10,9 @@
  * under that concurrency, and is reported as such.
  *
  *   node eval/bench/drafts.mjs --out FILE [--repeats 3] [--concurrency 8]
+ *
+ * --cases and --t0-cases replace the two case files with translated copies,
+ * for a run against the cryptic catalog (bench.mjs --names cryptic).
  */
 
 import { readFile, writeFile } from 'node:fs/promises';
@@ -41,8 +44,8 @@ if (!(await elasticHealth()).available) {
 
 // The original twelve come along as T0: they are scored on table choice, as
 // before, so a new model can be read against every earlier run.
-const bench = JSON.parse(await readFile(path.join(here, 'cases.json'), 'utf8')).cases;
-const original = JSON.parse(await readFile(path.join(here, '..', 'cases.json'), 'utf8')).cases
+const bench = JSON.parse(await readFile(flag('--cases', path.join(here, 'cases.json')), 'utf8')).cases;
+const original = JSON.parse(await readFile(flag('--t0-cases', path.join(here, '..', 'cases.json')), 'utf8')).cases
   .map((c) => ({ ...c, tier: 'T0' }));
 // --quick: the cases marked quick, without T0. It answers one question --
 // does this model serve correctly at all? -- before a full run is paid for.
@@ -69,6 +72,7 @@ let done = results.length;
 const save = (final) => writeFile(out, `${JSON.stringify({
   recorded_at: new Date().toISOString(),
   backend: { model: config.modelName, extra_body: config.modelExtraBody },
+  catalog: config.catalogPath, index: config.elasticIndex,
   repeats, concurrency, quick, stopped_early: stoppedEarly, complete: final && !stoppedEarly,
   wall_ms: Date.now() - started,
   results: [...results].sort((a, b) => a.repeat - b.repeat || a.id.localeCompare(b.id)),

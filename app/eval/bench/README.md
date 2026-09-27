@@ -127,6 +127,35 @@ A draft's result matches when every reference column is matched by one of its
 columns, whatever it is named, with the same rows; numbers within 0.01 unless
 the case says otherwise; row order only where the question asks for a ranking.
 
+## Cryptic names
+
+`--names cryptic` runs the same benchmark with the warehouse's names
+abbreviated the way an older bank warehouse spells them:
+`fact_account_balance_daily` becomes `F_ACCT_BAL_D`, `customer_key` becomes
+`CUST_K`. The rule is `eval/cryptic-names.mjs`, the one `make-cryptic.mjs`
+uses. Grain and column descriptions are kept, so a model can still read what a
+column holds. It just can't guess it from the name.
+
+Everything else stays the same: the questions stay in business English, the
+data is the same seed, and the answers are compared with the same references.
+The harness:
+
+- indexes the rewritten catalog under an alias of its own, `bench-cryptic`,
+  beside the application's index and without touching it, before any GPU is
+  rented;
+- loads a second database in the benchmark's PostgreSQL, `dwh_cryptic`: the
+  seed, then `ALTER TABLE ... RENAME` for every table and changed column.
+  The names are unquoted, so `F_ACCT_BAL_D` and `f_acct_bal_d` both find the
+  table, as on a case-insensitive warehouse;
+- translates the original twelve's expected tables through the same map;
+- runs each draft on `dwh_cryptic`, and the reference on the readable copy.
+  The comparison ignores column names, so the results compare directly. Every
+  reference, translated by hand, returns the same answer on both copies.
+
+Full runs are saved under `results/cryptic/` and form a table of their own,
+printed first. The same model scores differently when the names stop
+explaining themselves, so the two tables are never mixed.
+
 ## Reading the result
 
 gpt-oss-20b on an A100, 2026-09-26:
@@ -147,8 +176,8 @@ the wrong answer, plus a T2 draft for data that does not exist. Both read as an
 answer. A draft that fails to run, or a question back to the user, is visible
 to the analyst; these are not.
 
-The table printed at the end has one row per run in `results/`, most correct
-first, with the questions per minute the model answered while sixteen were in
+The tables printed at the end, cryptic names first, have one row per run in
+`results/cryptic/` and `results/`, most correct first, with the questions per minute the model answered while sixteen were in
 flight and the GPU cost per 1,000 questions at that rate. `--report` prints it
 without running anything. Each result file records the card and how the model
 was served (the vLLM image, or the API).
@@ -161,9 +190,10 @@ in a log file it adds a line at most every 20 seconds. Every run also writes
 its progress to `.cache/progress.log`, so a run started elsewhere can be
 followed with `tail -f app/eval/bench/.cache/progress.log`.
 
-The PWA shows the same runs in its **Model tests** tab (`/#tests`): the table,
-most correct first, with the card and vLLM version under each model; the fast
-checks and runs stopped early, in a table of their own; a legend; and every
+The PWA shows the same runs in its **Model tests** tab (`/#tests`): the
+cryptic-names table, then the descriptive-names table, each most correct first
+with the card and vLLM version under each model; the fast checks and runs
+stopped early, in a table of their own; a legend; and every
 question's outcome per run. **Export PDF** prints it as an A4 landscape report.
 With the daemon running the tab reads the checkout's `results/`, so a new run
 appears at once; without it, the files built into the image. Superseded runs
@@ -173,7 +203,8 @@ appears at once; without it, the files built into the image. Superseded runs
 
 The **Run a test** tab (`/#run`) does what the command line does. Enter a
 model, a Hugging Face id or a profile name, and check it; choose a card, the
-A100 unless none has stock; choose Full (the default) or Fast (`--quick`); confirm the price;
+A100 unless none has stock; choose Full (the default) or Fast (`--quick`), and
+cryptic names (the default) or descriptive ones; confirm the price;
 and follow the run as it goes. The finished run stays on show for two hours,
 with the log it had when it finished.
 
@@ -211,6 +242,7 @@ Guards, all enforced by the daemon, whatever the page shows:
 | Option | Effect |
 | --- | --- |
 | `--dry-run` | Prints the card, its price and the estimate; rents nothing |
+| `--names cryptic` | The same benchmark under abbreviated names; see [Cryptic names](#cryptic-names). The default is `descriptive` on the command line; the PWA defaults to cryptic |
 | `--quick` | A smoke test: ten questions once each, saved under `results/quick/` and left out of the table. Rarely worth it: loading the model dominates a run's time and cost, and a full run stops early if most replies fail |
 | `--vllm-extra JSON`, `--image REF` | Extra `vllm serve` arguments, or a different image, for an experiment, without editing the profile |
 | `--no-fail-fast` | Keeps asking even when most replies fail. By default a run stops once more than half of at least eight replies have failed |
@@ -223,7 +255,7 @@ Guards, all enforced by the daemon, whatever the page shows:
 | `--hf ORG/NAME` | A model without a profile, with default vLLM settings; `--disk` and `--name` adjust it |
 | `--resume FILE` | Keeps the answers of a stopped run and asks only the rest. A stopped run prints the file to pass |
 | `--rate-limit-attempts N`, `--runner-minutes N` | For a rate-limited API: how often a question may wait for room, and how long the question phase may take |
-| `--drafts FILE` | Re-scores saved answers without calling a model |
+| `--drafts FILE` | Re-scores saved answers without calling a model. Add `--names cryptic` for answers drafted against cryptic names |
 | `--keep-db` | Leaves the benchmark's PostgreSQL running afterwards |
 | `--cleanup` | Deletes pods an interrupted run left behind |
 

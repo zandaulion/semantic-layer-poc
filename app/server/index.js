@@ -181,7 +181,7 @@ export function createAppServer({ auth = new AuthStore(path.join(config.dataDir,
           if (req.method === 'POST') {
             const input = await readJson(req);
             body = target === '/runs'
-              ? { model: String(input.model ?? ''), gpu: String(input.gpu ?? ''), mode: String(input.mode ?? ''), requested_by: device.label }
+              ? { model: String(input.model ?? ''), gpu: String(input.gpu ?? ''), mode: String(input.mode ?? ''), names: String(input.names ?? 'cryptic'), requested_by: device.label }
               : target === '/validate' ? { model: String(input.model ?? '') } : {};
           }
           const reply = await benchRequest(req.method, target, body);

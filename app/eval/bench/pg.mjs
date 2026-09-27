@@ -8,13 +8,16 @@
  */
 
 import { execFile, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 
 const run = promisify(execFile);
 export const CONTAINER = 'banking-eval-pg';
 const IMAGE = 'docker.io/library/postgres:17-alpine';
-const DATABASE = 'dwh';
+export const DATABASE = 'dwh';
+// The same data under the cryptic catalog's names: see cryptic-names.mjs.
+export const CRYPTIC_DATABASE = 'dwh_cryptic';
 
 async function podman(args, options = {}) {
   return run('podman', args, { maxBuffer: 64 * 1024 * 1024, ...options });
@@ -44,11 +47,17 @@ async function running() {
 /**
  * Starts the database if it is not running and loads the seed if the loaded
  * one is missing or older. Returns the seed version in use.
+ *
+ * `database` loads it into another database of the same server, and `after`
+ * is SQL run once the seed is in: the cryptic copy is the seed followed by
+ * the statements that rename it.
  */
-export async function ensureDatabase(seedFile) {
+export async function ensureDatabase(seedFile, { database = DATABASE, after = '' } = {}) {
   const seed = await readFile(seedFile, 'utf8');
-  const version = seed.slice(0, 200).match(/^-- seed ([0-9a-f]+)/)?.[1];
-  if (!version) throw new Error(`${seedFile} is not a benchmark seed`);
+  const seedVersion = seed.slice(0, 200).match(/^-- seed ([0-9a-f]+)/)?.[1];
+  if (!seedVersion) throw new Error(`${seedFile} is not a benchmark seed`);
+  // A change to the renaming reloads the copy as a new seed would.
+  const version = after ? `${seedVersion}${createHash('sha256').update(after).digest('hex').slice(0, 8)}` : seedVersion;
   if (!(await running())) {
     await podman(['rm', '--force', '--ignore', CONTAINER]);
     await podman(['run', '--detach', '--rm', '--name', CONTAINER, '--memory', '768m',
@@ -64,15 +73,22 @@ export async function ensureDatabase(seedFile) {
       await new Promise((r) => setTimeout(r, 1000));
     }
   }
-  const loaded = await psql(['-U', 'postgres', '-d', DATABASE, '-At', '-c', "SELECT obj_description('bank_dwh'::regnamespace)"], '');
+  if (database !== DATABASE) {
+    const exists = await psql(['-U', 'postgres', '-d', DATABASE, '-At', '-c', `SELECT 1 FROM pg_database WHERE datname = '${database}'`], '');
+    if (exists.stdout.trim() !== '1') {
+      const made = await psql(['-U', 'postgres', '-d', DATABASE, '-c', `CREATE DATABASE ${database}`], '');
+      if (made.code !== 0) throw new Error(`Creating ${database} failed: ${made.stderr}`);
+    }
+  }
+  const loaded = await psql(['-U', 'postgres', '-d', database, '-At', '-c', "SELECT obj_description('bank_dwh'::regnamespace)"], '');
   if (loaded.code === 0 && loaded.stdout.trim() === version) return version;
 
-  const load = await psql(['-U', 'postgres', '-d', DATABASE], seed);
+  const load = await psql(['-U', 'postgres', '-d', database], `${seed}\n${after}`);
   if (load.code !== 0) throw new Error(`Loading the seed failed: ${load.stderr.slice(0, 500)}`);
   // Drafts run as a user that can read the warehouse and nothing else, in a
   // read-only transaction with a time limit. A draft that tries to write fails
   // here even if every check before it missed the statement.
-  const grants = await psql(['-U', 'postgres', '-d', DATABASE], `
+  const grants = await psql(['-U', 'postgres', '-d', database], `
     DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'bench_ro') THEN CREATE ROLE bench_ro LOGIN; END IF; END $$;
     GRANT USAGE ON SCHEMA bank_dwh TO bench_ro;
     GRANT SELECT ON ALL TABLES IN SCHEMA bank_dwh TO bench_ro;
@@ -114,10 +130,10 @@ function parseCsv(text) {
  * `{ ok: false, error }`; never throws for a bad query, because a draft that
  * does not run is a result, not a harness failure.
  */
-export async function query(sql) {
+export async function query(sql, { database = DATABASE } = {}) {
   const text = String(sql || '').trim().replace(/;\s*$/, '');
   if (!text) return { ok: false, error: 'empty statement' };
-  const result = await psql(['-U', 'bench_ro', '-d', DATABASE, '--csv'], `${text};\n`);
+  const result = await psql(['-U', 'bench_ro', '-d', database, '--csv'], `${text};\n`);
   if (result.code !== 0) return { ok: false, error: result.stderr.replace(/^psql:[^:]*:\d+: /gm, '').trim().slice(0, 300) };
   const [columns = [], ...rows] = parseCsv(result.stdout);
   return { ok: true, columns, rows };

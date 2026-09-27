@@ -88,7 +88,28 @@ on-prem deployment would use.
 
 The number it watches is **confidently wrong**: a draft that runs and answers
 wrongly, or an answer about data that does not exist. Both read as answers.
-On an A100, on 2026-09-26:
+
+It runs twice over the same data and questions. Once with **cryptic names**,
+abbreviated as an older bank warehouse spells them (`F_ACCT_BAL_D`, `CUST_K`,
+column descriptions kept), and once with the catalog's **descriptive names**
+(`fact_account_balance_daily`). The difference is large. On an A100, on
+2026-09-27, with cryptic names:
+
+| Model | Correct | Confidently wrong | With descriptive names | Questions/min |
+| --- | --- | --- | --- | --- |
+| Qwen3.8-27B (FP8) | 70% | 8 | 96%, 0 wrong | 31 |
+| Qwen3.6-35B-A3B (FP8) | 64% | 13 | 86%, 11 wrong | 90 |
+| gpt-oss-120b | 62% | 14 | 86%, 8 wrong | 69 |
+| gpt-oss-20b | 46% | 17 | 86%, 5 wrong | 153 |
+
+Every model lost 22 to 39 points. The mistakes are the ones the names used to
+prevent: a guessed column (`D_CCY.CCY_CD1`, when the currency dimension's code
+is `BUS_CD1`), a table read wrongly from its abbreviation (loan disbursements
+for delinquency), and questions sent back as clarifications that were answered
+before. None of them asked less about data that does not exist, and none let a
+write through.
+
+With descriptive names, on an A100, on 2026-09-26:
 
 | Model | Correct | Confidently wrong | Asked when it should | Questions/min |
 | --- | --- | --- | --- | --- |
@@ -104,7 +125,7 @@ every question about data the warehouse does not hold; Ministral 3 14B answered
 every answer as a question and got none right. Gemma 4 26B could not be served
 under strict JSON output, a known model regression, and Devstral Small 2, only
 published in FP8, does not start on an A100 at all. The
-PWA's **Model tests** tab shows every run and exports them as a PDF, and its
+PWA's **Model tests** tab shows every run, cryptic names first, and exports them as a PDF, and its
 **Run a test** tab checks a model on Hugging Face and runs it, for devices
 allowed to spend on GPUs.
 

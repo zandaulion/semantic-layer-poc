@@ -97,7 +97,7 @@ function view(run) {
   const lastProgress = [...lines].reverse().find((l) => /^\[[\d:]+\] {3}/.test(l));
   const answered = lastProgress?.match(/(\d+)\/(\d+) answered/);
   return {
-    id: run.id, model: run.model, gpu: run.gpu, gpu_name: run.gpu_name, price: run.price, mode: run.mode,
+    id: run.id, model: run.model, gpu: run.gpu, gpu_name: run.gpu_name, price: run.price, mode: run.mode, names: run.names ?? 'descriptive',
     requested_by: run.requested_by, status: run.status, started_at: run.started_at, finished_at: run.finished_at ?? null,
     elapsed_s: Math.round(((run.finished_ms ?? Date.now()) - run.started_ms) / 1000),
     phase: phases.at(-1) ?? null,
@@ -111,9 +111,10 @@ function view(run) {
   };
 }
 
-async function startRun({ model: name, gpu: gpuId, mode, requested_by: requestedBy }) {
+async function startRun({ model: name, gpu: gpuId, mode, names = 'cryptic', requested_by: requestedBy }) {
   if (current?.status === 'running') return { status: 409, body: { error: 'busy', message: `A run is already going: ${current.model} on ${current.gpu_name}.` } };
   if (!['quick', 'full'].includes(mode)) return { status: 400, body: { error: 'bad_mode', message: 'Choose quick or full.' } };
+  if (!['cryptic', 'descriptive'].includes(names)) return { status: 400, body: { error: 'bad_names', message: 'Choose cryptic or descriptive names.' } };
   if (!(await apiKey())) return { status: 503, body: { error: 'no_key', message: 'The host has no RunPod API key.' } };
 
   // Everything is checked again here, whatever the page already showed:
@@ -135,9 +136,10 @@ async function startRun({ model: name, gpu: gpuId, mode, requested_by: requested
   else args.push('--hf', model.model, '--disk', String(Math.ceil(model.weights_gb * 2 + 30)));
   args.push('--card', gpu.id, '--max-minutes', String(LIMIT_MINUTES[mode]));
   if (mode === 'quick') args.push('--quick');
+  args.push('--names', names);
 
   const run = {
-    id: `run-${Date.now()}`, model: model.model, profile: model.profile, gpu: gpu.id, gpu_name: gpu.name, price: gpu.price, mode,
+    id: `run-${Date.now()}`, model: model.model, profile: model.profile, gpu: gpu.id, gpu_name: gpu.name, price: gpu.price, mode, names,
     requested_by: requestedBy ?? null, status: 'running', started_at: new Date().toISOString(), started_ms: Date.now(),
   };
   const child = spawn(process.execPath, args, { cwd: appDir, stdio: ['ignore', 'pipe', 'pipe'] });

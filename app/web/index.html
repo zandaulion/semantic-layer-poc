@@ -143,24 +143,34 @@
           <p id="tests-print-meta" class="print-only"></p>
           <p id="tests-status" class="empty-copy">Loading recorded runs…</p>
 
+          <section class="panel tests-panel" aria-labelledby="tests-cryptic-title" hidden>
+            <div class="panel-heading"><div><span class="step">01</span><h2 id="tests-cryptic-title">Cryptic names</h2></div><span class="subtle">One row per run · most correct first</span></div>
+            <p class="tests-intro">Tables and columns abbreviated the way an older warehouse names them, <code>F_ACCT_BAL_D</code> for <code>fact_account_balance_daily</code>; the column descriptions are kept. The same data and questions as the table below.</p>
+            <p id="tests-cryptic-empty" class="empty-copy" hidden>No runs with cryptic names yet.</p>
+            <div class="table-wrap"><table id="tests-cryptic-table" class="tests-table"></table></div>
+            <div id="tests-cryptic-notes" class="tests-notes"></div>
+          </section>
+
           <section class="panel tests-panel" aria-labelledby="tests-results-title" hidden>
-            <div class="panel-heading"><div><span class="step">01</span><h2 id="tests-results-title">Results</h2></div><span class="subtle">One row per run · most correct first</span></div>
+            <div class="panel-heading"><div><span class="step">02</span><h2 id="tests-results-title">Descriptive names</h2></div><span class="subtle">One row per run · most correct first</span></div>
+            <p class="tests-intro">The catalog as written: names that say what they hold, <code>fact_account_balance_daily</code>, <code>customer_key</code>.</p>
             <div class="table-wrap"><table id="tests-table" class="tests-table"></table></div>
             <div id="tests-notes" class="tests-notes"></div>
           </section>
 
           <section id="tests-quick-panel" class="panel tests-panel" aria-labelledby="tests-quick-title" hidden>
-            <div class="panel-heading"><div><span class="step">↯</span><h2 id="tests-quick-title">Fast checks</h2></div><span class="subtle">Ten questions once each · not comparable with the table above · newest first</span></div>
+            <div class="panel-heading"><div><span class="step">↯</span><h2 id="tests-quick-title">Fast checks</h2></div><span class="subtle">Ten questions once each · not comparable with the tables above · newest first</span></div>
             <div class="table-wrap"><table id="tests-quick" class="tests-table"></table></div>
           </section>
 
           <section class="panel tests-panel" aria-labelledby="tests-legend-title" hidden>
-            <div class="panel-heading"><div><span class="step">02</span><h2 id="tests-legend-title">Reading the columns</h2></div></div>
+            <div class="panel-heading"><div><span class="step">03</span><h2 id="tests-legend-title">Reading the columns</h2></div></div>
             <dl class="tests-legend">
               <dt>Correct</dt><dd>Hard questions with one right answer. The drafted query is run on the seeded warehouse and its result compared with the reference.</dd>
               <dt>Confidently wrong</dt><dd>Drafts that ran and returned a wrong answer, plus drafts for data the warehouse does not hold. They read as answers, so this is the number to watch.</dd>
               <dt>Asked</dt><dd>Questions about data the warehouse does not hold, met with a question back instead of a draft.</dd>
               <dt>Unsafe writes</dt><dd>Requests to change data that reached the user as a draft. The SQL check stops these; this counts any it missed.</dd>
+              <dt>Cryptic · descriptive</dt><dd>Which names the model saw. The questions, the data and the right answers are the same in both; only the table and column names differ.</dd>
               <dt>Served by</dt><dd>Under each model: the card, and how the model was served, either the vLLM version on a rented pod or the API that answered.</dd>
               <dt>Answer time</dt><dd>Median time to a draft, with as many questions in flight as the run used (shown beneath it). Not comparable between a rented card and a shared API.</dd>
               <dt>Per minute · per 1,000</dt><dd>Questions answered per minute at that load, and the GPU's hourly price spread over them.</dd>
@@ -168,7 +178,7 @@
           </section>
 
           <section class="panel tests-panel" aria-labelledby="tests-matrix-title" hidden>
-            <div class="panel-heading"><div><span class="step">03</span><h2 id="tests-matrix-title">Question by question</h2></div><span class="subtle">Right answers out of repeats</span></div>
+            <div class="panel-heading"><div><span class="step">04</span><h2 id="tests-matrix-title">Question by question</h2></div><span class="subtle">Right answers out of repeats</span></div>
             <div class="table-wrap"><table id="tests-matrix" class="tests-matrix"></table></div>
           </section>
         </div>
@@ -211,6 +221,12 @@
                 <legend class="sr-only">Test size</legend>
                 <label class="run-mode"><input type="radio" name="run-mode" value="full" checked><span><strong>Full</strong><small>All 46 questions, three times each. The run that goes into the results table. Stops early, within a minute of answering, if most replies fail.</small></span></label>
                 <label class="run-mode"><input type="radio" name="run-mode" value="quick"><span><strong>Fast</strong><small>Ten questions, once each; kept apart from the table. Saves little: loading the model takes most of any run.</small></span></label>
+              </fieldset>
+
+              <fieldset class="run-modes">
+                <legend class="sr-only">Names the model sees</legend>
+                <label class="run-mode"><input type="radio" name="run-names" value="cryptic" checked><span><strong>Cryptic names</strong><small>F_ACCT_BAL_D, CUST_K: abbreviated as an older warehouse names them, descriptions kept. The first table in Model tests.</small></span></label>
+                <label class="run-mode"><input type="radio" name="run-names" value="descriptive"><span><strong>Descriptive names</strong><small>fact_account_balance_daily, customer_key: the catalog as written.</small></span></label>
               </fieldset>
 
               <p id="run-estimate" class="run-estimate"></p>

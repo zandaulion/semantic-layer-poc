@@ -8,6 +8,7 @@
  *   node eval/bench/bench.mjs --model gpt-oss-20b          # a profile in models/
  *   node eval/bench/bench.mjs --model qwen3.8-27b --card "NVIDIA A100-SXM4-80GB"
  *   node eval/bench/bench.mjs --hf org/name --card "NVIDIA L40S"   # no profile
+ *   node eval/bench/bench.mjs --model gpt-oss-20b --names cryptic   # the same data under F_ACCT_BAL_D-style names
  *   node eval/bench/bench.mjs --model gpt-oss-20b --dry-run
  *   node eval/bench/bench.mjs --endpoint URL --served-name NAME --key-file F   # a server you already run
  *   node eval/bench/bench.mjs --report                     # the table of all runs
@@ -25,7 +26,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
-import { ensureDatabase, stopDatabase } from './pg.mjs';
+import { crypticCases, crypticCatalog, crypticRenameSql } from '../cryptic-names.mjs';
+import { CRYPTIC_DATABASE, ensureDatabase, stopDatabase } from './pg.mjs';
 import { scoreDrafts, summarise } from './score.mjs';
 import { apiKey, createPod, deletePod, gpuPrice, ledger, podLog, waitForServer } from './runpod.mjs';
 
@@ -35,6 +37,10 @@ const appDir = path.resolve(here, '..', '..');
 const projectDir = path.dirname(appDir);
 const cacheDir = path.join(here, '.cache');
 const resultsDir = path.join(here, 'results');
+// Full runs against the cryptic catalog: a table of their own, because the
+// same model scores differently when the names stop explaining themselves.
+const crypticDir = path.join(resultsDir, 'cryptic');
+const CRYPTIC_INDEX = 'bench-cryptic';
 const IMAGE = 'vllm/vllm-openai:v0.30.0';
 const RUNNER_IMAGE = 'docker.io/library/node:24-alpine';
 
@@ -273,9 +279,18 @@ const pct = (v) => (v === null || v === undefined ? '—' : `${v}%`);
 
 // ------------------------------------------------------------------ report
 
-async function allResults() {
-  const files = await readdir(resultsDir).catch(() => []);
-  return Promise.all(files.filter((f) => f.endsWith('.json')).sort().map(async (f) => ({ file: f, ...JSON.parse(await readFile(path.join(resultsDir, f), 'utf8')) })));
+async function allResults(dir = resultsDir) {
+  const files = await readdir(dir).catch(() => []);
+  return Promise.all(files.filter((f) => f.endsWith('.json')).sort().map(async (f) => ({ file: f, ...JSON.parse(await readFile(path.join(dir, f), 'utf8')) })));
+}
+
+/** Both tables: cryptic names first, the harder and likelier case. */
+async function report() {
+  const cryptic = await allResults(crypticDir);
+  return [
+    ...(cryptic.length ? ['Cryptic names (F_ACCT_BAL_D), descriptions kept', table(ranked(cryptic)), ''] : []),
+    'Descriptive names (fact_account_balance_daily)', table(ranked(await allResults())),
+  ].join('\n');
 }
 
 /** Most correct first, as the PWA orders them; runs with a note go last. */
@@ -313,7 +328,7 @@ function table(results) {
 
 async function main() {
   if (has('--report')) {
-    console.log(table(ranked(await allResults())));
+    console.log(await report());
     return;
   }
   const pods = ledger(cacheDir);
@@ -333,6 +348,9 @@ async function main() {
     ? { name: flag('--served-name'), hf: null, about: 'An existing server.', cards: [], extra_body: JSON.parse(flag('--extra-body', '{}')) }
     : await loadProfile();
   const quick = has('--quick');
+  const names = flag('--names', 'descriptive');
+  if (!['descriptive', 'cryptic'].includes(names)) throw new Error('--names is descriptive or cryptic.');
+  const cryptic = names === 'cryptic';
   const repeats = Number(flag('--repeats', quick ? 1 : 3));
   const concurrency = Number(flag('--concurrency', 16));
   const levels = flag('--load-levels', '1,8,32');
@@ -343,7 +361,7 @@ async function main() {
   const offline = Boolean(external || flag('--drafts'));
   if (!offline && !(await apiKey())) throw new Error('No RunPod API key: set RUNPOD_API_KEY or write it to ~/.config/runpod-api-key (mode 600).');
   let price = offline ? null : await gpuPrice(profile.cards[0], cloud);
-  say(`${profile.name}${profile.hf ? ` (${profile.hf})` : ''} on ${offline ? (external ?? 'saved answers') : `${profile.cards[0]}, ${cloud}, $${price}/h`}`);
+  say(`${profile.name}${profile.hf ? ` (${profile.hf})` : ''}${cryptic ? ', cryptic names,' : ''} on ${offline ? (external ?? 'saved answers') : `${profile.cards[0]}, ${cloud}, $${price}/h`}`);
   if (has('--dry-run')) {
     say(`would ask ${repeats} x the benchmark at ${concurrency} at once${has('--load') ? `, then load levels ${levels}` : ''}; usually 5 to 15 minutes, about $${price ? (price * 5 / 60).toFixed(2) : '?'} to $${price ? (price * 15 / 60).toFixed(2) : '?'}. Nothing rented.`);
     return;
@@ -359,6 +377,8 @@ async function main() {
   phase('seeding the benchmark database');
   await run('node', [path.join(here, 'seed.mjs'), '--out', seedFile], { maxBuffer: 1024 * 1024 });
   const seedVersion = await ensureDatabase(seedFile);
+  const catalog = JSON.parse(await readFile(path.join(projectDir, 'banking-poc', 'catalog.json'), 'utf8'));
+  if (cryptic) await ensureDatabase(seedFile, { database: CRYPTIC_DATABASE, after: crypticRenameSql(catalog) });
 
   const serverKey = external && !flag('--drafts') ? (await readFile(flag('--key-file'), 'utf8')).trim() : randomBytes(24).toString('hex');
   let podId = null;
@@ -390,6 +410,19 @@ async function main() {
   await mkdir(outDir, { recursive: true });
   let drafts = flag('--drafts') ? JSON.parse(await readFile(flag('--drafts'), 'utf8')) : null;
   let load = null;
+  // Cryptic names: the catalog rewritten, indexed under an alias of its own
+  // beside the application's, and the original twelve's expected tables
+  // translated. Done before a GPU is rented, so a failure here costs nothing.
+  const namesEnv = {};
+  if (cryptic && !drafts) {
+    const { variant, tableMap } = crypticCatalog(catalog);
+    const original = JSON.parse(await readFile(path.join(appDir, 'eval', 'cases.json'), 'utf8'));
+    await writeFile(path.join(outDir, 'catalog.json'), JSON.stringify(variant));
+    await writeFile(path.join(outDir, 't0-cases.json'), JSON.stringify({ ...original, cases: crypticCases(original.cases, tableMap) }));
+    Object.assign(namesEnv, { CATALOG_PATH: '/out/catalog.json', ELASTICSEARCH_INDEX: CRYPTIC_INDEX });
+    say('indexing the cryptic catalog');
+    await inRunner('server/ingest.js', [], namesEnv, outDir);
+  }
   try {
     if (drafts) {
       phase(`reading saved answers from ${flag('--drafts')}; no model is called`);
@@ -442,11 +475,12 @@ async function main() {
             card, cloud, price_per_hour: price,
             cost_usd: price && timings.pod_s ? Math.round(price * timings.pod_s / 36) / 100 : null,
             timings: { ...timings, total_s: Math.round((Date.now() - t0) / 1000) },
-            failed_start: { reason: error.message },
+            failed_start: { reason: error.message }, names,
             summary: null, answers: [],
           };
-          await mkdir(resultsDir, { recursive: true });
-          const out = path.join(resultsDir, `${recordedAt.slice(0, 16).replace(/[:T-]/g, '')}-${slug(profile.name)}-${slug(card)}.json`);
+          const dir = cryptic ? crypticDir : resultsDir;
+          await mkdir(dir, { recursive: true });
+          const out = path.join(dir, `${recordedAt.slice(0, 16).replace(/[:T-]/g, '')}-${slug(profile.name)}-${slug(card)}${cryptic ? '-cryptic' : ''}.json`);
           await writeFile(out, `${JSON.stringify(failed, null, 2)}\n`);
           say(`recorded as a run that did not start: ${path.relative(process.cwd(), out)}`);
         }
@@ -472,6 +506,7 @@ async function main() {
       // A rate-limited provider (a free API tier) is waited out, not scored:
       // --rate-limit-attempts raises how long a question may wait for room.
       MODEL_RATE_LIMIT_ATTEMPTS: flag('--rate-limit-attempts', '4'),
+      ...namesEnv,
     };
     await probe(baseUrl, serverKey, profile);
     let started = Date.now();
@@ -479,7 +514,7 @@ async function main() {
     // --resume FILE: a stopped run's saved answers, kept rather than asked again.
     const resume = flag('--resume');
     if (resume) await writeFile(path.join(outDir, 'previous.json'), await readFile(resume));
-    await inRunner('eval/bench/drafts.mjs', ['--out', '/out/drafts.json', '--repeats', String(repeats), '--concurrency', String(concurrency), ...(quick ? ['--quick'] : []), ...(resume ? ['--resume', '/out/previous.json'] : [])], env, outDir, (line) => {
+    await inRunner('eval/bench/drafts.mjs', ['--out', '/out/drafts.json', '--repeats', String(repeats), '--concurrency', String(concurrency), ...(quick ? ['--quick'] : []), ...(namesEnv.CATALOG_PATH ? ['--t0-cases', '/out/t0-cases.json'] : []), ...(resume ? ['--resume', '/out/previous.json'] : [])], env, outDir, (line) => {
       if (/STOPPED quota/.test(line)) { say('stopping: the provider\'s daily allowance is used up'); return; }
       if (/STOPPED \d/.test(line)) { say(`stopping early: ${line.slice(line.indexOf('STOPPED') + 8)} replies so far failed`); return; }
       // Anywhere in the line: a rate-limit notice ("rate limited, waiting
@@ -530,7 +565,7 @@ async function main() {
   phase('scoring the drafts against PostgreSQL');
   const started = Date.now();
   const { cases } = JSON.parse(await readFile(path.join(here, 'cases.json'), 'utf8'));
-  const scored = await scoreDrafts(drafts, cases);
+  const scored = await scoreDrafts(drafts, cases, cryptic ? { database: CRYPTIC_DATABASE } : {});
   const summary = summarise(scored);
   timings.score_s = Math.round((Date.now() - started) / 1000);
   timings.total_s = Math.round((Date.now() - t0) / 1000);
@@ -545,6 +580,9 @@ async function main() {
     server_image: external ? null : profile.image ?? IMAGE,
     card, cloud: external ? null : cloud, price_per_hour: price,
     cost_usd: price && timings.pod_s ? Math.round(price * timings.pod_s / 36) / 100 : null,
+    // Which names the model was shown: the catalog as written, or the same
+    // tables and columns abbreviated (cryptic-names.mjs), descriptions kept.
+    names,
     seed: seedVersion, repeats: drafts.repeats, concurrency: drafts.concurrency, timings, summary,
     // Questions the model answered per minute while the benchmark kept
     // `concurrency` of them in flight: the capacity figure every run has,
@@ -555,12 +593,12 @@ async function main() {
   };
   // A quick run or one stopped early is a smoke test, not a result: kept, but
   // out of the table.
-  const target = quick || drafts.stopped_early ? path.join(resultsDir, 'quick') : resultsDir;
+  const target = quick || drafts.stopped_early ? path.join(resultsDir, 'quick') : cryptic ? crypticDir : resultsDir;
   if (drafts.stopped_early) result.stopped_early = drafts.stopped_early;
   result.quick = quick;
   await mkdir(target, { recursive: true });
   const slug = (text) => text.replace(/^NVIDIA (GeForce )?/, '').replace(/[^A-Za-z0-9.]+/g, '-');
-  const file = path.join(target, `${recordedAt.slice(0, 16).replace(/[:T-]/g, '')}-${slug(profile.name)}-${slug(card ?? 'external')}.json`);
+  const file = path.join(target, `${recordedAt.slice(0, 16).replace(/[:T-]/g, '')}-${slug(profile.name)}-${slug(card ?? 'external')}${cryptic ? '-cryptic' : ''}.json`);
   await writeFile(file, `${JSON.stringify(result, null, 2)}\n`);
   await rm(outDir, { recursive: true, force: true });
   if (!has('--keep-db')) await stopDatabase();
@@ -580,7 +618,7 @@ async function main() {
   cost                ${result.cost_usd === null ? '—' : `$${result.cost_usd.toFixed(2)}`}
   wrote ${path.relative(process.cwd(), file)}
 `);
-  console.log(table(ranked(await allResults())));
+  console.log(await report());
 }
 
 main().catch(async (error) => {

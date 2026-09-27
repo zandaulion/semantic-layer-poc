@@ -396,6 +396,16 @@ const el = (tag, className, text) => {
   return node;
 };
 const tone = (value, good, bad) => (value === null || value === undefined ? '' : value >= good ? 'metric-good' : value <= bad ? 'metric-bad' : 'metric-warn');
+// Open weights can run on the bank's own hardware; closed ones only by API.
+// Marked on every run, in every table, the same way.
+const WEIGHTS = { open: ['OPEN', 'Open weights: can run on the bank\'s own hardware'], closed: ['CLOSED · API', 'Closed weights: reachable only through the vendor\'s API'] };
+const weightsTag = (run) => {
+  const known = WEIGHTS[run.weights];
+  if (!known) return document.createTextNode('');
+  const tag = el('span', `weights weights-${run.weights}`, known[0]);
+  tag.title = known[1];
+  return tag;
+};
 const shortCard = (card) => String(card || 'external').replace(/^NVIDIA (GeForce )?/, '').replace(/-SXM4-80GB| 80GB HBM3/, '');
 
 async function loadTests() {
@@ -442,9 +452,10 @@ function renderTestsTable(runs, tableId, notesId) {
   for (const run of runs) {
     const s = run.summary;
     const row = body.insertRow();
-    if (run.note || run.failed_start) { row.className = 'flagged'; notes.push(run); }
+    if (run.weights) row.classList.add(`row-${run.weights}`);
+    if (run.note || run.failed_start) { row.classList.add('flagged'); notes.push(run); }
     const name = row.insertCell();
-    name.append(el('span', 'model', run.model));
+    name.append(el('span', 'model', run.model), weightsTag(run));
     if (run.failed_start) name.append(el('span', 'flag', 'DID NOT RUN'));
     else if (run.note) name.append(el('span', 'flag', 'NOT VALID'));
     name.append(el('span', 'card', `${run.card ? shortCard(run.card) : 'no GPU rented'} · ${run.server ?? 'server not recorded'} · ${run.recorded_at.slice(0, 10)}`));
@@ -464,7 +475,7 @@ function renderTestsTable(runs, tableId, notesId) {
       [String(s.t3.unsafe), `of ${s.t3.answers}`, s.t3.unsafe === 0 ? 'metric-good' : 'metric-bad'],
       [s.latency_ms.p50 ? `${(s.latency_ms.p50 / 1000).toFixed(1)} s` : '—', `${run.concurrency ?? '?'} in flight`, ''],
       [cellText(run.questions_per_minute), 'questions', ''],
-      [run.cost_per_1000 === null ? '—' : `$${run.cost_per_1000.toFixed(3)}`, 'GPU cost', ''],
+      [run.cost_per_1000 === null ? '—' : `$${run.cost_per_1000.toFixed(3)}`, run.price_per_hour ? 'GPU cost' : 'API cost', ''],
       [run.minutes === null ? '—' : `${run.minutes} min`, run.cost_usd === null ? '' : `$${run.cost_usd.toFixed(2)}`, ''],
     ];
     for (const [value, detail, className] of cells) {
@@ -489,8 +500,9 @@ function renderQuickChecks(quick) {
   for (const run of quick) {
     const s = run.summary;
     const row = body.insertRow();
+    if (run.weights) row.classList.add(`row-${run.weights}`);
     const name = row.insertCell();
-    name.append(el('span', 'model', run.model), el('span', 'card', `${run.names === 'cryptic' ? 'cryptic names · ' : ''}${run.card ? shortCard(run.card) : 'no GPU rented'} · ${run.server ?? ''} · ${run.recorded_at.slice(0, 16).replace('T', ' ')}`));
+    name.append(el('span', 'model', run.model), weightsTag(run), el('span', 'card', `${run.names === 'cryptic' ? 'cryptic names · ' : ''}${run.card ? shortCard(run.card) : 'no GPU rented'} · ${run.server ?? ''} · ${run.recorded_at.slice(0, 16).replace('T', ' ')}`));
     for (const [value, className] of [
       [`${s.t1.correct} of ${s.t1.answers}`, tone(s.t1.accuracy_pct, 90, 60)],
       [String(s.confidently_wrong.count), s.confidently_wrong.count ? 'metric-bad' : 'metric-good'],
@@ -512,8 +524,8 @@ function renderTestsMatrix(runs, questions) {
   const head = table.createTHead().insertRow();
   head.append(el('th', '', 'Question'));
   for (const run of runs) {
-    const th = el('th', '', run.model);
-    th.append(el('span', 'card', `${run.names === 'cryptic' ? 'cryptic · ' : ''}${run.card ? shortCard(run.card) : (run.server ?? '').replace(/^API: /, '')}`));
+    const th = el('th', run.weights ? `col-${run.weights}` : '', run.model);
+    th.append(weightsTag(run), el('span', 'card', `${run.names === 'cryptic' ? 'cryptic · ' : ''}${run.card ? shortCard(run.card) : (run.server ?? '').replace(/^API: /, '')}`));
     th.scope = 'col';
     head.append(th);
   }

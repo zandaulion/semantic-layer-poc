@@ -20,7 +20,9 @@ Two tabs beside **Draft SQL** serve the [model benchmark](eval/bench/README.md).
 first in each. Cryptic names come first (`F_ACCT_BAL_D`, abbreviated as an
 older warehouse names things, descriptions kept), then descriptive names
 (`fact_account_balance_daily`). The questions, data and answers are the same
-in both. Each table shows accuracy
+in both. Each run is tagged OPEN (teal) or CLOSED · API (violet),
+with a matching stripe down its row: open weights could run on the bank's
+own hardware, closed models only through their vendor's API. Each table shows accuracy
 on questions with one right answer, confidently wrong drafts, questions about
 missing data met with a question back, unsafe writes, speed and GPU cost, with
 the card and vLLM version under each model. A model that could not be served

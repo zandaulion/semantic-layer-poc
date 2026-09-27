@@ -19,6 +19,7 @@
   "price_per_hour": null,
   "cost_usd": 0.05,
   "names": "cryptic",
+  "weights": "closed",
   "seed": "959d4656ba2d845c",
   "repeats": 3,
   "concurrency": 4,
@@ -162,7 +163,7 @@
         "cost_details": {
           "upstream_inference_cost": 0.000557675,
           "upstream_inference_prompt_cost": 0.000482675,
-          "upstream_inference_completions_cost": 0.000075
+          "upstream_inference_completions_cost": 7.5e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 0,
@@ -404,7 +405,7 @@
         "cost_details": {
           "upstream_inference_cost": 0.000592425,
           "upstream_inference_prompt_cost": 0.000522925,
-          "upstream_inference_completions_cost": 0.0000695
+          "upstream_inference_completions_cost": 6.95e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 0,
@@ -767,7 +768,7 @@
         "cost_details": {
           "upstream_inference_cost": 0.00064605,
           "upstream_inference_prompt_cost": 0.00055355,
-          "upstream_inference_completions_cost": 0.0000925
+          "upstream_inference_completions_cost": 9.25e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 0,
@@ -1262,7 +1263,7 @@
         "cost_details": {
           "upstream_inference_cost": 0.0006018,
           "upstream_inference_prompt_cost": 0.0005473,
-          "upstream_inference_completions_cost": 0.0000545
+          "upstream_inference_completions_cost": 5.45e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 0,
@@ -1361,7 +1362,7 @@
         "cost_details": {
           "upstream_inference_cost": 0.0006273,
           "upstream_inference_prompt_cost": 0.0005723,
-          "upstream_inference_completions_cost": 0.000055
+          "upstream_inference_completions_cost": 5.5e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 0,
@@ -1428,7 +1429,7 @@
         "cost_details": {
           "upstream_inference_cost": 0.000569425,
           "upstream_inference_prompt_cost": 0.000500925,
-          "upstream_inference_completions_cost": 0.0000685
+          "upstream_inference_completions_cost": 6.85e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 62,
@@ -1462,7 +1463,7 @@
         "cost_details": {
           "upstream_inference_cost": 0.000466425,
           "upstream_inference_prompt_cost": 0.000405925,
-          "upstream_inference_completions_cost": 0.0000605
+          "upstream_inference_completions_cost": 6.05e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 0,
@@ -1596,7 +1597,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00016648,
-          "upstream_inference_prompt_cost": 0.00004398,
+          "upstream_inference_prompt_cost": 4.398e-05,
           "upstream_inference_completions_cost": 0.0001225
         },
         "completion_tokens_details": {
@@ -1629,7 +1630,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.0001716,
-          "upstream_inference_prompt_cost": 0.0000421,
+          "upstream_inference_prompt_cost": 4.21e-05,
           "upstream_inference_completions_cost": 0.0001295
         },
         "completion_tokens_details": {
@@ -1662,7 +1663,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00024439,
-          "upstream_inference_prompt_cost": 0.00003889,
+          "upstream_inference_prompt_cost": 3.889e-05,
           "upstream_inference_completions_cost": 0.0002055
         },
         "completion_tokens_details": {
@@ -1695,7 +1696,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00019018,
-          "upstream_inference_prompt_cost": 0.00004168,
+          "upstream_inference_prompt_cost": 4.168e-05,
           "upstream_inference_completions_cost": 0.0001485
         },
         "completion_tokens_details": {
@@ -1728,7 +1729,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00017647,
-          "upstream_inference_prompt_cost": 0.00004447,
+          "upstream_inference_prompt_cost": 4.447e-05,
           "upstream_inference_completions_cost": 0.000132
         },
         "completion_tokens_details": {
@@ -1761,7 +1762,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00031561,
-          "upstream_inference_prompt_cost": 0.00004711,
+          "upstream_inference_prompt_cost": 4.711e-05,
           "upstream_inference_completions_cost": 0.0002685
         },
         "completion_tokens_details": {
@@ -1794,7 +1795,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.0002718,
-          "upstream_inference_prompt_cost": 0.0000443,
+          "upstream_inference_prompt_cost": 4.43e-05,
           "upstream_inference_completions_cost": 0.0002275
         },
         "completion_tokens_details": {
@@ -1838,7 +1839,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00036855,
-          "upstream_inference_prompt_cost": 0.00004655,
+          "upstream_inference_prompt_cost": 4.655e-05,
           "upstream_inference_completions_cost": 0.000322
         },
         "completion_tokens_details": {
@@ -1871,7 +1872,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00019011,
-          "upstream_inference_prompt_cost": 0.00004611,
+          "upstream_inference_prompt_cost": 4.611e-05,
           "upstream_inference_completions_cost": 0.000144
         },
         "completion_tokens_details": {
@@ -1904,8 +1905,8 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00010061,
-          "upstream_inference_prompt_cost": 0.00004211,
-          "upstream_inference_completions_cost": 0.0000585
+          "upstream_inference_prompt_cost": 4.211e-05,
+          "upstream_inference_completions_cost": 5.85e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 0,
@@ -1937,7 +1938,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00032884,
-          "upstream_inference_prompt_cost": 0.00004234,
+          "upstream_inference_prompt_cost": 4.234e-05,
           "upstream_inference_completions_cost": 0.0002865
         },
         "completion_tokens_details": {
@@ -1970,7 +1971,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00023818,
-          "upstream_inference_prompt_cost": 0.00003768,
+          "upstream_inference_prompt_cost": 3.768e-05,
           "upstream_inference_completions_cost": 0.0002005
         },
         "completion_tokens_details": {
@@ -2003,7 +2004,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00017354,
-          "upstream_inference_prompt_cost": 0.00004654,
+          "upstream_inference_prompt_cost": 4.654e-05,
           "upstream_inference_completions_cost": 0.000127
         },
         "completion_tokens_details": {
@@ -2036,7 +2037,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00020995,
-          "upstream_inference_prompt_cost": 0.00004495,
+          "upstream_inference_prompt_cost": 4.495e-05,
           "upstream_inference_completions_cost": 0.000165
         },
         "completion_tokens_details": {
@@ -2069,7 +2070,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00016832,
-          "upstream_inference_prompt_cost": 0.00003982,
+          "upstream_inference_prompt_cost": 3.982e-05,
           "upstream_inference_completions_cost": 0.0001285
         },
         "completion_tokens_details": {
@@ -2102,7 +2103,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00020979,
-          "upstream_inference_prompt_cost": 0.00004029,
+          "upstream_inference_prompt_cost": 4.029e-05,
           "upstream_inference_completions_cost": 0.0001695
         },
         "completion_tokens_details": {
@@ -2135,7 +2136,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00018607,
-          "upstream_inference_prompt_cost": 0.00004307,
+          "upstream_inference_prompt_cost": 4.307e-05,
           "upstream_inference_completions_cost": 0.000143
         },
         "completion_tokens_details": {
@@ -2173,7 +2174,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00031197,
-          "upstream_inference_prompt_cost": 0.00004147,
+          "upstream_inference_prompt_cost": 4.147e-05,
           "upstream_inference_completions_cost": 0.0002705
         },
         "completion_tokens_details": {
@@ -2206,7 +2207,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00022591,
-          "upstream_inference_prompt_cost": 0.00004441,
+          "upstream_inference_prompt_cost": 4.441e-05,
           "upstream_inference_completions_cost": 0.0001815
         },
         "completion_tokens_details": {
@@ -2239,7 +2240,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00020372,
-          "upstream_inference_prompt_cost": 0.00004422,
+          "upstream_inference_prompt_cost": 4.422e-05,
           "upstream_inference_completions_cost": 0.0001595
         },
         "completion_tokens_details": {
@@ -2272,7 +2273,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00028356,
-          "upstream_inference_prompt_cost": 0.00004456,
+          "upstream_inference_prompt_cost": 4.456e-05,
           "upstream_inference_completions_cost": 0.000239
         },
         "completion_tokens_details": {
@@ -2305,7 +2306,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00016977,
-          "upstream_inference_prompt_cost": 0.00003677,
+          "upstream_inference_prompt_cost": 3.677e-05,
           "upstream_inference_completions_cost": 0.000133
         },
         "completion_tokens_details": {
@@ -2338,7 +2339,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00021415,
-          "upstream_inference_prompt_cost": 0.00004665,
+          "upstream_inference_prompt_cost": 4.665e-05,
           "upstream_inference_completions_cost": 0.0001675
         },
         "completion_tokens_details": {
@@ -2371,7 +2372,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00018614,
-          "upstream_inference_prompt_cost": 0.00004564,
+          "upstream_inference_prompt_cost": 4.564e-05,
           "upstream_inference_completions_cost": 0.0001405
         },
         "completion_tokens_details": {
@@ -2404,7 +2405,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00020095,
-          "upstream_inference_prompt_cost": 0.00004795,
+          "upstream_inference_prompt_cost": 4.795e-05,
           "upstream_inference_completions_cost": 0.000153
         },
         "completion_tokens_details": {
@@ -2437,7 +2438,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.0004592,
-          "upstream_inference_prompt_cost": 0.0000467,
+          "upstream_inference_prompt_cost": 4.67e-05,
           "upstream_inference_completions_cost": 0.0004125
         },
         "completion_tokens_details": {
@@ -2470,7 +2471,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00036513,
-          "upstream_inference_prompt_cost": 0.00003763,
+          "upstream_inference_prompt_cost": 3.763e-05,
           "upstream_inference_completions_cost": 0.0003275
         },
         "completion_tokens_details": {
@@ -2503,7 +2504,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00014781,
-          "upstream_inference_prompt_cost": 0.00004331,
+          "upstream_inference_prompt_cost": 4.331e-05,
           "upstream_inference_completions_cost": 0.0001045
         },
         "completion_tokens_details": {
@@ -2536,7 +2537,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00029675,
-          "upstream_inference_prompt_cost": 0.00004575,
+          "upstream_inference_prompt_cost": 4.575e-05,
           "upstream_inference_completions_cost": 0.000251
         },
         "completion_tokens_details": {
@@ -2569,7 +2570,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00020804,
-          "upstream_inference_prompt_cost": 0.00004654,
+          "upstream_inference_prompt_cost": 4.654e-05,
           "upstream_inference_completions_cost": 0.0001615
         },
         "completion_tokens_details": {
@@ -2602,7 +2603,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00030292,
-          "upstream_inference_prompt_cost": 0.00003892,
+          "upstream_inference_prompt_cost": 3.892e-05,
           "upstream_inference_completions_cost": 0.000264
         },
         "completion_tokens_details": {
@@ -2635,7 +2636,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00021561,
-          "upstream_inference_prompt_cost": 0.00004561,
+          "upstream_inference_prompt_cost": 4.561e-05,
           "upstream_inference_completions_cost": 0.00017
         },
         "completion_tokens_details": {
@@ -2668,7 +2669,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00025621,
-          "upstream_inference_prompt_cost": 0.00004571,
+          "upstream_inference_prompt_cost": 4.571e-05,
           "upstream_inference_completions_cost": 0.0002105
         },
         "completion_tokens_details": {
@@ -2701,8 +2702,8 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00013028,
-          "upstream_inference_prompt_cost": 0.00003828,
-          "upstream_inference_completions_cost": 0.000092
+          "upstream_inference_prompt_cost": 3.828e-05,
+          "upstream_inference_completions_cost": 9.2e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 57,
@@ -2734,7 +2735,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00014463,
-          "upstream_inference_prompt_cost": 0.00004213,
+          "upstream_inference_prompt_cost": 4.213e-05,
           "upstream_inference_completions_cost": 0.0001025
         },
         "completion_tokens_details": {
@@ -2767,8 +2768,8 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00012056,
-          "upstream_inference_prompt_cost": 0.00004406,
-          "upstream_inference_completions_cost": 0.0000765
+          "upstream_inference_prompt_cost": 4.406e-05,
+          "upstream_inference_completions_cost": 7.65e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 54,
@@ -2800,7 +2801,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00015224,
-          "upstream_inference_prompt_cost": 0.00004524,
+          "upstream_inference_prompt_cost": 4.524e-05,
           "upstream_inference_completions_cost": 0.000107
         },
         "completion_tokens_details": {
@@ -2833,8 +2834,8 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00013814,
-          "upstream_inference_prompt_cost": 0.00004414,
-          "upstream_inference_completions_cost": 0.000094
+          "upstream_inference_prompt_cost": 4.414e-05,
+          "upstream_inference_completions_cost": 9.4e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 78,
@@ -2856,7 +2857,7 @@
         "prompt_tokens": 4579,
         "completion_tokens": 99,
         "total_tokens": 4678,
-        "cost": 0.00009556,
+        "cost": 9.556e-05,
         "is_byok": false,
         "prompt_tokens_details": {
           "cached_tokens": 4576,
@@ -2865,9 +2866,9 @@
           "video_tokens": 0
         },
         "cost_details": {
-          "upstream_inference_cost": 0.00009556,
-          "upstream_inference_prompt_cost": 0.00004606,
-          "upstream_inference_completions_cost": 0.0000495
+          "upstream_inference_cost": 9.556e-05,
+          "upstream_inference_prompt_cost": 4.606e-05,
+          "upstream_inference_completions_cost": 4.95e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 0,
@@ -2899,8 +2900,8 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.0001031,
-          "upstream_inference_prompt_cost": 0.0000421,
-          "upstream_inference_completions_cost": 0.000061
+          "upstream_inference_prompt_cost": 4.21e-05,
+          "upstream_inference_completions_cost": 6.1e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 0,
@@ -2933,8 +2934,8 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00010585,
-          "upstream_inference_prompt_cost": 0.00004035,
-          "upstream_inference_completions_cost": 0.0000655
+          "upstream_inference_prompt_cost": 4.035e-05,
+          "upstream_inference_completions_cost": 6.55e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 57,
@@ -2967,7 +2968,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00015675,
-          "upstream_inference_prompt_cost": 0.00003275,
+          "upstream_inference_prompt_cost": 3.275e-05,
           "upstream_inference_completions_cost": 0.000124
         },
         "completion_tokens_details": {
@@ -3001,7 +3002,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00017693,
-          "upstream_inference_prompt_cost": 0.00003593,
+          "upstream_inference_prompt_cost": 3.593e-05,
           "upstream_inference_completions_cost": 0.000141
         },
         "completion_tokens_details": {
@@ -3035,7 +3036,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00025521,
-          "upstream_inference_prompt_cost": 0.00004221,
+          "upstream_inference_prompt_cost": 4.221e-05,
           "upstream_inference_completions_cost": 0.000213
         },
         "completion_tokens_details": {
@@ -3069,7 +3070,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00020261,
-          "upstream_inference_prompt_cost": 0.00004561,
+          "upstream_inference_prompt_cost": 4.561e-05,
           "upstream_inference_completions_cost": 0.000157
         },
         "completion_tokens_details": {
@@ -3102,7 +3103,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00025248,
-          "upstream_inference_prompt_cost": 0.00004398,
+          "upstream_inference_prompt_cost": 4.398e-05,
           "upstream_inference_completions_cost": 0.0002085
         },
         "completion_tokens_details": {
@@ -3135,7 +3136,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.0001921,
-          "upstream_inference_prompt_cost": 0.0000421,
+          "upstream_inference_prompt_cost": 4.21e-05,
           "upstream_inference_completions_cost": 0.00015
         },
         "completion_tokens_details": {
@@ -3168,7 +3169,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00022639,
-          "upstream_inference_prompt_cost": 0.00003889,
+          "upstream_inference_prompt_cost": 3.889e-05,
           "upstream_inference_completions_cost": 0.0001875
         },
         "completion_tokens_details": {
@@ -3201,7 +3202,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00028968,
-          "upstream_inference_prompt_cost": 0.00004168,
+          "upstream_inference_prompt_cost": 4.168e-05,
           "upstream_inference_completions_cost": 0.000248
         },
         "completion_tokens_details": {
@@ -3234,7 +3235,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00017697,
-          "upstream_inference_prompt_cost": 0.00004447,
+          "upstream_inference_prompt_cost": 4.447e-05,
           "upstream_inference_completions_cost": 0.0001325
         },
         "completion_tokens_details": {
@@ -3267,7 +3268,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00021361,
-          "upstream_inference_prompt_cost": 0.00004711,
+          "upstream_inference_prompt_cost": 4.711e-05,
           "upstream_inference_completions_cost": 0.0001665
         },
         "completion_tokens_details": {
@@ -3300,7 +3301,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.0003833,
-          "upstream_inference_prompt_cost": 0.0000443,
+          "upstream_inference_prompt_cost": 4.43e-05,
           "upstream_inference_completions_cost": 0.000339
         },
         "completion_tokens_details": {
@@ -3344,7 +3345,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00016705,
-          "upstream_inference_prompt_cost": 0.00004655,
+          "upstream_inference_prompt_cost": 4.655e-05,
           "upstream_inference_completions_cost": 0.0001205
         },
         "completion_tokens_details": {
@@ -3377,7 +3378,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00019611,
-          "upstream_inference_prompt_cost": 0.00004611,
+          "upstream_inference_prompt_cost": 4.611e-05,
           "upstream_inference_completions_cost": 0.00015
         },
         "completion_tokens_details": {
@@ -3410,8 +3411,8 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00011861,
-          "upstream_inference_prompt_cost": 0.00004211,
-          "upstream_inference_completions_cost": 0.0000765
+          "upstream_inference_prompt_cost": 4.211e-05,
+          "upstream_inference_completions_cost": 7.65e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 0,
@@ -3443,7 +3444,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00036434,
-          "upstream_inference_prompt_cost": 0.00004234,
+          "upstream_inference_prompt_cost": 4.234e-05,
           "upstream_inference_completions_cost": 0.000322
         },
         "completion_tokens_details": {
@@ -3476,8 +3477,8 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00013368,
-          "upstream_inference_prompt_cost": 0.00003768,
-          "upstream_inference_completions_cost": 0.000096
+          "upstream_inference_prompt_cost": 3.768e-05,
+          "upstream_inference_completions_cost": 9.6e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 0,
@@ -3509,7 +3510,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00018054,
-          "upstream_inference_prompt_cost": 0.00004654,
+          "upstream_inference_prompt_cost": 4.654e-05,
           "upstream_inference_completions_cost": 0.000134
         },
         "completion_tokens_details": {
@@ -3542,7 +3543,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00031195,
-          "upstream_inference_prompt_cost": 0.00004495,
+          "upstream_inference_prompt_cost": 4.495e-05,
           "upstream_inference_completions_cost": 0.000267
         },
         "completion_tokens_details": {
@@ -3575,7 +3576,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00014832,
-          "upstream_inference_prompt_cost": 0.00003982,
+          "upstream_inference_prompt_cost": 3.982e-05,
           "upstream_inference_completions_cost": 0.0001085
         },
         "completion_tokens_details": {
@@ -3608,7 +3609,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00023629,
-          "upstream_inference_prompt_cost": 0.00004029,
+          "upstream_inference_prompt_cost": 4.029e-05,
           "upstream_inference_completions_cost": 0.000196
         },
         "completion_tokens_details": {
@@ -3641,7 +3642,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00024807,
-          "upstream_inference_prompt_cost": 0.00004307,
+          "upstream_inference_prompt_cost": 4.307e-05,
           "upstream_inference_completions_cost": 0.000205
         },
         "completion_tokens_details": {
@@ -3674,7 +3675,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00016647,
-          "upstream_inference_prompt_cost": 0.00004147,
+          "upstream_inference_prompt_cost": 4.147e-05,
           "upstream_inference_completions_cost": 0.000125
         },
         "completion_tokens_details": {
@@ -3707,7 +3708,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00041991,
-          "upstream_inference_prompt_cost": 0.00004441,
+          "upstream_inference_prompt_cost": 4.441e-05,
           "upstream_inference_completions_cost": 0.0003755
         },
         "completion_tokens_details": {
@@ -3740,7 +3741,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00017122,
-          "upstream_inference_prompt_cost": 0.00004422,
+          "upstream_inference_prompt_cost": 4.422e-05,
           "upstream_inference_completions_cost": 0.000127
         },
         "completion_tokens_details": {
@@ -3773,7 +3774,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00029656,
-          "upstream_inference_prompt_cost": 0.00004456,
+          "upstream_inference_prompt_cost": 4.456e-05,
           "upstream_inference_completions_cost": 0.000252
         },
         "completion_tokens_details": {
@@ -3806,7 +3807,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00025377,
-          "upstream_inference_prompt_cost": 0.00003677,
+          "upstream_inference_prompt_cost": 3.677e-05,
           "upstream_inference_completions_cost": 0.000217
         },
         "completion_tokens_details": {
@@ -3839,7 +3840,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00018615,
-          "upstream_inference_prompt_cost": 0.00004665,
+          "upstream_inference_prompt_cost": 4.665e-05,
           "upstream_inference_completions_cost": 0.0001395
         },
         "completion_tokens_details": {
@@ -3872,7 +3873,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00016314,
-          "upstream_inference_prompt_cost": 0.00004564,
+          "upstream_inference_prompt_cost": 4.564e-05,
           "upstream_inference_completions_cost": 0.0001175
         },
         "completion_tokens_details": {
@@ -3905,7 +3906,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00019845,
-          "upstream_inference_prompt_cost": 0.00004795,
+          "upstream_inference_prompt_cost": 4.795e-05,
           "upstream_inference_completions_cost": 0.0001505
         },
         "completion_tokens_details": {
@@ -3938,7 +3939,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.0002912,
-          "upstream_inference_prompt_cost": 0.0000467,
+          "upstream_inference_prompt_cost": 4.67e-05,
           "upstream_inference_completions_cost": 0.0002445
         },
         "completion_tokens_details": {
@@ -3971,7 +3972,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00035513,
-          "upstream_inference_prompt_cost": 0.00003763,
+          "upstream_inference_prompt_cost": 3.763e-05,
           "upstream_inference_completions_cost": 0.0003175
         },
         "completion_tokens_details": {
@@ -4004,7 +4005,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00014931,
-          "upstream_inference_prompt_cost": 0.00004331,
+          "upstream_inference_prompt_cost": 4.331e-05,
           "upstream_inference_completions_cost": 0.000106
         },
         "completion_tokens_details": {
@@ -4037,7 +4038,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00017125,
-          "upstream_inference_prompt_cost": 0.00004575,
+          "upstream_inference_prompt_cost": 4.575e-05,
           "upstream_inference_completions_cost": 0.0001255
         },
         "completion_tokens_details": {
@@ -4070,7 +4071,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00018404,
-          "upstream_inference_prompt_cost": 0.00004654,
+          "upstream_inference_prompt_cost": 4.654e-05,
           "upstream_inference_completions_cost": 0.0001375
         },
         "completion_tokens_details": {
@@ -4103,7 +4104,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00038892,
-          "upstream_inference_prompt_cost": 0.00003892,
+          "upstream_inference_prompt_cost": 3.892e-05,
           "upstream_inference_completions_cost": 0.00035
         },
         "completion_tokens_details": {
@@ -4136,7 +4137,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00019361,
-          "upstream_inference_prompt_cost": 0.00004561,
+          "upstream_inference_prompt_cost": 4.561e-05,
           "upstream_inference_completions_cost": 0.000148
         },
         "completion_tokens_details": {
@@ -4169,7 +4170,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00022521,
-          "upstream_inference_prompt_cost": 0.00004571,
+          "upstream_inference_prompt_cost": 4.571e-05,
           "upstream_inference_completions_cost": 0.0001795
         },
         "completion_tokens_details": {
@@ -4202,8 +4203,8 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00011728,
-          "upstream_inference_prompt_cost": 0.00003828,
-          "upstream_inference_completions_cost": 0.000079
+          "upstream_inference_prompt_cost": 3.828e-05,
+          "upstream_inference_completions_cost": 7.9e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 0,
@@ -4235,8 +4236,8 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00014113,
-          "upstream_inference_prompt_cost": 0.00004213,
-          "upstream_inference_completions_cost": 0.000099
+          "upstream_inference_prompt_cost": 4.213e-05,
+          "upstream_inference_completions_cost": 9.9e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 38,
@@ -4268,8 +4269,8 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00012256,
-          "upstream_inference_prompt_cost": 0.00004406,
-          "upstream_inference_completions_cost": 0.0000785
+          "upstream_inference_prompt_cost": 4.406e-05,
+          "upstream_inference_completions_cost": 7.85e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 58,
@@ -4301,8 +4302,8 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00013724,
-          "upstream_inference_prompt_cost": 0.00004524,
-          "upstream_inference_completions_cost": 0.000092
+          "upstream_inference_prompt_cost": 4.524e-05,
+          "upstream_inference_completions_cost": 9.2e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 85,
@@ -4334,7 +4335,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00014664,
-          "upstream_inference_prompt_cost": 0.00004414,
+          "upstream_inference_prompt_cost": 4.414e-05,
           "upstream_inference_completions_cost": 0.0001025
         },
         "completion_tokens_details": {
@@ -4367,8 +4368,8 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00010906,
-          "upstream_inference_prompt_cost": 0.00004606,
-          "upstream_inference_completions_cost": 0.000063
+          "upstream_inference_prompt_cost": 4.606e-05,
+          "upstream_inference_completions_cost": 6.3e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 30,
@@ -4400,8 +4401,8 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.0001141,
-          "upstream_inference_prompt_cost": 0.0000421,
-          "upstream_inference_completions_cost": 0.000072
+          "upstream_inference_prompt_cost": 4.21e-05,
+          "upstream_inference_completions_cost": 7.2e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 0,
@@ -4434,8 +4435,8 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00012135,
-          "upstream_inference_prompt_cost": 0.00004035,
-          "upstream_inference_completions_cost": 0.000081
+          "upstream_inference_prompt_cost": 4.035e-05,
+          "upstream_inference_completions_cost": 8.1e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 89,
@@ -4458,7 +4459,7 @@
         "prompt_tokens": 3248,
         "completion_tokens": 131,
         "total_tokens": 3379,
-        "cost": 0.00009825,
+        "cost": 9.825e-05,
         "is_byok": false,
         "prompt_tokens_details": {
           "cached_tokens": 3245,
@@ -4467,9 +4468,9 @@
           "video_tokens": 0
         },
         "cost_details": {
-          "upstream_inference_cost": 0.00009825,
-          "upstream_inference_prompt_cost": 0.00003275,
-          "upstream_inference_completions_cost": 0.0000655
+          "upstream_inference_cost": 9.825e-05,
+          "upstream_inference_prompt_cost": 3.275e-05,
+          "upstream_inference_completions_cost": 6.55e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 0,
@@ -4502,7 +4503,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00020393,
-          "upstream_inference_prompt_cost": 0.00003593,
+          "upstream_inference_prompt_cost": 3.593e-05,
           "upstream_inference_completions_cost": 0.000168
         },
         "completion_tokens_details": {
@@ -4536,8 +4537,8 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00013371,
-          "upstream_inference_prompt_cost": 0.00004221,
-          "upstream_inference_completions_cost": 0.0000915
+          "upstream_inference_prompt_cost": 4.221e-05,
+          "upstream_inference_completions_cost": 9.15e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 0,
@@ -4570,7 +4571,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.00017561,
-          "upstream_inference_prompt_cost": 0.00004561,
+          "upstream_inference_prompt_cost": 4.561e-05,
           "upstream_inference_completions_cost": 0.00013
         },
         "completion_tokens_details": {

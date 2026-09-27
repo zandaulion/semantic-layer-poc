@@ -89,6 +89,9 @@ export async function validateOpenRouterModel(id) {
   const priced = { price_in: price_in, price_out: price_out };
   return {
     ok: true, provider: 'openrouter', model: model.id, name: model.name, context: model.context_length,
+    // OpenRouter links a model whose weights are published to its Hugging
+    // Face repository; a closed model has none.
+    weights: model.hugging_face_id ? 'open' : 'closed', hf: model.hugging_face_id || null,
     price_in_per_m: price_in, price_out_per_m: price_out,
     reasoning: supported.has('reasoning'),
     temperature: supported.has('temperature'),

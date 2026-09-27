@@ -69,7 +69,15 @@ real exception rather than vLLM's wrapper errors, and the pod's last log lines
 are kept in `.cache/failed-start.log`, because the pod is deleted next.
 
 A reply cut off at the token limit records what filled it: reasoning,
-whitespace padding, or an answer that looped. A run stops early once more
+whitespace padding, or an answer that looped. Whitespace padding is common:
+EuroLLM and Gemma 2 did it under vLLM's default JSON grammar, so a model run
+without a profile gets a grammar that allows no free whitespace
+(`--structured-outputs-config '{"backend": "xgrammar", "disable_any_whitespace": true}'`).
+
+A model vLLM cannot serve on the chosen card is recorded as a result: it
+appears in the table, last, flagged as not having run, with the reason. A
+container that dies before vLLM writes anything is a bad host and is not
+recorded. A run stops early once more
 than half of at least eight replies have failed.
 
 ## The profiles
@@ -86,7 +94,8 @@ than half of at least eight replies have failed.
 | `mistral-small-3.2-24b` | Mistral, 24B, BF16 | Works on the A100 |
 | `gemma-4-26b` | Google, 26B MoE | Does not work: loops under strict JSON, a known model regression |
 | `eurollm-22b` | EuroLLM (EU-funded), 22B, BF16 | Runs on the A100 once free whitespace is disallowed in the JSON grammar; labels nearly every answer as a question, so 0 correct |
-| `devstral-small-2-24b` | Mistral, 24B coding model, FP8 only | Does not run on the A100: the compiler fails, and without it the FP8 kernel does. Profile points at FP8 cards instead |
+| `devstral-small-2-24b` | Mistral, 24B coding model, FP8 only | Does not run on the A100: the compiler fails, and without it the FP8 kernel does. Listed as DID NOT RUN; profile points at FP8 cards instead |
+| `gemma-2-9b` | Google, 9B, BF16 (Unsloth's ungated copy) | Works with a chat template that folds the system message into the first turn, which Gemma 2 refuses otherwise; 35% correct, drafts for missing data every time |
 
 On the A100, Mistral's FP8 checkpoints do not start with vLLM (Ministral 3 on an A40, Devstral Small 2 on an A100): use a BF16 release where there is one.
 Every Mistral 3 model needs vLLM v0.29.0 (v0.30.0 cannot load them,

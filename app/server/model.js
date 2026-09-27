@@ -232,7 +232,7 @@ export async function generateDraft({ question, previousSql = '', hits }) {
   let usage = null;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.modelTimeoutMs);
-  const requestBody = JSON.stringify({
+  const body = {
     model: config.modelName,
     temperature: 0.1,
     max_completion_tokens: 1600,
@@ -243,7 +243,11 @@ export async function generateDraft({ question, previousSql = '', hits }) {
     ],
     response_format: { type: 'json_schema', json_schema: { name: 'sql_draft', strict: true, schema: responseSchema } },
     ...config.modelExtraBody,
-  });
+  };
+  // A null in MODEL_EXTRA_BODY leaves that field out: some models refuse a
+  // parameter the app sends by default (Claude Sonnet 5 takes no temperature).
+  for (const [field, value] of Object.entries(config.modelExtraBody)) if (value === null) delete body[field];
+  const requestBody = JSON.stringify(body);
   let result;
   try {
     for (let attempt = 0; attempt < 2; attempt++) {

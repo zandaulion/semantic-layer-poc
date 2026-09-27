@@ -294,6 +294,18 @@ default $5 daily cap, so the Run tab refuses it until `BENCH_DAILY_CAP_USD` is
 raised. Results join the same tables, labelled "API: OpenRouter", with the
 cost per 1,000 questions taken from the tokens actually billed.
 
+Two things OpenRouter's models differ in, both handled:
+
+- **Temperature.** Some models take none; Claude Sonnet 5 is one. With
+  `require_parameters` a field no provider accepts leaves no provider at all,
+  so for these the temperature is left out and the model answers at its own
+  default sampling. In general, a `null` in `--extra-body` or
+  `MODEL_EXTRA_BODY` removes a field the app would otherwise send.
+- **Rate limits.** A new OpenRouter account is held to 20 requests a minute on
+  some models. OpenRouter runs therefore ask 4 at a time with up to 12
+  retries. A run where replies still failed keeps its answers, and
+  `--resume` asks only the failed ones again.
+
 The questions and the synthetic catalog go to the model's provider. With a
 real catalog, check that this is allowed first.
 

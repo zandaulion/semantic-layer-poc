@@ -209,8 +209,8 @@
               <div class="panel-heading run-gap"><div><span class="step">03</span><h2>Test</h2></div></div>
               <fieldset class="run-modes">
                 <legend class="sr-only">Test size</legend>
-                <label class="run-mode"><input type="radio" name="run-mode" value="quick" checked><span><strong>Fast</strong><small>Ten questions, once each. Stops early if most replies fail. For a first look at a new model.</small></span></label>
-                <label class="run-mode"><input type="radio" name="run-mode" value="full"><span><strong>Full</strong><small>All 46 questions, three times each. The run that goes into the results table.</small></span></label>
+                <label class="run-mode"><input type="radio" name="run-mode" value="full" checked><span><strong>Full</strong><small>All 46 questions, three times each. The run that goes into the results table. Stops early, within a minute of answering, if most replies fail.</small></span></label>
+                <label class="run-mode"><input type="radio" name="run-mode" value="quick"><span><strong>Fast</strong><small>Ten questions, once each; kept apart from the table. Saves little: loading the model takes most of any run.</small></span></label>
               </fieldset>
 
               <p id="run-estimate" class="run-estimate"></p>

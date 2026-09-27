@@ -98,8 +98,12 @@ On an A100, on 2026-09-26:
 | Qwen3.6-35B-A3B (FP8) | 86% | 11 | 14 of 18 | 128 |
 | Mistral Small 3.2 24B | 41% | 9 | 15 of 18 | 53 |
 
-Ministral 3 14B answered 45% with 40 confidently wrong, and Gemma 4 26B could
-not be served at all under strict JSON output, a known model regression. The
+Gemma 2 9B answered 35% with 35 confidently wrong, and drafted an answer for
+every question about data the warehouse does not hold; Ministral 3 14B answered
+45% with 40 confidently wrong; EuroLLM-22B, the EU-funded model, labelled nearly
+every answer as a question and got none right. Gemma 4 26B could not be served
+under strict JSON output, a known model regression, and Devstral Small 2, only
+published in FP8, does not start on an A100 at all. The
 PWA's **Model tests** tab shows every run and exports them as a PDF, and its
 **Run a test** tab checks a model on Hugging Face and runs it, for devices
 allowed to spend on GPUs.

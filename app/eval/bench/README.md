@@ -173,7 +173,7 @@ appears at once; without it, the files built into the image. Superseded runs
 
 The **Run a test** tab (`/#run`) does what the command line does. Enter a
 model, a Hugging Face id or a profile name, and check it; choose a card, the
-A100 unless none has stock; choose Fast (`--quick`) or Full; confirm the price;
+A100 unless none has stock; choose Full (the default) or Fast (`--quick`); confirm the price;
 and follow the run as it goes. The finished run stays on show for two hours,
 with the log it had when it finished.
 
@@ -182,7 +182,9 @@ exists, is public and ungated, has safetensors weights, and generates text,
 and sizes its weights from the files themselves. The card list then offers
 only cards with room for it and stock right now, counting only hosts new
 enough for the vLLM image (CUDA 12.8). What cannot be checked in advance is
-whether vLLM serves the model well; that is what a fast run is for.
+whether vLLM serves the model well. A full run answers that as quickly as a
+fast one: loading the model takes most of either, and a model that fails is
+stopped within a minute of its first replies.
 
 The PWA itself holds no RunPod key and runs no containers. A daemon on the
 host does (`eval/bench/daemon.mjs`), installed as a user service by
@@ -209,7 +211,7 @@ Guards, all enforced by the daemon, whatever the page shows:
 | Option | Effect |
 | --- | --- |
 | `--dry-run` | Prints the card, its price and the estimate; rents nothing |
-| `--quick` | A smoke test: ten questions once each, saved under `results/quick/` and left out of the table. Use it first for a new model |
+| `--quick` | A smoke test: ten questions once each, saved under `results/quick/` and left out of the table. Rarely worth it: loading the model dominates a run's time and cost, and a full run stops early if most replies fail |
 | `--vllm-extra JSON`, `--image REF` | Extra `vllm serve` arguments, or a different image, for an experiment, without editing the profile |
 | `--no-fail-fast` | Keeps asking even when most replies fail. By default a run stops once more than half of at least eight replies have failed |
 | `--card ID` | Overrides the profile's card list |

@@ -109,7 +109,7 @@ Read by the daemon (`app/eval/bench/daemon.mjs`) and by `bench.mjs` on the host:
 | `npm run eval` | Scores the configured backend against the evaluation set |
 | `npm run eval:load` | Measures the configured backend's latency and throughput under rising concurrency |
 | `npm run eval:results` | Regenerates `app/eval/RESULTS.md` from the recorded baselines |
-| `node eval/bench/bench.mjs --model NAME` | Benchmarks a model on a rented A100 and scores its SQL by running it. `--quick` for a fast check, `--report` for the table of runs. See [the model benchmark](app/eval/bench/README.md) |
+| `node eval/bench/bench.mjs --model NAME` | Benchmarks a model on a rented A100 and scores its SQL by running it. `--report` prints the table of runs. See [the model benchmark](app/eval/bench/README.md) |
 | `app/deploy/a1/install-bench-daemon.sh` | Installs the benchmark daemon as a user service, for the PWA's Run a test tab |
 | `./deploy.sh` | Tests, builds the image, installs the units, restarts, health-checks |
 

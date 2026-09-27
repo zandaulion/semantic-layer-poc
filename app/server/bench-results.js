@@ -23,7 +23,7 @@ export function loadBenchResults(appDir) {
 
   const runs = files.map((file) => {
     const r = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
-    const peak = Math.max(r.throughput_qpm ?? 0, ...(r.load?.levels ?? []).map((l) => l.requests_per_minute));
+    const peak = !r.summary ? 0 : Math.max(r.throughput_qpm ?? 0, ...(r.load?.levels ?? []).map((l) => l.requests_per_minute));
     // Per question: how many of its repeats ended in each outcome.
     const outcomes = {};
     for (const a of r.answers ?? []) {
@@ -50,6 +50,7 @@ export function loadBenchResults(appDir) {
       questions_per_minute: peak ? Math.round(peak) : null,
       cost_per_1000: peak && r.price_per_hour ? Math.round((r.price_per_hour / (peak * 60)) * 1000 * 1000) / 1000 : null,
       note: r.note ?? null,
+      failed_start: r.failed_start ?? null,
       summary: r.summary,
       outcomes,
     };

@@ -101,7 +101,10 @@ async function loadProfile() {
       cards: [flag('--card', 'NVIDIA A100-SXM4-80GB')], disk_gb: Number(flag('--disk', 150)),
       // --max-num-seqs 64: the benchmark never has more than 32 requests in
       // flight, and hybrid models refuse vLLM's default of 256 on a small card.
-      vllm_args: ['--max-model-len', '8192', '--gpu-memory-utilization', '0.9', '--max-num-seqs', '64', '--no-enable-prefix-caching'],
+      // No free whitespace in the JSON grammar: EuroLLM, Gemma 2 and, under
+      // SGLang, gpt-oss padded finished answers with it until the token limit.
+      vllm_args: ['--max-model-len', '8192', '--gpu-memory-utilization', '0.9', '--max-num-seqs', '64', '--no-enable-prefix-caching',
+        '--structured-outputs-config', '{"backend": "xgrammar", "disable_any_whitespace": true}'],
       extra_body: JSON.parse(flag('--extra-body', '{}')),
     };
   }
@@ -276,14 +279,15 @@ async function allResults() {
 }
 
 /** Most correct first, as the PWA orders them; runs with a note go last. */
-const ranked = (results) => [...results].sort((a, b) => Boolean(a.note) - Boolean(b.note)
-  || (b.summary.t1.accuracy_pct ?? -1) - (a.summary.t1.accuracy_pct ?? -1)
+const ranked = (results) => [...results].sort((a, b) => Boolean(a.note || a.failed_start) - Boolean(b.note || b.failed_start)
+  || (b.summary?.t1.accuracy_pct ?? -1) - (a.summary?.t1.accuracy_pct ?? -1)
   || b.recorded_at.localeCompare(a.recorded_at));
 
 function table(results) {
   const header = ['Date', 'Model', 'Card', 'T1 correct', 'Confidently wrong', 'T2 asked', 'T3 unsafe', 'T0 pass', 'p50', 'q/min', '$ / 1k q', 'Run', 'Cost'];
   const rows = results.map((r) => {
     const s = r.summary;
+    if (!s) return [r.recorded_at.slice(0, 10), `${r.model.name} (did not run)`, r.card ?? '—', '—', '—', '—', '—', '—', '—', '—', '—', `${Math.round(r.timings.total_s / 60 * 10) / 10} min`, r.cost_usd !== null && r.cost_usd !== undefined ? `$${r.cost_usd.toFixed(2)}` : '—'];
     const peak = Math.round(Math.max(r.throughput_qpm ?? 0, ...(r.load?.levels ?? []).map((l) => l.requests_per_minute))) || null;
     return [
       r.recorded_at.slice(0, 10), r.model.name, r.card ?? '—',
@@ -298,8 +302,8 @@ function table(results) {
     ];
   });
   // A run marked with a note did not measure what the columns claim.
-  results.forEach((r, i) => { if (r.note) rows[i][1] = `${rows[i][1]} (!)`; });
-  const notes = results.filter((r) => r.note).map((r) => `(!) ${r.model.name}: ${r.note}`);
+  results.forEach((r, i) => { if (r.note && !r.failed_start) rows[i][1] = `${rows[i][1]} (!)`; });
+  const notes = results.filter((r) => r.note || r.failed_start).map((r) => (r.failed_start ? `${r.model.name} did not run: ${r.note ?? r.failed_start.reason}` : `(!) ${r.model.name}: ${r.note}`));
   const widths = header.map((h, i) => Math.max(h.length, ...rows.map((r) => String(r[i]).length)));
   const line = (cells) => cells.map((c, i) => String(c).padEnd(widths[i])).join('  ');
   return [line(header), line(widths.map((w) => '-'.repeat(w))), ...rows.map(line), ...(notes.length ? ['', ...notes] : [])].join('\n');
@@ -425,6 +429,27 @@ async function main() {
         const file = path.join(cacheDir, 'failed-start.log');
         await writeFile(file, `# ${new Date().toISOString()} ${profile.name} on ${card}\n# ${error.message}\n\n--- system\n${logs.system.join('\n')}\n\n--- container\n${logs.container.join('\n')}\n`);
         say(`the pod's last log lines are kept in ${path.relative(appDir, file)}`);
+        // A model vLLM cannot serve on this card is a result, and belongs in
+        // the table as one, flagged as not having run. A bad host is not.
+        if (error.kind === 'model') {
+          await cleanup();
+          const recordedAt = new Date().toISOString();
+          const slug = (text) => text.replace(/^NVIDIA (GeForce )?/, '').replace(/[^A-Za-z0-9.]+/g, '-');
+          const failed = {
+            recorded_at: recordedAt,
+            model: { name: profile.name, hf: profile.hf, about: profile.about, vllm_args: profile.vllm_args ?? null, extra_body: profile.extra_body ?? {} },
+            server: `vLLM ${(profile.image ?? IMAGE).split(':').pop()}`, server_image: profile.image ?? IMAGE,
+            card, cloud, price_per_hour: price,
+            cost_usd: price && timings.pod_s ? Math.round(price * timings.pod_s / 36) / 100 : null,
+            timings: { ...timings, total_s: Math.round((Date.now() - t0) / 1000) },
+            failed_start: { reason: error.message },
+            summary: null, answers: [],
+          };
+          await mkdir(resultsDir, { recursive: true });
+          const out = path.join(resultsDir, `${recordedAt.slice(0, 16).replace(/[:T-]/g, '')}-${slug(profile.name)}-${slug(card)}.json`);
+          await writeFile(out, `${JSON.stringify(failed, null, 2)}\n`);
+          say(`recorded as a run that did not start: ${path.relative(process.cwd(), out)}`);
+        }
         throw error;
       }
       timings.ready_s = Math.round((Date.now() - podStarted) / 1000);

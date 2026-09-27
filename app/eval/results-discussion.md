@@ -358,14 +358,16 @@ about $0.36: three runs of each model on each abbreviated catalog.
 - **More than one card, or newer ones.** The sweeps are one RTX 4090 and one
   A100. Neither says how the 120b scales across cards with tensor parallelism,
   or what a Hopper-class card with native FP8 and FP4 support would do.
-- **Whether the SQL is right.** Nothing executes it. Table selection is checked;
-  column choice, join direction and business meaning are not — the same limits the
-  PWA declares to its own users.
+- **Whether the SQL is right.** Nothing here executes it: table selection is
+  checked, column choice, join direction and business meaning are not. The
+  [model benchmark](bench/README.md), built afterwards, does run every draft
+  against a seeded copy of the warehouse and compares results.
 - **What a larger model is worth.** The 120b matched the 20b on every case of
   the original catalog, because every case is one the 20b already answers. On
   the stripped catalog it avoided one wrong draft the 20b made in three runs.
-  Sizing that difference needs more runs, and questions written to be hard
-  rather than a catalog made hard.
+  The [model benchmark](bench/README.md)'s harder questions later settled it:
+  the 120b answered 86% of them correctly with eight confidently wrong, the
+  20b 86% with five, at under half the cost.
 - **A different model.** The likely corporate reality is not this model
   self-hosted but a different one entirely, chosen by model risk approval. That
   swap would dwarf the hosting difference measured here.

@@ -32,10 +32,10 @@ neither.
 | 7 | Deterministic catalog rules | `server/model.js` | **Reimplement** |
 | 8 | Clarification behaviour | `server/model.js` | **Port** |
 | 9 | SQL safety check | `server/sql-check.js` | **Port**, and strengthen |
-| 10 | Evaluation harness | `app/eval/` | **Reuse** |
+| 10 | Evaluation harness and model benchmark | `app/eval/`, `app/eval/bench/` | **Reuse** |
 | 11 | Access control | `server/auth.js` | **Reimplement** |
 | 12 | PWA client | `app/web/` | **Port** or discard |
-| 13 | Deployment | `app/deploy/`, `deploy.sh` | **Reimplement** |
+| 13 | Deployment | `app/deploy/`, `deploy.sh`, `app/eval/bench/daemon.mjs` | **Reimplement** |
 
 ---
 
@@ -201,7 +201,7 @@ executable write. The bug the evaluation harness found here — a valid `EXTRACT
 filter read as an unknown table — is exactly the kind of defect that erodes trust
 in a guard until people route around it.
 
-## 10. Evaluation harness
+## 10. Evaluation harness and model benchmark
 
 **What it does.** Runs the real pipeline over questions whose correct answers the
 schema determines, scores grounding, status and read-only safety, classifies
@@ -209,6 +209,17 @@ failures, and writes comparable result files per backend. A companion script,
 `eval/load.mjs`, sends the same model requests at rising concurrency and reports
 latency, throughput and failures per level, so a serving stack can be sized as
 well as compared.
+
+The [model benchmark](app/eval/bench/README.md) goes further: it scores the SQL
+itself. It seeds a PostgreSQL copy of the warehouse, asks 46 questions three
+times, runs every draft read-only, and compares its result with a reference
+query's. It separates answers that are right, that ask back, that fail
+visibly, and that are **confidently wrong** — a draft that runs and answers
+wrongly, or answers about data the warehouse does not hold. It rents the GPU,
+serves the model with vLLM and deletes the GPU itself, on an A100 by default,
+and the PWA can start runs and show the results. On 2026-09-26 it separated
+the models the twelve original questions could not: Qwen3.8-27B answered 96%
+correctly with nothing confidently wrong, gpt-oss-20b 86% with five.
 
 **Verdict.** Reuse — and this is arguably the most portable thing in the
 repository. The cases are fixture-bound, but the method is not: ground truth
@@ -244,7 +255,10 @@ retrieval and indexing concern. The metadata model reserves
 
 **What it does.** Single-page app with a service worker, offline shell,
 versioned-asset cache busting, per-device history, and the review surface that
-shows SQL, interpretation, assumptions, checks and sources.
+shows SQL, interpretation, assumptions, checks and sources. Two further tabs
+serve the model benchmark: **Model tests** shows the recorded runs and exports
+them as a PDF report, and **Run a test** checks a model on Hugging Face, picks a
+card and starts a run, for devices allowed to spend on GPUs.
 
 **Verdict.** Port the review surface, discard the rest. The screen layout is the
 product thinking worth keeping — showing assumptions and retrieved sources beside
@@ -265,6 +279,13 @@ the application; and the deploy script **starts Elasticsearch first and waits**,
 because the app answers its own health check without it and a broken pair would
 otherwise look deployed.
 
+The benchmark adds a user service on the host, `banking-bench`, which holds the
+RunPod key and runs benchmarks for the Run a test tab. The application keeps no
+key and runs no containers; it exchanges request and response files with the
+daemon through a directory the quadlet mounts. Not a socket, because SELinux
+refuses a container a connection to a host process's socket, and not a port,
+because the host's loopback is not reachable from the container network.
+
 ---
 
 ## What is missing entirely
@@ -273,8 +294,9 @@ Named explicitly, so nobody infers these exist:
 
 - **Entitlements.** No user identity, no scoping of any kind (see 11).
 - **Embeddings.** Retrieval is BM25 only. No encoder is called anywhere.
-- **Execution.** Nothing runs the generated SQL. No connection to a warehouse
-  exists in this codebase.
+- **Execution.** The application never runs the generated SQL, and has no
+  connection to a warehouse. Only the model benchmark runs drafts, read-only,
+  against a seeded synthetic copy, to score them (see 10).
 - **Business term / metric layer.** No glossary, no approved metric definitions.
   The catalog rules (7) are the nearest thing and they are hardcoded.
 - **Lineage.** Relationships are candidate joins, not derived lineage.

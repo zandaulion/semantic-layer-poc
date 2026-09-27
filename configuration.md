@@ -42,12 +42,15 @@ error, which reads as "nothing matched" and is very hard to diagnose.
 | `MODEL_API_KEY` | — | Sent as `Authorization: Bearer`. **Must be non-empty**, or the server returns `model_unconfigured` without calling anything. A local endpoint that ignores keys still needs a placeholder |
 | `GROQ_API_KEY` | — | Fallback for `MODEL_API_KEY` |
 | `MODEL_TIMEOUT_MS` | `70000` | Client-side abort. Raise it substantially for CPU-served models: the same prompt that takes under a second hosted took about four and a half minutes on four CPU cores |
+| `MODEL_EXTRA_BODY` | — | A JSON object merged over every request, for fields a particular model needs: `{"chat_template_kwargs":{"enable_thinking":false}}` for Qwen, `{"reasoning_effort":"none"}` for Mistral. The benchmark's model profiles set it per model |
 
 The request also sends `temperature: 0.1`, `max_completion_tokens: 1600`,
-`reasoning_effort: 'low'`, and `response_format` with a strict JSON schema. Those
-are not configurable, and the last two are the fields most likely to be
-interpreted differently by another server — see
-[the evaluation harness](app/eval/README.md).
+`reasoning_effort: 'low'`, and `response_format` with a strict JSON schema.
+`MODEL_EXTRA_BODY` can override any of them; the last two are the fields most
+likely to be read differently by another server or model. Mistral models, for
+one, refuse `reasoning_effort: 'low'` outright. See
+[the evaluation harness](app/eval/README.md) and
+[the model benchmark](app/eval/bench/README.md).
 
 ### Server and access
 
@@ -77,6 +80,24 @@ podman exec \
 `SMOKE_QUESTION` and `SMOKE_DOMAIN` are used only by
 `app/deploy/a1/smoke-test.mjs`.
 
+### Model benchmark
+
+Read by the application, for the Model tests and Run a test tabs:
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `BENCH_DIR` | — | The directory shared with the benchmark daemon on the host. The quadlet mounts it at `/run/bench` and sets this. Empty turns the Run tab off; Model tests then reads the results built into the image |
+| `BENCH_RUNNER_DEVICES` | — | Device ids, comma separated, that may start runs. Runs rent GPUs, so the default is nobody; the Run tab shows a device its own id. Belongs in the server's private environment file |
+
+Read by the daemon (`app/eval/bench/daemon.mjs`) and by `bench.mjs` on the host:
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `RUNPOD_API_KEY` | `~/.config/runpod-api-key` | The RunPod API key. Prefer the file, mode 600: it is read, never printed |
+| `BENCH_DIR` | `~/.local/share/banking-bench` | Where the daemon reads requests and writes answers |
+| `BENCH_DAILY_CAP_USD` | `5` | A run whose worst case would take the day past this is refused. The day's spend is the higher of the daemon's ledger and RunPod's bill |
+| `MODEL_RATE_LIMIT_ATTEMPTS` | `4` | How often a rate-limited question may wait for room; `bench.mjs --rate-limit-attempts` sets it for a run |
+
 ## Commands
 
 | Command | Purpose |
@@ -88,6 +109,8 @@ podman exec \
 | `npm run eval` | Scores the configured backend against the evaluation set |
 | `npm run eval:load` | Measures the configured backend's latency and throughput under rising concurrency |
 | `npm run eval:results` | Regenerates `app/eval/RESULTS.md` from the recorded baselines |
+| `node eval/bench/bench.mjs --model NAME` | Benchmarks a model on a rented A100 and scores its SQL by running it. `--quick` for a fast check, `--report` for the table of runs. See [the model benchmark](app/eval/bench/README.md) |
+| `app/deploy/a1/install-bench-daemon.sh` | Installs the benchmark daemon as a user service, for the PWA's Run a test tab |
 | `./deploy.sh` | Tests, builds the image, installs the units, restarts, health-checks |
 
 ## Order of operations

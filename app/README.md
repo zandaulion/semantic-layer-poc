@@ -1,6 +1,6 @@
 # Banking DWH Studio PWA
 
-The app serves an installable PWA with an invite gate, synthetic catalog search, GPT-OSS SQL drafting, an editable SQL review panel, and query history. Node and Elasticsearch each run as a rootless container on the A1 host, on a private network between them. The browser talks only to the Node server; the model key stays on that host. There are no npm runtime dependencies.
+The app serves an installable PWA with an invite gate, synthetic catalog search, GPT-OSS SQL drafting, an editable SQL review panel, and query history, plus two tabs for the model benchmark: recorded results, and running a new test. Node and Elasticsearch each run as a rootless container on the A1 host, on a private network between them. The browser talks only to the Node server; the model key stays on that host. There are no npm runtime dependencies.
 
 ## Local run
 
@@ -11,6 +11,35 @@ The catalog is generated from [`../banking-poc/catalog.json`](../banking-poc/cat
 ## Query history
 
 Each successful generation saves its question, subject area, and complete answer in the app's SQLite database under the registered device ID. This includes SQL drafts and clarification responses. The History button lists saved answers newest first, lets the user restore a response, and lets them delete individual entries. History survives PWA reloads and server restarts. It is available only to that registered device; deleting the device removes its history. The list loads 20 entries at a time. Earlier generations made before this feature was deployed are not backfilled, and manual edits to the SQL editor remain in the current tab's session storage rather than being added to history.
+
+## Model tests and Run a test
+
+Two tabs beside **Draft SQL** serve the [model benchmark](eval/bench/README.md).
+
+**Model tests** (`/#tests`) shows every recorded run, most correct first: accuracy
+on questions with one right answer, confidently wrong drafts, questions about
+missing data met with a question back, unsafe writes, speed and GPU cost, with
+the card and vLLM version under each model. Fast checks have a table of their
+own, and a grid shows each question's outcome per run. **Export PDF** prints it
+as an A4 landscape report. Any registered device can see it.
+
+**Run a test** (`/#run`) checks a model on Hugging Face, offers the cards with
+room for it (the A100 by default), and starts a fast or full run, with live
+progress and the result at the end. Only devices listed in
+`BENCH_RUNNER_DEVICES` may use it, because runs rent GPUs; others see their own
+device id and a note saying so.
+
+The app holds no RunPod key and runs no containers. A daemon on the host does:
+
+```bash
+app/deploy/a1/install-bench-daemon.sh      # needs ~/.config/runpod-api-key, mode 600
+```
+
+It runs as the `banking-bench` user service, one run at a time, stops a run at
+15 or 25 minutes, and refuses a run that could take the day past
+`BENCH_DAILY_CAP_USD` (default $5). The quadlet mounts its exchange directory at
+`/run/bench`; without the daemon the Run tab says so and the rest of the app is
+unaffected.
 
 ## Tests
 
@@ -118,7 +147,7 @@ Run `node app/deploy/a1/smoke-test.mjs <tailnet-hostname> https://your-public-pw
 
 ## Model provider
 
-The default `MODEL_BASE_URL` uses Groq's OpenAI-compatible chat completions API with `openai/gpt-oss-20b`. The request uses strict JSON schema output and low reasoning effort. Other providers need support for those request fields or an adapter in `server/model.js`. Costs, limits, and availability depend on the provider account.
+The default `MODEL_BASE_URL` uses Groq's OpenAI-compatible chat completions API with `openai/gpt-oss-20b`. The request uses strict JSON schema output and low reasoning effort. Other providers need support for those request fields; `MODEL_EXTRA_BODY` overrides or adds fields for a model that needs them (Mistral models refuse `reasoning_effort: "low"`, Qwen's thinking mode is switched off through `chat_template_kwargs`), and anything beyond that needs an adapter in `server/model.js`. Costs, limits, and availability depend on the provider account.
 
 For the POC example “clients in default at end of August,” the app resolves the default flag and date relationship from the synthetic catalog, asks for a missing year, and uses a catalog-checked SQL rule after a year is supplied. The rule treats the latest available daily snapshot in that month as month end and labels the default definition as provisional. Other requests continue through the hosted model.
 

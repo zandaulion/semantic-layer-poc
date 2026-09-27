@@ -1,0 +1,32 @@
+{
+  "name": "devstral-small-2-24b",
+  "about": "Mistral AI Devstral Small 2 24B Instruct (2512), a coding model, FP8 as published (the only release). Apache-2.0, EU vendor. On the A100 its FP8 runs without hardware support: Ministral 3's FP8 failed to compile on an A40, so start with a fast run. Settings every Mistral 3 model needed: vLLM v0.29.0, Mistral's own format, reasoning_effort none.",
+  "hf": "mistralai/Devstral-Small-2-24B-Instruct-2512",
+  "image": "vllm/vllm-openai:v0.29.0",
+  "cards": [
+    "NVIDIA A100-SXM4-80GB",
+    "NVIDIA A100 80GB PCIe",
+    "NVIDIA L40S",
+    "NVIDIA H100 80GB HBM3"
+  ],
+  "disk_gb": 80,
+  "vllm_args": [
+    "--max-model-len",
+    "8192",
+    "--gpu-memory-utilization",
+    "0.9",
+    "--max-num-seqs",
+    "64",
+    "--no-enable-prefix-caching",
+    "--tokenizer-mode",
+    "mistral",
+    "--config-format",
+    "mistral",
+    "--load-format",
+    "mistral"
+  ],
+  "extra_body": {
+    "temperature": 0.1,
+    "reasoning_effort": "none"
+  }
+}

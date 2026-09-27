@@ -1,0 +1,21 @@
+{
+  "name": "eurollm-22b",
+  "about": "EuroLLM-22B-Instruct (2512), from the EU-funded EuroLLM project (Unbabel, Instituto Superior Técnico, University of Edinburgh and partners). Apache-2.0. 22.6B dense, Llama architecture, BF16 as released, 45 GB: fits an A100 without FP8. Trained for all EU languages, not for SQL. Default settings: nothing in its card asks for more.",
+  "hf": "utter-project/EuroLLM-22B-Instruct-2512",
+  "cards": [
+    "NVIDIA A100-SXM4-80GB",
+    "NVIDIA A100 80GB PCIe",
+    "NVIDIA H100 80GB HBM3"
+  ],
+  "disk_gb": 120,
+  "vllm_args": [
+    "--max-model-len",
+    "8192",
+    "--gpu-memory-utilization",
+    "0.9",
+    "--max-num-seqs",
+    "64",
+    "--no-enable-prefix-caching"
+  ],
+  "extra_body": {}
+}

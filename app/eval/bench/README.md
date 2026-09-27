@@ -299,7 +299,8 @@ Two things OpenRouter's models differ in, both handled:
 - **Temperature.** Some models take none; Claude Sonnet 5 is one. With
   `require_parameters` a field no provider accepts leaves no provider at all,
   so for these the temperature is left out and the model answers at its own
-  default sampling. In general, a `null` in `--extra-body` or
+  default sampling. A model that does not reason (GPT-4.1) is likewise sent
+  no `reasoning_effort`. In general, a `null` in `--extra-body` or
   `MODEL_EXTRA_BODY` removes a field the app would otherwise send.
 - **Rate limits.** A new OpenRouter account is held to 20 requests a minute on
   some models. OpenRouter runs therefore ask 4 at a time with up to 12

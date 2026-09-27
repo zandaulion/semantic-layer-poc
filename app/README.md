@@ -19,8 +19,9 @@ Two tabs beside **Draft SQL** serve the [model benchmark](eval/bench/README.md).
 **Model tests** (`/#tests`) shows every recorded run, most correct first: accuracy
 on questions with one right answer, confidently wrong drafts, questions about
 missing data met with a question back, unsafe writes, speed and GPU cost, with
-the card and vLLM version under each model. Fast checks have a table of their
-own, and a grid shows each question's outcome per run. **Export PDF** prints it
+the card and vLLM version under each model. A model that could not be served
+on its card is listed last, flagged DID NOT RUN, with the reason. Fast checks
+have a table of their own, and a grid shows each question's outcome per run. **Export PDF** prints it
 as an A4 landscape report. Any registered device can see it.
 
 **Run a test** (`/#run`) checks a model on Hugging Face, offers the cards with

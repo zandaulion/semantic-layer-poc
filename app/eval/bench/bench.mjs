@@ -183,6 +183,9 @@ async function inRunner(script, args, env, outDir, onLine) {
   }
 }
 
+// As the app does: a null in a profile's extra body leaves that field out.
+const withoutNulls = (body) => Object.fromEntries(Object.entries(body).filter(([, value]) => value !== null));
+
 /**
  * Two requests straight to the server before the benchmark: plain text, then
  * a tiny JSON schema. They separate a model that is broken as served from one
@@ -196,7 +199,7 @@ async function probe(baseUrl, key, profile) {
         // Room for a reasoning model to think before it answers: at 120 tokens
         // gpt-oss spent the lot reasoning and the long-prompt probe came back
         // empty, which read as a failure that was not there.
-        body: JSON.stringify({ model: profile.name, temperature: 0.1, max_tokens: 400, ...body, ...(profile.extra_body ?? {}) }),
+        body: JSON.stringify(withoutNulls({ model: profile.name, temperature: 0.1, max_tokens: 400, ...body, ...(profile.extra_body ?? {}) })),
         signal: AbortSignal.timeout(60_000),
       });
       const payload = await response.json();
@@ -241,7 +244,7 @@ async function appShapeProbe(baseUrl, key, profile) {
     try {
       const response = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
-        body: JSON.stringify(body), signal: AbortSignal.timeout(90_000),
+        body: JSON.stringify(withoutNulls(body)), signal: AbortSignal.timeout(90_000),
       });
       const payload = await response.json().catch(() => ({}));
       return { ok: response.ok, status: response.status, text: String(payload.choices?.[0]?.message?.content ?? payload.error?.message ?? payload.message ?? payload.detail ?? '').replace(/\s+/g, ' ') };
@@ -362,7 +365,9 @@ async function main() {
     ? {
       name: openrouter ?? flag('--served-name'), hf: null, cards: [],
       about: routed ? `${routed.name}, through OpenRouter at $${routed.price_in_per_m} in and $${routed.price_out_per_m} out per million tokens.` : 'An existing server.',
-      extra_body: { ...(openrouter ? ROUTING : {}), ...JSON.parse(flag('--extra-body', '{}')) },
+      // A model that takes no temperature gets none: with require_parameters,
+      // one field no provider accepts leaves no provider at all.
+      extra_body: { ...(openrouter ? ROUTING : {}), ...(routed && !routed.temperature ? { temperature: null } : {}), ...JSON.parse(flag('--extra-body', '{}')) },
     }
     : await loadProfile();
   const quick = has('--quick');
@@ -370,7 +375,9 @@ async function main() {
   if (!['descriptive', 'cryptic'].includes(names)) throw new Error('--names is descriptive or cryptic.');
   const cryptic = names === 'cryptic';
   const repeats = Number(flag('--repeats', quick ? 1 : 3));
-  const concurrency = Number(flag('--concurrency', 16));
+  // OpenRouter holds a new account to 20 requests a minute on some models;
+  // four at once, with patient retries, stays near that and loses nothing.
+  const concurrency = Number(flag('--concurrency', flag('--openrouter') ? 4 : 16));
   const levels = flag('--load-levels', '1,8,32');
   const cloud = has('--community') ? 'COMMUNITY' : 'SECURE';
   const maxMinutes = Number(flag('--max-minutes', 20));
@@ -531,7 +538,7 @@ async function main() {
       MODEL_TIMEOUT_MS: '120000', MODEL_EXTRA_BODY: JSON.stringify(profile.extra_body ?? {}),
       // A rate-limited provider (a free API tier) is waited out, not scored:
       // --rate-limit-attempts raises how long a question may wait for room.
-      MODEL_RATE_LIMIT_ATTEMPTS: flag('--rate-limit-attempts', '4'),
+      MODEL_RATE_LIMIT_ATTEMPTS: flag('--rate-limit-attempts', openrouter ? '12' : '4'),
       ...namesEnv,
     };
     await probe(baseUrl, serverKey, profile);
@@ -554,11 +561,13 @@ async function main() {
       progress(`${bar(done, total)} ${done}/${total} answered, ${Math.round(spent)} s${left !== null ? `, about ${left} s left` : ''}`);
     });
     drafts = JSON.parse(await readFile(path.join(outDir, 'drafts.json'), 'utf8'));
-    if (drafts.stopped_early) {
-      // Kept where a later run can pick it up, and said so.
+    const failedReplies = drafts.results.filter((r) => r.path === 'failed').length;
+    if (drafts.stopped_early || failedReplies) {
+      // Kept where a later run can pick it up, and said so: a stopped run, or
+      // one where some replies failed (a rate limit, say) and can be asked again.
       const keep = path.join(cacheDir, `resume-${profile.name.replace(/[^\w.-]+/g, '-')}.json`);
       await writeFile(keep, JSON.stringify(drafts));
-      say(`${drafts.results.length} answers kept; to carry on later, run the same command with --resume ${path.relative(appDir, keep)}`);
+      say(`${drafts.results.length - failedReplies} answers kept${failedReplies ? `, ${failedReplies} failed` : ''}; to ask ${drafts.stopped_early ? 'the rest' : 'the failed ones again'}, run the same command with --resume ${path.relative(appDir, keep)}`);
     }
     timings.drafts_s = Math.round((Date.now() - started) / 1000);
     say(`${drafts.results.length} answers in ${timings.drafts_s} s`);

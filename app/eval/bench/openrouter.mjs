@@ -83,13 +83,14 @@ export async function validateOpenRouterModel(id) {
   if (!supported.has('structured_outputs')) return { ok: false, reason: `${model.id} does not support structured outputs on OpenRouter, and the app needs its reply to follow a JSON schema.` };
   if (!(model.architecture?.output_modalities ?? ['text']).includes('text')) return { ok: false, reason: `${model.id} does not generate text.` };
   const warnings = [];
-  if (!supported.has('temperature')) warnings.push('It does not accept a temperature; the app sends one, so OpenRouter may find no provider for the request.');
+  if (!supported.has('temperature')) warnings.push('It takes no temperature, so none is sent: it answers at its own default sampling, not the 0.1 the other runs use.');
   if (name.endsWith(':batch')) warnings.push('A batch variant can take hours to answer.');
   const priced = { price_in: price_in, price_out: price_out };
   return {
     ok: true, provider: 'openrouter', model: model.id, name: model.name, context: model.context_length,
     price_in_per_m: price_in, price_out_per_m: price_out,
     reasoning: supported.has('reasoning'),
+    temperature: supported.has('temperature'),
     estimate: { full: estimate(priced, 'full'), quick: estimate(priced, 'quick') },
     warnings,
   };

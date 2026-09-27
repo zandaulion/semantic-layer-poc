@@ -5,7 +5,10 @@ model with vLLM, sends the benchmark questions through the POC's real pipeline,
 runs every drafted query against a seeded PostgreSQL copy of the warehouse,
 deletes the GPU, and prints the result beside every earlier run. It runs on an
 A100 by default, the card the bank runs, and usually takes 5 to 12 minutes and
-$0.10 to $0.35. The same runs can be started, followed and read in the PWA.
+$0.10 to $0.35. A closed model is called through
+[OpenRouter](#closed-models-through-openrouter) instead, and the questions can be
+asked under [cryptic names](#cryptic-names). The same runs can be started,
+followed and read in the PWA.
 
 ```bash
 node app/eval/bench/bench.mjs --model gpt-oss-20b
@@ -177,8 +180,10 @@ answer. A draft that fails to run, or a question back to the user, is visible
 to the analyst; these are not.
 
 The tables printed at the end, cryptic names first, have one row per run in
-`results/cryptic/` and `results/`, most correct first, with the questions per minute the model answered while sixteen were in
-flight and the GPU cost per 1,000 questions at that rate. `--report` prints it
+`results/cryptic/` and `results/`, most correct first, with the questions per
+minute the model answered at the run's concurrency (16 on a GPU, 4 through
+OpenRouter) and the cost per 1,000 questions: the GPU's hourly price at that
+rate, or what the API billed, spread over the answers. `--report` prints it
 without running anything. Each result file records the card and how the model
 was served (the vLLM image, or the API).
 
@@ -192,7 +197,8 @@ followed with `tail -f app/eval/bench/.cache/progress.log`.
 
 The PWA shows the same runs in its **Model tests** tab (`/#tests`): the
 cryptic-names table, then the descriptive-names table, each most correct first
-with the card and vLLM version under each model; the fast checks and runs
+with the card and vLLM version (or the API) under each model, and each tagged
+OPEN or CLOSED · API with a matching stripe down its row; the fast checks and runs
 stopped early, in a table of their own; a legend; and every
 question's outcome per run. **Export PDF** prints it as an A4 landscape report.
 With the daemon running the tab reads the checkout's `results/`, so a new run

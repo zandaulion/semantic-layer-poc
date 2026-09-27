@@ -81,10 +81,12 @@ servers, not models. [The model benchmark](app/eval/bench/README.md) asks 46
 harder ones three times: 23 with a single right answer, scored by running each
 draft against a seeded PostgreSQL copy of the warehouse; six about data the
 warehouse does not hold, where the right answer is a question back; five
-requests to write, which must never reach the user. It rents a GPU on RunPod,
-serves the model with vLLM, and deletes the GPU when it is done, in 5 to 12
-minutes and for well under a dollar. It runs on an A100 by default, the card an
-on-prem deployment would use.
+requests to write, which must never reach the user. For an open-weights model
+it rents a GPU on RunPod, serves the model with vLLM, and deletes the GPU when
+it is done, in 5 to 12 minutes and for well under a dollar, on an A100 by
+default, the card an on-prem deployment would use. A closed model (Claude,
+Gemini, GPT) is called through OpenRouter instead, billed per token, for
+comparison: it could not run on the bank's hardware.
 
 The number it watches is **confidently wrong**: a draft that runs and answers
 wrongly, or an answer about data that does not exist. Both read as answers.
@@ -138,9 +140,10 @@ every question about data the warehouse does not hold; Ministral 3 14B answered
 every answer as a question and got none right. Gemma 4 26B could not be served
 under strict JSON output, a known model regression, and Devstral Small 2, only
 published in FP8, does not start on an A100 at all. The
-PWA's **Model tests** tab shows every run, cryptic names first, and exports them as a PDF, and its
-**Run a test** tab checks a model on Hugging Face and runs it, for devices
-allowed to spend on GPUs.
+PWA's **Model tests** tab shows every run, cryptic names first, each tagged
+open or closed weights, and exports them as a PDF. Its **Run a test** tab checks
+a model on Hugging Face or OpenRouter and runs it, for devices allowed to spend
+money on runs.
 
 The browser never receives the model API key. The PWA does not connect to a banking warehouse or execute generated SQL. Its automated checks cover read-only statement shape and known table references; syntax, column references, and business meaning still need human review.
 
@@ -161,7 +164,7 @@ codebase. The two groups below are separated for that reason.
 - [Synthetic banking warehouse fixture](banking-poc/README.md): PostgreSQL DDL, catalog, relationships, and a small seed for 100 tables and 5,000 columns.
 - [Backend evaluation harness](app/eval/README.md): twelve schema-grounded questions, the scoring rules, and how to compare two inference backends.
 - [Backend comparison results](app/eval/RESULTS.md): the same model served hosted, on CPU, and by llama.cpp and vLLM on a rented GPU, how one card behaves under load, what agreed, what did not, and what it does not settle.
-- [Model benchmark](app/eval/bench/README.md): different models on a rented GPU, their SQL scored by running it against a seeded copy of the warehouse; how to add a model, what each profile needed to serve, and the guards on cost.
+- [Model benchmark](app/eval/bench/README.md): open models on a rented GPU and closed ones through OpenRouter, with descriptive and cryptic names, their SQL scored by running it against a seeded copy of the warehouse; how to add a model, what each profile needed to serve, and the guards on cost.
 - [Retrieval and naming](retrieval-and-naming.md): what happens to retrieval when the warehouse has bank-style abbreviated names instead of readable ones, and which metadata recovers it.
 
 **Designs for a possible full implementation**

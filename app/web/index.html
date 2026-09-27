@@ -203,20 +203,27 @@
 
           <section id="run-form-panel" class="panel tests-panel" hidden>
             <form id="run-form" novalidate>
-              <div class="panel-heading"><div><span class="step">01</span><h2>Model</h2></div><span class="subtle">Checked on Hugging Face before anything is rented</span></div>
-              <label for="run-model" class="field-label">Hugging Face id or profile name</label>
+              <div class="panel-heading"><div><span class="step">01</span><h2>Model</h2></div><span id="run-model-sub" class="subtle">Checked on Hugging Face before anything is rented</span></div>
+              <fieldset class="run-modes run-providers">
+                <legend class="sr-only">Where the model runs</legend>
+                <label class="run-mode"><input type="radio" name="run-provider" value="runpod" checked><span><strong>Open weights, on a rented GPU</strong><small>A Hugging Face model served with vLLM on RunPod: what an on-premise deployment would run.</small></span></label>
+                <label class="run-mode"><input type="radio" name="run-provider" value="openrouter"><span><strong>Closed model, through OpenRouter</strong><small>Claude, Gemini, GPT and others by API, billed per token. Nothing is rented.</small></span></label>
+              </fieldset>
+              <label for="run-model" id="run-model-label" class="field-label">Hugging Face id or profile name</label>
               <div class="run-row">
                 <input id="run-model" class="run-input" autocomplete="off" spellcheck="false" maxlength="120" placeholder="Qwen/Qwen3.8-27B-FP8, openai/gpt-oss-20b, gpt-oss-20b…">
                 <button id="run-check" class="button button-secondary" type="submit">Check model</button>
               </div>
               <div id="run-model-card" class="run-card" hidden></div>
 
+              <div id="run-gpu-section">
               <div class="panel-heading run-gap"><div><span class="step">02</span><h2>GPU</h2></div><span class="subtle">Secure Cloud · price per hour</span></div>
               <label for="run-gpu" class="field-label">Card</label>
               <select id="run-gpu" class="run-input" disabled><option value="">Check a model first</option></select>
               <p class="input-hint run-hint">The A100 is chosen by default: it is the card the bank runs. Cards without enough memory for the model, or without stock right now, cannot be chosen. An FP8 model on an A100 or other Ampere card runs through a slower fallback; it usually works, but Ministral 3 failed that way on an A40.</p>
+              </div>
 
-              <div class="panel-heading run-gap"><div><span class="step">03</span><h2>Test</h2></div></div>
+              <div class="panel-heading run-gap"><div><span id="run-test-step" class="step">03</span><h2>Test</h2></div></div>
               <fieldset class="run-modes">
                 <legend class="sr-only">Test size</legend>
                 <label class="run-mode"><input type="radio" name="run-mode" value="full" checked><span><strong>Full</strong><small>All 46 questions, three times each. The run that goes into the results table. Stops early, within a minute of answering, if most replies fail.</small></span></label>

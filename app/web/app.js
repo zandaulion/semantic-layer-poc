@@ -630,17 +630,32 @@ function renderGpus() {
 }
 
 const runMode = () => document.querySelector('input[name="run-mode"]:checked')?.value ?? 'full';
+const runProvider = () => document.querySelector('input[name="run-provider"]:checked')?.value ?? 'runpod';
+const viaOpenRouter = () => runProvider() === 'openrouter';
 const runNames = () => document.querySelector('input[name="run-names"]:checked')?.value ?? 'cryptic';
 const selectedGpu = () => runState.gpus.find((g) => g.id === $('run-gpu').value);
 
 function updateEstimate() {
   const gpu = selectedGpu();
   const runner = runState.runner;
-  const ready = Boolean(runState.model && gpu);
+  const routed = viaOpenRouter();
+  const ready = Boolean(runState.model && (routed || gpu));
   $('run-start').disabled = !ready;
   $('run-confirm').hidden = true;
   if (!ready || !runner) { $('run-estimate').textContent = ''; return; }
   const mode = runMode();
+  if (routed) {
+    // Billed per token: the list price times what a run sends, typically and
+    // if every answer thinks up to the app's token cap.
+    const { typical_usd: typical, worst_usd: worst } = runState.model.estimate[mode];
+    $('run-estimate').textContent = `Usually about $${typical.toFixed(2)}; at most $${worst.toFixed(2)}, and that is what the daily cap counts. `
+      + `Spent today: $${runner.spent_today.toFixed(2)} of a $${runner.daily_cap.toFixed(2)} daily cap.`;
+    if (runner.spent_today + worst > runner.daily_cap) {
+      $('run-estimate').textContent += ' This run would pass the cap, so it will be refused.';
+      $('run-start').disabled = true;
+    }
+    return;
+  }
   const typical = runner.typical_minutes[mode];
   const limit = runner.limit_minutes[mode];
   const cost = (minutes) => `$${((gpu.price * minutes) / 60).toFixed(2)}`;
@@ -655,6 +670,19 @@ function renderModelCard(result) {
   card.className = `run-card${result.ok ? '' : ' bad'}`;
   if (!result.ok) { card.textContent = result.reason; return; }
   card.append(el('strong', '', result.model));
+  if (result.provider === 'openrouter') {
+    card.append(document.createTextNode(` · ${result.name}`));
+    const facts = document.createElement('dl');
+    for (const [term, value] of [
+      ['Price', `$${result.price_in_per_m} per million tokens in, $${result.price_out_per_m} out`],
+      ['A full run', `usually about $${result.estimate.full.typical_usd.toFixed(2)}, at most $${result.estimate.full.worst_usd.toFixed(2)}`],
+      ['Context', `${Math.round(result.context / 1000)}k tokens`],
+      ['Reasoning', result.reasoning ? 'yes; the app asks for low effort' : 'no'],
+    ]) facts.append(el('dt', '', term), el('dd', '', value));
+    card.append(facts);
+    for (const warning of result.warnings) card.append(el('p', 'warn', warning));
+    return;
+  }
   if (result.profile) card.append(document.createTextNode(` · profile ${result.profile}`));
   const facts = document.createElement('dl');
   for (const [term, value] of [
@@ -677,11 +705,12 @@ async function checkModel(event) {
   $('run-check').disabled = true;
   $('run-check').textContent = 'Checking…';
   try {
-    const result = await api('/api/bench/validate', { method: 'POST', body: JSON.stringify({ model: name }) });
+    const result = await api('/api/bench/validate', { method: 'POST', body: JSON.stringify({ model: name, provider: runProvider() }) });
     renderModelCard(result);
     if (result.ok) {
       runState.model = result;
-      if (!runState.gpus.length) await loadGpus(); else renderGpus();
+      if (viaOpenRouter()) updateEstimate();
+      else if (!runState.gpus.length) await loadGpus(); else renderGpus();
     }
   } catch (error) {
     $('run-form-message').textContent = error.message;
@@ -693,8 +722,15 @@ async function checkModel(event) {
 
 function askToConfirm() {
   const gpu = selectedGpu();
-  if (!runState.model || !gpu) return;
   const mode = runMode();
+  if (runState.model && viaOpenRouter()) {
+    const { typical_usd: typical, worst_usd: worst } = runState.model.estimate[mode];
+    $('run-confirm-text').textContent = `This sends the ${mode === 'quick' ? 'fast' : 'full'} test to ${runState.model.model} through OpenRouter with ${runNames()} names, billed to the host's OpenRouter key: usually about $${typical.toFixed(2)}, at most $${worst.toFixed(2)}. The questions and the synthetic catalog go to the model's provider.`;
+    $('run-confirm').hidden = false;
+    $('run-start').disabled = true;
+    return;
+  }
+  if (!runState.model || !gpu) return;
   $('run-confirm-text').textContent = `This rents ${gpu.name} at $${gpu.price.toFixed(2)} an hour now, and runs the ${mode === 'quick' ? 'fast' : 'full'} test on ${runState.model.model} with ${runNames()} names. The GPU is deleted when the test ends, fails or is stopped.`;
   $('run-confirm').hidden = false;
   $('run-start').disabled = true;
@@ -704,7 +740,7 @@ async function startRun() {
   $('run-confirm-yes').disabled = true;
   $('run-form-message').textContent = 'Starting…';
   try {
-    const run = await api('/api/bench/runs', { method: 'POST', body: JSON.stringify({ model: runState.model.model, gpu: $('run-gpu').value, mode: runMode(), names: runNames() }) });
+    const run = await api('/api/bench/runs', { method: 'POST', body: JSON.stringify({ model: runState.model.model, gpu: viaOpenRouter() ? '' : $('run-gpu').value, mode: runMode(), names: runNames(), provider: runProvider() }) });
     $('run-form-message').textContent = '';
     showRunProgress(run);
   } catch (error) {
@@ -725,7 +761,7 @@ function showRunProgress(run) {
   const chip = $('run-chip');
   chip.className = `run-chip ${run.status}`;
   chip.textContent = { running: 'Running', done: 'Finished', failed: 'Failed', cancelled: 'Stopped' }[run.status] ?? run.status;
-  $('run-what').textContent = `${run.model} on ${run.gpu_name} ($${run.price.toFixed(2)}/h) · ${run.mode === 'quick' ? 'fast' : 'full'} test, ${run.names ?? 'descriptive'} names · ${minutesText(run.elapsed_s)} elapsed${run.requested_by ? ` · started by ${run.requested_by}` : ''}`;
+  $('run-what').textContent = `${run.model} ${run.provider === 'openrouter' ? 'through OpenRouter' : `on ${run.gpu_name} ($${run.price.toFixed(2)}/h)`} · ${run.mode === 'quick' ? 'fast' : 'full'} test, ${run.names ?? 'descriptive'} names · ${minutesText(run.elapsed_s)} elapsed${run.requested_by ? ` · started by ${run.requested_by}` : ''}`;
 
   const phases = $('run-phases');
   phases.replaceChildren();
@@ -747,7 +783,7 @@ function showRunProgress(run) {
   result.replaceChildren();
   if (run.status !== 'running') {
     if (run.error) result.append(el('p', 'metric-bad', run.error));
-    if (run.status === 'cancelled') result.append(el('p', '', 'Stopped. The GPU was deleted.'));
+    if (run.status === 'cancelled') result.append(el('p', '', run.provider === 'openrouter' ? 'Stopped. No more questions are sent.' : 'Stopped. The GPU was deleted.'));
     const s = run.result?.summary;
     if (s) {
       const facts = document.createElement('dl');
@@ -798,6 +834,23 @@ $('run-model').addEventListener('input', () => {
 });
 $('run-gpu').addEventListener('change', updateEstimate);
 for (const radio of document.querySelectorAll('input[name="run-mode"]')) radio.addEventListener('change', updateEstimate);
+// Where the model runs changes what a model name means and whether there is
+// a card to choose, so a model checked for one is not carried to the other.
+function applyProvider() {
+  const routed = viaOpenRouter();
+  const noKey = routed && runState.runner && !runState.runner.openrouter;
+  $('run-gpu-section').hidden = routed;
+  $('run-test-step').textContent = routed ? '02' : '03';
+  $('run-model-label').textContent = routed ? 'OpenRouter model id' : 'Hugging Face id or profile name';
+  $('run-model').placeholder = routed ? 'google/gemini-3.8-flash, anthropic/claude-opus-5.5…' : 'Qwen/Qwen3.8-27B-FP8, openai/gpt-oss-20b, gpt-oss-20b…';
+  $('run-model-sub').textContent = routed ? 'Checked against OpenRouter\'s model list before anything is sent' : 'Checked on Hugging Face before anything is rented';
+  $('run-form-message').textContent = noKey ? 'The host has no OpenRouter key yet: save one to ~/.config/openrouter-api-key (mode 600).' : '';
+  $('run-check').disabled = Boolean(noKey);
+  runState.model = null;
+  $('run-model-card').hidden = true;
+  renderGpus();
+}
+for (const radio of document.querySelectorAll('input[name="run-provider"]')) radio.addEventListener('change', applyProvider);
 $('run-start').addEventListener('click', askToConfirm);
 $('run-confirm-no').addEventListener('click', updateEstimate);
 $('run-confirm-yes').addEventListener('click', startRun);

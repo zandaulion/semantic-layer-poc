@@ -204,7 +204,9 @@ appears at once; without it, the files built into the image. Superseded runs
 The **Run a test** tab (`/#run`) does what the command line does. Enter a
 model, a Hugging Face id or a profile name, and check it; choose a card, the
 A100 unless none has stock; choose Full (the default) or Fast (`--quick`), and
-cryptic names (the default) or descriptive ones; confirm the price;
+cryptic names (the default) or descriptive ones; confirm the price. For a
+closed model, choose **Closed model, through OpenRouter** and enter its
+OpenRouter id: there is no card to choose, and the estimate is per token;
 and follow the run as it goes. The finished run stays on show for two hours,
 with the log it had when it finished.
 
@@ -251,6 +253,7 @@ Guards, all enforced by the daemon, whatever the page shows:
 | `--repeats N`, `--concurrency N` | Default 3 and 16 |
 | `--load` | Adds a load test at 1, 8 and 32 requests in flight (`--load-levels`), stopped early if a level's median passes 30 s. Adds a few minutes |
 | `--max-minutes N` | Hard limit on the whole run, default 20 |
+| `--openrouter ID` | A closed model through OpenRouter; see [Closed models through OpenRouter](#closed-models-through-openrouter) |
 | `--endpoint URL --served-name NAME --key-file F` | Benchmarks a server that already exists; rents nothing. `--provider NAME` labels it in the results |
 | `--hf ORG/NAME` | A model without a profile, with default vLLM settings; `--disk` and `--name` adjust it |
 | `--resume FILE` | Keeps the answers of a stopped run and asks only the rest. A stopped run prints the file to pass |
@@ -258,6 +261,41 @@ Guards, all enforced by the daemon, whatever the page shows:
 | `--drafts FILE` | Re-scores saved answers without calling a model. Add `--names cryptic` for answers drafted against cryptic names |
 | `--keep-db` | Leaves the benchmark's PostgreSQL running afterwards |
 | `--cleanup` | Deletes pods an interrupted run left behind |
+
+## Closed models through OpenRouter
+
+`--openrouter ID` benchmarks a model you cannot download, such as Claude,
+Gemini or GPT, through [OpenRouter](https://openrouter.ai). Nothing is rented,
+and the questions and scoring are the same:
+
+```bash
+node eval/bench/bench.mjs --openrouter google/gemini-3.8-flash --names cryptic
+node eval/bench/bench.mjs --openrouter anthropic/claude-opus-5.5 --dry-run   # price only
+```
+
+The key comes from `OPENROUTER_API_KEY` or `~/.config/openrouter-api-key`
+(mode 600). Give it a credit limit on OpenRouter: that is a ceiling nothing
+here can get past. Give the benchmark a key of its own too, because a run's
+cost is read from the key's spend before and after.
+
+Before anything is sent, the id is checked against OpenRouter's public model
+list. The model has to exist, have a fixed price, and support structured
+outputs, which the app's JSON schema needs. The check prints the list price
+and an estimate for a run: typical, and worst case, where every answer thinks
+up to the app's 1,600-token cap. Every request carries
+`provider.require_parameters`, so OpenRouter only routes it to providers that
+honour the schema. The four probes then show whether the app's request is
+accepted as sent.
+
+A full run sends 138 requests of about 4,300 prompt tokens. At list prices on
+2026-09-27, Gemini 3.8 Flash costs about $0.70 (at most $1.27) and Claude
+Opus 5.5 about $3.75 (at most $6.79). Opus's worst case is over the PWA's
+default $5 daily cap, so the Run tab refuses it until `BENCH_DAILY_CAP_USD` is
+raised. Results join the same tables, labelled "API: OpenRouter", with the
+cost per 1,000 questions taken from the tokens actually billed.
+
+The questions and the synthetic catalog go to the model's provider. With a
+real catalog, check that this is allowed first.
 
 ## A free API tier
 

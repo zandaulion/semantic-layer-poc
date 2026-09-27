@@ -94,8 +94,9 @@ Read by the daemon (`app/eval/bench/daemon.mjs`) and by `bench.mjs` on the host:
 | Variable | Default | Effect |
 | --- | --- | --- |
 | `RUNPOD_API_KEY` | `~/.config/runpod-api-key` | The RunPod API key. Prefer the file, mode 600: it is read, never printed |
+| `OPENROUTER_API_KEY` | `~/.config/openrouter-api-key` | The OpenRouter key for closed models (`bench.mjs --openrouter`). Prefer the file, mode 600, and a credit limit on the key |
 | `BENCH_DIR` | `~/.local/share/banking-bench` | Where the daemon reads requests and writes answers |
-| `BENCH_DAILY_CAP_USD` | `5` | A run whose worst case would take the day past this is refused. The day's spend is the higher of the daemon's ledger and RunPod's bill |
+| `BENCH_DAILY_CAP_USD` | `5` | A run whose worst case would take the day past this is refused. On GPUs the day's spend is the higher of the daemon's ledger and RunPod's bill; OpenRouter runs are added on top, counted at their worst case before they start |
 | `MODEL_RATE_LIMIT_ATTEMPTS` | `4` | How often a rate-limited question may wait for room; `bench.mjs --rate-limit-attempts` sets it for a run |
 
 ## Commands

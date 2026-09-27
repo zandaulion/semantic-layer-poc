@@ -11,6 +11,7 @@
  *   node eval/bench/bench.mjs --model gpt-oss-20b --names cryptic   # the same data under F_ACCT_BAL_D-style names
  *   node eval/bench/bench.mjs --model gpt-oss-20b --dry-run
  *   node eval/bench/bench.mjs --endpoint URL --served-name NAME --key-file F   # a server you already run
+ *   node eval/bench/bench.mjs --openrouter google/gemini-3.8-flash    # a closed model, through OpenRouter
  *   node eval/bench/bench.mjs --report                     # the table of all runs
  *   node eval/bench/bench.mjs --cleanup                    # delete pods a failed run left behind
  *
@@ -29,6 +30,7 @@ import { promisify } from 'node:util';
 import { crypticCases, crypticCatalog, crypticRenameSql } from '../cryptic-names.mjs';
 import { CRYPTIC_DATABASE, ensureDatabase, stopDatabase } from './pg.mjs';
 import { scoreDrafts, summarise } from './score.mjs';
+import { keyUsage, OPENROUTER_URL, openrouterKey, openrouterKeyFile, ROUTING, validateOpenRouterModel } from './openrouter.mjs';
 import { apiKey, createPod, deletePod, gpuPrice, ledger, podLog, waitForServer } from './runpod.mjs';
 
 const run = promisify(execFile);
@@ -311,7 +313,9 @@ function table(results) {
       `${pct(s.t2.asked_pct)}`, `${s.t3.unsafe}/${s.t3.answers}`, pct(s.t0.pass_pct),
       s.latency_ms.p50 ? `${(s.latency_ms.p50 / 1000).toFixed(1)} s` : '—',
       peak ?? '—',
-      peak && r.price_per_hour ? `$${(r.price_per_hour / (peak * 60) * 1000).toFixed(3)}` : '—',
+      peak && r.price_per_hour ? `$${(r.price_per_hour / (peak * 60) * 1000).toFixed(3)}`
+        // An API bills per token: the run's cost spread over its answers.
+        : !r.price_per_hour && r.cost_usd ? `$${(r.cost_usd / s.answers * 1000).toFixed(3)}` : '—',
       `${Math.round(r.timings.total_s / 60 * 10) / 10} min`,
       r.cost_usd !== null && r.cost_usd !== undefined ? `$${r.cost_usd.toFixed(2)}` : '—',
     ];
@@ -343,9 +347,23 @@ async function main() {
     return;
   }
 
-  const external = flag('--endpoint');
+  // --openrouter ID: an existing server like any other, whose model is
+  // checked against OpenRouter's list first, and whose cost is read from the
+  // key's own spend rather than from a GPU's hourly price.
+  const openrouter = flag('--openrouter');
+  let routed = null;
+  if (openrouter) {
+    routed = await validateOpenRouterModel(openrouter);
+    if (!routed.ok) throw new Error(routed.reason);
+    if (!has('--dry-run') && !(await openrouterKey())) throw new Error(`No OpenRouter key: set OPENROUTER_API_KEY or write it to ${openrouterKeyFile} (mode 600).`);
+  }
+  const external = openrouter ? OPENROUTER_URL : flag('--endpoint');
   const profile = external
-    ? { name: flag('--served-name'), hf: null, about: 'An existing server.', cards: [], extra_body: JSON.parse(flag('--extra-body', '{}')) }
+    ? {
+      name: openrouter ?? flag('--served-name'), hf: null, cards: [],
+      about: routed ? `${routed.name}, through OpenRouter at $${routed.price_in_per_m} in and $${routed.price_out_per_m} out per million tokens.` : 'An existing server.',
+      extra_body: { ...(openrouter ? ROUTING : {}), ...JSON.parse(flag('--extra-body', '{}')) },
+    }
     : await loadProfile();
   const quick = has('--quick');
   const names = flag('--names', 'descriptive');
@@ -362,6 +380,10 @@ async function main() {
   if (!offline && !(await apiKey())) throw new Error('No RunPod API key: set RUNPOD_API_KEY or write it to ~/.config/runpod-api-key (mode 600).');
   let price = offline ? null : await gpuPrice(profile.cards[0], cloud);
   say(`${profile.name}${profile.hf ? ` (${profile.hf})` : ''}${cryptic ? ', cryptic names,' : ''} on ${offline ? (external ?? 'saved answers') : `${profile.cards[0]}, ${cloud}, $${price}/h`}`);
+  if (has('--dry-run') && routed) {
+    say(`would ask ${repeats} x the benchmark at ${concurrency} at once through OpenRouter: usually about $${routed.estimate[quick ? 'quick' : 'full'].typical_usd}, at most $${routed.estimate[quick ? 'quick' : 'full'].worst_usd}. Nothing sent.`);
+    return;
+  }
   if (has('--dry-run')) {
     say(`would ask ${repeats} x the benchmark at ${concurrency} at once${has('--load') ? `, then load levels ${levels}` : ''}; usually 5 to 15 minutes, about $${price ? (price * 5 / 60).toFixed(2) : '?'} to $${price ? (price * 15 / 60).toFixed(2) : '?'}. Nothing rented.`);
     return;
@@ -380,7 +402,11 @@ async function main() {
   const catalog = JSON.parse(await readFile(path.join(projectDir, 'banking-poc', 'catalog.json'), 'utf8'));
   if (cryptic) await ensureDatabase(seedFile, { database: CRYPTIC_DATABASE, after: crypticRenameSql(catalog) });
 
-  const serverKey = external && !flag('--drafts') ? (await readFile(flag('--key-file'), 'utf8')).trim() : randomBytes(24).toString('hex');
+  const serverKey = openrouter ? await openrouterKey()
+    : external && !flag('--drafts') ? (await readFile(flag('--key-file'), 'utf8')).trim() : randomBytes(24).toString('hex');
+  // The key's spend before the first request, probes included.
+  const usageBefore = openrouter ? await keyUsage(serverKey) : null;
+  if (routed) say(`${routed.name}: $${routed.price_in_per_m} in, $${routed.price_out_per_m} out per million tokens; a full run usually costs about $${routed.estimate.full.typical_usd}, at most $${routed.estimate.full.worst_usd}${usageBefore.remaining !== null ? `; the key has $${Number(usageBefore.remaining).toFixed(2)} left` : ''}`);
   let podId = null;
   let podStarted = null;
   let card = null;
@@ -568,6 +594,22 @@ async function main() {
   const scored = await scoreDrafts(drafts, cases, cryptic ? { database: CRYPTIC_DATABASE } : {});
   const summary = summarise(scored);
   timings.score_s = Math.round((Date.now() - started) / 1000);
+
+  // What the run cost on OpenRouter: the key's spend now, less before. Its
+  // count settles a few seconds after the last answer, so wait for it to
+  // stop moving. Without a reading, the list price times the tokens used.
+  async function openrouterCost() {
+    let last = null;
+    for (let i = 0; i < 6; i++) {
+      const now = await keyUsage(serverKey).catch(() => null);
+      if (now && last && now.usage === last.usage && now.usage > usageBefore.usage) break;
+      last = now ?? last;
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+    if (last && last.usage > usageBefore.usage) return Math.round((last.usage - usageBefore.usage) * 1000) / 1000;
+    const tokens = scored.filter((a) => a.usage);
+    return Math.round(tokens.reduce((n, a) => n + (a.usage.prompt_tokens ?? 0) * routed.price_in_per_m + (a.usage.completion_tokens ?? 0) * routed.price_out_per_m, 0) / 1e6 * 1000) / 1000;
+  }
   timings.total_s = Math.round((Date.now() - t0) / 1000);
 
   const recordedAt = new Date().toISOString();
@@ -576,10 +618,10 @@ async function main() {
     model: { name: profile.name, hf: profile.hf, about: profile.about, vllm_args: profile.vllm_args ?? null, extra_body: profile.extra_body ?? {} },
     // How the model was served: the vLLM image (whose tag is the vLLM version)
     // for a rented pod, or the API's host for an existing endpoint.
-    server: external ? `API: ${flag('--provider', new URL(external).host)}` : `vLLM ${(profile.image ?? IMAGE).split(':').pop()}`,
+    server: external ? `API: ${openrouter ? 'OpenRouter' : flag('--provider', new URL(external).host)}` : `vLLM ${(profile.image ?? IMAGE).split(':').pop()}`,
     server_image: external ? null : profile.image ?? IMAGE,
     card, cloud: external ? null : cloud, price_per_hour: price,
-    cost_usd: price && timings.pod_s ? Math.round(price * timings.pod_s / 36) / 100 : null,
+    cost_usd: openrouter ? await openrouterCost() : price && timings.pod_s ? Math.round(price * timings.pod_s / 36) / 100 : null,
     // Which names the model was shown: the catalog as written, or the same
     // tables and columns abbreviated (cryptic-names.mjs), descriptions kept.
     names,
@@ -598,7 +640,7 @@ async function main() {
   result.quick = quick;
   await mkdir(target, { recursive: true });
   const slug = (text) => text.replace(/^NVIDIA (GeForce )?/, '').replace(/[^A-Za-z0-9.]+/g, '-');
-  const file = path.join(target, `${recordedAt.slice(0, 16).replace(/[:T-]/g, '')}-${slug(profile.name)}-${slug(card ?? 'external')}${cryptic ? '-cryptic' : ''}.json`);
+  const file = path.join(target, `${recordedAt.slice(0, 16).replace(/[:T-]/g, '')}-${slug(profile.name)}-${slug(card ?? (openrouter ? 'openrouter' : 'external'))}${cryptic ? '-cryptic' : ''}.json`);
   await writeFile(file, `${JSON.stringify(result, null, 2)}\n`);
   await rm(outDir, { recursive: true, force: true });
   if (!has('--keep-db')) await stopDatabase();

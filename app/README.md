@@ -36,7 +36,7 @@ the model on Hugging Face, offers the cards with
 room for it (the A100 by default), and starts a fast or full run with cryptic
 (the default) or descriptive names, with live
 progress and the result at the end. Only devices listed in
-`BENCH_RUNNER_DEVICES` may use it, because runs rent GPUs; others see their own
+`BENCH_RUNNER_DEVICES` may use it, because runs spend money; others see their own
 device id and a note saying so.
 
 The app holds no RunPod key and runs no containers. A daemon on the host does:

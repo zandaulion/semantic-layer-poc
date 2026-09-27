@@ -87,7 +87,7 @@ Read by the application, for the Model tests and Run a test tabs:
 | Variable | Default | Effect |
 | --- | --- | --- |
 | `BENCH_DIR` | — | The directory shared with the benchmark daemon on the host. The quadlet mounts it at `/run/bench` and sets this. Empty turns the Run tab off; Model tests then reads the results built into the image |
-| `BENCH_RUNNER_DEVICES` | — | Device ids, comma separated, that may start runs. Runs rent GPUs, so the default is nobody; the Run tab shows a device its own id. Belongs in the server's private environment file |
+| `BENCH_RUNNER_DEVICES` | — | Device ids, comma separated, that may start runs. Runs spend money, on GPUs or API tokens, so the default is nobody; the Run tab shows a device its own id. Belongs in the server's private environment file |
 
 Read by the daemon (`app/eval/bench/daemon.mjs`) and by `bench.mjs` on the host:
 

@@ -217,9 +217,12 @@ query's. It separates answers that are right, that ask back, that fail
 visibly, and that are **confidently wrong** — a draft that runs and answers
 wrongly, or answers about data the warehouse does not hold. It rents the GPU,
 serves the model with vLLM and deletes the GPU itself, on an A100 by default,
-and the PWA can start runs and show the results. On 2026-09-26 it separated
-the models the twelve original questions could not: Qwen3.8-27B answered 96%
-correctly with nothing confidently wrong, gpt-oss-20b 86% with five.
+or calls a closed model through OpenRouter; and the PWA can start runs and show
+the results. On 2026-09-26 it separated the models the twelve original
+questions could not: Qwen3.8-27B answered 96% correctly with nothing
+confidently wrong, gpt-oss-20b 86% with five. The same questions under cryptic,
+bank-style names (`F_ACCT_BAL_D`) cost every open model 22 to 39 points; the
+best of all, Gemini 3.8 Flash, reached 72.5%.
 
 **Verdict.** Reuse — and this is arguably the most portable thing in the
 repository. The cases are fixture-bound, but the method is not: ground truth
@@ -256,9 +259,10 @@ retrieval and indexing concern. The metadata model reserves
 **What it does.** Single-page app with a service worker, offline shell,
 versioned-asset cache busting, per-device history, and the review surface that
 shows SQL, interpretation, assumptions, checks and sources. Two further tabs
-serve the model benchmark: **Model tests** shows the recorded runs and exports
-them as a PDF report, and **Run a test** checks a model on Hugging Face, picks a
-card and starts a run, for devices allowed to spend on GPUs.
+serve the model benchmark: **Model tests** shows the recorded runs, tagged open
+or closed weights, and exports them as a PDF report, and **Run a test** checks
+a model on Hugging Face or OpenRouter, picks a card where there is one, and
+starts a run, for devices allowed to spend money on runs.
 
 **Verdict.** Port the review surface, discard the rest. The screen layout is the
 product thinking worth keeping — showing assumptions and retrieved sources beside
@@ -280,7 +284,7 @@ because the app answers its own health check without it and a broken pair would
 otherwise look deployed.
 
 The benchmark adds a user service on the host, `banking-bench`, which holds the
-RunPod key and runs benchmarks for the Run a test tab. The application keeps no
+RunPod and OpenRouter keys and runs benchmarks for the Run a test tab. The application keeps no
 key and runs no containers; it exchanges request and response files with the
 daemon through a directory the quadlet mounts. Not a socket, because SELinux
 refuses a container a connection to a host process's socket, and not a port,

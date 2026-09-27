@@ -292,7 +292,9 @@ while dropping the graph expansion would look like progress and be a regression.
 
 `make-cryptic.mjs` builds a variant catalog whose table and column names are
 abbreviated the way a real warehouse abbreviates them, translating the
-expectations through the same map:
+expectations through the same map. The rule lives in `cryptic-names.mjs`,
+which the model benchmark also uses for its `--names cryptic` runs, where the
+drafted SQL is executed against a renamed copy of the data:
 
 ```bash
 node eval/make-cryptic.mjs --out /tmp/cryptic

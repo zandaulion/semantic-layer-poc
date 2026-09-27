@@ -16,7 +16,11 @@ Each successful generation saves its question, subject area, and complete answer
 
 Two tabs beside **Draft SQL** serve the [model benchmark](eval/bench/README.md).
 
-**Model tests** (`/#tests`) shows every recorded run, most correct first: accuracy
+**Model tests** (`/#tests`) shows every recorded run in two tables, most correct
+first in each. Cryptic names come first (`F_ACCT_BAL_D`, abbreviated as an
+older warehouse names things, descriptions kept), then descriptive names
+(`fact_account_balance_daily`). The questions, data and answers are the same
+in both. Each table shows accuracy
 on questions with one right answer, confidently wrong drafts, questions about
 missing data met with a question back, unsafe writes, speed and GPU cost, with
 the card and vLLM version under each model. A model that could not be served
@@ -25,7 +29,8 @@ have a table of their own, and a grid shows each question's outcome per run. **E
 as an A4 landscape report. Any registered device can see it.
 
 **Run a test** (`/#run`) checks a model on Hugging Face, offers the cards with
-room for it (the A100 by default), and starts a fast or full run, with live
+room for it (the A100 by default), and starts a fast or full run with cryptic
+(the default) or descriptive names, with live
 progress and the result at the end. Only devices listed in
 `BENCH_RUNNER_DEVICES` may use it, because runs rent GPUs; others see their own
 device id and a note saying so.

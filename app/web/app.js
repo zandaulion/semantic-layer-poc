@@ -406,25 +406,31 @@ async function loadTests() {
   // Best first: by the share of hard questions answered correctly. A run that
   // did not measure the model (a note says why) goes last whatever its score;
   // ties go to the newer run.
-  const runs = [...data.runs].sort((a, b) => Boolean(a.note || a.failed_start) - Boolean(b.note || b.failed_start)
+  const ranked = (list) => [...list].sort((a, b) => Boolean(a.note || a.failed_start) - Boolean(b.note || b.failed_start)
     || (b.summary?.t1.accuracy_pct ?? -1) - (a.summary?.t1.accuracy_pct ?? -1)
     || b.recorded_at.localeCompare(a.recorded_at));
-  const panels = document.querySelectorAll('.tests-panel');
-  if (!runs.length) { $('tests-status').textContent = 'No recorded runs yet. Run eval/bench/bench.mjs to add one.'; panels.forEach((p) => { p.hidden = true; }); return; }
+  const runs = ranked(data.runs);
+  const cryptic = ranked(data.cryptic ?? []);
+  const panels = document.querySelectorAll('#tests-view .tests-panel');
+  if (!runs.length && !cryptic.length) { $('tests-status').textContent = 'No recorded runs yet. Run eval/bench/bench.mjs to add one.'; panels.forEach((p) => { p.hidden = true; }); return; }
   $('tests-status').hidden = true;
   panels.forEach((p) => { p.hidden = false; });
-  renderTestsTable(runs);
-  renderTestsMatrix(runs.filter((run) => run.summary), data.questions);
+  // Cryptic names first: the harder case, and the likelier one in a real bank.
+  renderTestsTable(cryptic, 'tests-cryptic-table', 'tests-cryptic-notes');
+  $('tests-cryptic-empty').hidden = cryptic.length > 0;
+  renderTestsTable(runs, 'tests-table', 'tests-notes');
+  renderTestsMatrix([...cryptic, ...runs].filter((run) => run.summary), data.questions);
   renderQuickChecks(data.quick ?? []);
-  const newest = runs.map((r) => r.recorded_at).sort().at(-1);
-  $('tests-print-meta').textContent = `Bank DWH Studio · model benchmark · ${runs.length} recorded runs, the latest on ${newest.slice(0, 10)} · exported ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC. `
+  const newest = [...cryptic, ...runs].map((r) => r.recorded_at).sort().at(-1);
+  $('tests-print-meta').textContent = `Bank DWH Studio · model benchmark · ${cryptic.length + runs.length} recorded runs, the latest on ${newest.slice(0, 10)} · exported ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC. `
     + 'Synthetic banking warehouse: hard questions are scored by running each drafted query against a seeded copy and comparing its result with a reference answer.';
   $('tests-export').hidden = false;
 }
 
-function renderTestsTable(runs) {
-  const table = $('tests-table');
+function renderTestsTable(runs, tableId, notesId) {
+  const table = $(tableId);
   table.replaceChildren();
+  if (!runs.length) { $(notesId).replaceChildren(); return; }
   const head = table.createTHead().insertRow();
   for (const [label, num] of [['Model', false], ['Correct', true], ['Confidently wrong', true], ['Asked', true], ['Unsafe writes', true], ['Answer time', true], ['Per minute', true], ['Per 1,000', true], ['Run', true]]) {
     const th = el('th', num ? 'num' : '', label);
@@ -467,7 +473,7 @@ function renderTestsTable(runs) {
       cell.append(el('span', '', value), el('span', 'card', detail));
     }
   }
-  $('tests-notes').replaceChildren(...notes.map((run) => el('p', '', run.failed_start
+  $(notesId).replaceChildren(...notes.map((run) => el('p', '', run.failed_start
     ? `DID NOT RUN — ${run.model} on ${shortCard(run.card)}: ${run.note ?? run.failed_start.reason}`
     : `NOT VALID — ${run.model}: ${run.note}`)));
 }
@@ -484,7 +490,7 @@ function renderQuickChecks(quick) {
     const s = run.summary;
     const row = body.insertRow();
     const name = row.insertCell();
-    name.append(el('span', 'model', run.model), el('span', 'card', `${run.card ? shortCard(run.card) : 'no GPU rented'} · ${run.server ?? ''} · ${run.recorded_at.slice(0, 16).replace('T', ' ')}`));
+    name.append(el('span', 'model', run.model), el('span', 'card', `${run.names === 'cryptic' ? 'cryptic names · ' : ''}${run.card ? shortCard(run.card) : 'no GPU rented'} · ${run.server ?? ''} · ${run.recorded_at.slice(0, 16).replace('T', ' ')}`));
     for (const [value, className] of [
       [`${s.t1.correct} of ${s.t1.answers}`, tone(s.t1.accuracy_pct, 90, 60)],
       [String(s.confidently_wrong.count), s.confidently_wrong.count ? 'metric-bad' : 'metric-good'],
@@ -507,7 +513,7 @@ function renderTestsMatrix(runs, questions) {
   head.append(el('th', '', 'Question'));
   for (const run of runs) {
     const th = el('th', '', run.model);
-    th.append(el('span', 'card', run.card ? shortCard(run.card) : (run.server ?? '').replace(/^API: /, '')));
+    th.append(el('span', 'card', `${run.names === 'cryptic' ? 'cryptic · ' : ''}${run.card ? shortCard(run.card) : (run.server ?? '').replace(/^API: /, '')}`));
     th.scope = 'col';
     head.append(th);
   }
@@ -623,7 +629,8 @@ function renderGpus() {
   updateEstimate();
 }
 
-const runMode = () => document.querySelector('input[name="run-mode"]:checked')?.value ?? 'quick';
+const runMode = () => document.querySelector('input[name="run-mode"]:checked')?.value ?? 'full';
+const runNames = () => document.querySelector('input[name="run-names"]:checked')?.value ?? 'cryptic';
 const selectedGpu = () => runState.gpus.find((g) => g.id === $('run-gpu').value);
 
 function updateEstimate() {
@@ -688,7 +695,7 @@ function askToConfirm() {
   const gpu = selectedGpu();
   if (!runState.model || !gpu) return;
   const mode = runMode();
-  $('run-confirm-text').textContent = `This rents ${gpu.name} at $${gpu.price.toFixed(2)} an hour now, and runs the ${mode === 'quick' ? 'fast' : 'full'} test on ${runState.model.model}. The GPU is deleted when the test ends, fails or is stopped.`;
+  $('run-confirm-text').textContent = `This rents ${gpu.name} at $${gpu.price.toFixed(2)} an hour now, and runs the ${mode === 'quick' ? 'fast' : 'full'} test on ${runState.model.model} with ${runNames()} names. The GPU is deleted when the test ends, fails or is stopped.`;
   $('run-confirm').hidden = false;
   $('run-start').disabled = true;
 }
@@ -697,7 +704,7 @@ async function startRun() {
   $('run-confirm-yes').disabled = true;
   $('run-form-message').textContent = 'Starting…';
   try {
-    const run = await api('/api/bench/runs', { method: 'POST', body: JSON.stringify({ model: runState.model.model, gpu: $('run-gpu').value, mode: runMode() }) });
+    const run = await api('/api/bench/runs', { method: 'POST', body: JSON.stringify({ model: runState.model.model, gpu: $('run-gpu').value, mode: runMode(), names: runNames() }) });
     $('run-form-message').textContent = '';
     showRunProgress(run);
   } catch (error) {
@@ -718,7 +725,7 @@ function showRunProgress(run) {
   const chip = $('run-chip');
   chip.className = `run-chip ${run.status}`;
   chip.textContent = { running: 'Running', done: 'Finished', failed: 'Failed', cancelled: 'Stopped' }[run.status] ?? run.status;
-  $('run-what').textContent = `${run.model} on ${run.gpu_name} ($${run.price.toFixed(2)}/h) · ${run.mode === 'quick' ? 'fast' : 'full'} test · ${minutesText(run.elapsed_s)} elapsed${run.requested_by ? ` · started by ${run.requested_by}` : ''}`;
+  $('run-what').textContent = `${run.model} on ${run.gpu_name} ($${run.price.toFixed(2)}/h) · ${run.mode === 'quick' ? 'fast' : 'full'} test, ${run.names ?? 'descriptive'} names · ${minutesText(run.elapsed_s)} elapsed${run.requested_by ? ` · started by ${run.requested_by}` : ''}`;
 
   const phases = $('run-phases');
   phases.replaceChildren();

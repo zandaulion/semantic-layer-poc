@@ -70,7 +70,12 @@ export function matches(reference, draft, { ordered = false, tolerance = 0.01 } 
   return false;
 }
 
-export async function scoreDrafts(drafts, cases) {
+/**
+ * `database` is where the drafts run: the cryptic copy when the model was
+ * shown cryptic names. References always run against the readable copy; the
+ * data is the same, and the comparison ignores column names.
+ */
+export async function scoreDrafts(drafts, cases, { database } = {}) {
   const byId = Object.fromEntries(cases.map((c) => [c.id, c]));
   const references = {};
   for (const c of cases.filter((c) => c.reference)) {
@@ -89,7 +94,7 @@ export async function scoreDrafts(drafts, cases) {
     const drafted = d.status === 'draft' || d.status === 'needs_revision';
     if (d.tier === 'T2') { scored.push({ ...base, outcome: drafted && d.sql?.trim() ? 'drafted' : 'asked' }); continue; }
     if (!drafted || !d.sql?.trim()) { scored.push({ ...base, outcome: 'asked' }); continue; }
-    const result = await query(d.sql);
+    const result = await query(d.sql, { database });
     if (!result.ok) { scored.push({ ...base, outcome: 'sql_error', error: result.error }); continue; }
     const correct = matches(references[d.id], result, { ordered: c.ordered, tolerance: c.tolerance ?? 0.01 });
     scored.push({ ...base, outcome: correct ? 'correct' : 'wrong_result', ...(correct ? {} : { got: result.rows.slice(0, 5) }) });

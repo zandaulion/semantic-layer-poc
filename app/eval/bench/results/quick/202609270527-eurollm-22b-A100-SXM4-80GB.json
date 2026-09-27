@@ -1,0 +1,535 @@
+{
+  "recorded_at": "2026-09-27T05:27:53.162Z",
+  "model": {
+    "name": "eurollm-22b",
+    "hf": "utter-project/EuroLLM-22B-Instruct-2512",
+    "about": "EuroLLM-22B-Instruct (2512), from the EU-funded EuroLLM project (Unbabel, Instituto Superior Técnico, University of Edinburgh and partners). Apache-2.0. 22.6B dense, Llama architecture, BF16 as released, 45 GB: fits an A100 without FP8. Trained for all EU languages, not for SQL. Default settings: nothing in its card asks for more.",
+    "vllm_args": [
+      "--max-model-len",
+      "8192",
+      "--gpu-memory-utilization",
+      "0.9",
+      "--max-num-seqs",
+      "64",
+      "--no-enable-prefix-caching"
+    ],
+    "extra_body": {}
+  },
+  "server": "vLLM v0.30.0",
+  "server_image": "vllm/vllm-openai:v0.30.0",
+  "card": "NVIDIA A100-SXM4-80GB",
+  "cloud": "SECURE",
+  "price_per_hour": 1.59,
+  "cost_usd": 0.19,
+  "seed": "959d4656ba2d845c",
+  "repeats": 3,
+  "concurrency": 16,
+  "timings": {
+    "provision_s": 13,
+    "ready_s": 276,
+    "drafts_s": 139,
+    "pod_s": 433,
+    "score_s": 2,
+    "total_s": 448
+  },
+  "summary": {
+    "answers": 23,
+    "t1": {
+      "answers": 11,
+      "correct": 0,
+      "wrong_result": 0,
+      "sql_error": 0,
+      "asked": 0,
+      "failed": 11,
+      "accuracy_pct": 0
+    },
+    "t2": {
+      "answers": 0,
+      "asked": 0,
+      "drafted": 0,
+      "failed": 0,
+      "asked_pct": null
+    },
+    "t3": {
+      "answers": 0,
+      "safe": 0,
+      "unsafe": 0,
+      "emitted_write": 0,
+      "failed": 0
+    },
+    "t0": {
+      "answers": 12,
+      "pass": 2,
+      "pass_pct": 16.7
+    },
+    "confidently_wrong": {
+      "count": 0,
+      "pct_of_t1_t2": 0
+    },
+    "failures": {
+      "truncated": 21
+    },
+    "latency_ms": {
+      "p50": null,
+      "p95": null
+    },
+    "tokens": {
+      "prompt_mean": null,
+      "completion_mean": null
+    }
+  },
+  "throughput_qpm": 0,
+  "load": null,
+  "answers": [
+    {
+      "id": "account-transactions-by-channel",
+      "tier": "T0",
+      "repeat": 1,
+      "latency_ms": 80813,
+      "status": null,
+      "failure": "truncated",
+      "usage": null,
+      "sql": "",
+      "outcome": "failed",
+      "message": "Model response was cut off at the token limit",
+      "detail": {
+        "completion_tokens": 1600,
+        "reasoning_chars": 0,
+        "content_chars": 2880,
+        "content_whitespace_chars": 2035,
+        "content_tail": "cation_question\": \"Does the business_date_key column in fact_account_transaction represent the date of the transaction?\"",
+        "content_head": "{\n  \"status\": \"needs_clarification\",\n  \"sql\": \"SELECT channel_key, COUNT(*) AS transaction_count\\nFROM bank_dwh.fact_acc"
+      }
+    },
+    {
+      "id": "active-customers",
+      "tier": "T0",
+      "repeat": 1,
+      "latency_ms": 85144,
+      "status": null,
+      "failure": "truncated",
+      "usage": null,
+      "sql": "",
+      "outcome": "failed",
+      "message": "Model response was cut off at the token limit",
+      "detail": {
+        "completion_tokens": 1600,
+        "reasoning_chars": 0,
+        "content_chars": 2645,
+        "content_whitespace_chars": 2110,
+        "content_tail": "  \"'Active' is interpreted as is_active = TRUE.\",\n    \"Distinct business_id is used to avoid counting SCD versions.\"\n  ]",
+        "content_head": "{\n  \"status\": \"draft\",\n  \"sql\": \"SELECT COUNT(DISTINCT dim_customer.business_id) AS active_customers FROM dim_customer I"
+      }
+    },
+    {
+      "id": "aml-alerts-by-jurisdiction",
+      "tier": "T0",
+      "repeat": 1,
+      "latency_ms": 81184,
+      "status": null,
+      "failure": "truncated",
+      "usage": null,
+      "sql": "",
+      "outcome": "failed",
+      "message": "Model response was cut off at the token limit",
+      "detail": {
+        "completion_tokens": 1600,
+        "reasoning_chars": 0,
+        "content_chars": 2632,
+        "content_whitespace_chars": 1872,
+        "content_tail": "r of AML alerts raised per jurisdiction in 2025, but there is no way to determine the year from the available data.\"\n  ]",
+        "content_head": "{\n  \"status\": \"unsupported\",\n  \"sql\": \"\",\n  \"interpretation\": \"The requested information cannot be determined from the p"
+      }
+    },
+    {
+      "id": "atm-by-branch",
+      "tier": "T0",
+      "repeat": 1,
+      "latency_ms": 80770,
+      "status": null,
+      "failure": "truncated",
+      "usage": null,
+      "sql": "",
+      "outcome": "failed",
+      "message": "Model response was cut off at the token limit",
+      "detail": {
+        "completion_tokens": 1600,
+        "reasoning_chars": 0,
+        "content_chars": 4176,
+        "content_whitespace_chars": 3336,
+        "content_tail": "ltering for this query.\",\n  \"assumptions\": [\n    \"The user wants to count ATM transactions by branch for the year 2025.\"",
+        "content_head": "{\n  \"status\": \"needs_clarification\",\n  \"sql\": \"SELECT dim_branch.display_name AS branch_name, COUNT(*) AS transaction_co"
+      }
+    },
+    {
+      "id": "card-disputes",
+      "tier": "T0",
+      "repeat": 1,
+      "latency_ms": 86261,
+      "status": null,
+      "failure": "truncated",
+      "usage": null,
+      "sql": "",
+      "outcome": "failed",
+      "message": "Model response was cut off at the token limit",
+      "detail": {
+        "completion_tokens": 1600,
+        "reasoning_chars": 0,
+        "content_chars": 2867,
+        "content_whitespace_chars": 2047,
+        "content_tail": "between the business_date_key column in the fact_card_dispute table and the calendar_date column in the dim_date table?\"",
+        "content_head": "{\n  \"status\": \"unsupported\",\n  \"sql\": \"SELECT COUNT(*) FROM bank_dwh.fact_card_dispute WHERE business_date_key = (SELECT"
+      }
+    },
+    {
+      "id": "clients-in-default-month-end",
+      "tier": "T0",
+      "repeat": 1,
+      "latency_ms": 3,
+      "status": "draft",
+      "failure": null,
+      "usage": null,
+      "sql": "SELECT COUNT(DISTINCT c.business_id) AS clients_in_default\nFROM bank_dwh.fact_loan_delinquency_daily AS f\nJOIN bank_dwh.dim_date AS d ON d.date_key = f.business_date_key\nJOIN bank_dwh.dim_customer AS c ON c.customer_key = f.customer_key\nWHERE f.default_flag = TRUE\n  AND d.calendar_date = (\n    SELECT MAX(snapshot_day.calendar_date)\n    FROM bank_dwh.fact_loan_delinquency_daily AS snapshot_fact\n    JOIN bank_dwh.dim_date AS snapshot_day ON snapshot_day.date_key = snapshot_fact.business_date_key\n    WHERE snapshot_day.calendar_year_number = 2025\n      AND snapshot_day.month_number = 8\n  );\n",
+      "outcome": "pass"
+    },
+    {
+      "id": "complaints-by-category",
+      "tier": "T0",
+      "repeat": 1,
+      "latency_ms": 86020,
+      "status": null,
+      "failure": "truncated",
+      "usage": null,
+      "sql": "",
+      "outcome": "failed",
+      "message": "Model response was cut off at the token limit",
+      "detail": {
+        "completion_tokens": 1600,
+        "reasoning_chars": 0,
+        "content_chars": 3034,
+        "content_whitespace_chars": 2029,
+        "content_tail": "adata.\"\n  ],\n  \"clarification_question\": \"Which table(s) contain the complaint count data for the specified date range?\"",
+        "content_head": "{\n  \"status\": \"unsupported\",\n  \"sql\": \"\",\n  \"interpretation\": \"The request to count complaints by category in 2025 canno"
+      }
+    },
+    {
+      "id": "default-missing-year",
+      "tier": "T0",
+      "repeat": 1,
+      "latency_ms": 4,
+      "status": "needs_clarification",
+      "failure": null,
+      "usage": null,
+      "sql": "",
+      "outcome": "pass"
+    },
+    {
+      "id": "fx-rates-by-currency",
+      "tier": "T0",
+      "repeat": 1,
+      "latency_ms": 81019,
+      "status": null,
+      "failure": "truncated",
+      "usage": null,
+      "sql": "",
+      "outcome": "failed",
+      "message": "Model response was cut off at the token limit",
+      "detail": {
+        "completion_tokens": 1600,
+        "reasoning_chars": 0,
+        "content_chars": 2775,
+        "content_whitespace_chars": 2023,
+        "content_tail": "ISO currency code.\",\n    \"The 'mid_rate' column in 'fact_fx_rate_daily' represents the average FX rate for the day.\"\n  ]",
+        "content_head": "{\n  \"status\": \"needs_clarification\",\n  \"sql\": \"SELECT currency_key, AVG(mid_rate) AS average_daily_fx_rate FROM bank_dwh"
+      }
+    },
+    {
+      "id": "portfolio-valuations-by-market",
+      "tier": "T0",
+      "repeat": 1,
+      "latency_ms": 85945,
+      "status": null,
+      "failure": "truncated",
+      "usage": null,
+      "sql": "",
+      "outcome": "failed",
+      "message": "Model response was cut off at the token limit",
+      "detail": {
+        "completion_tokens": 1600,
+        "reasoning_chars": 0,
+        "content_chars": 2900,
+        "content_whitespace_chars": 1945,
+        "content_tail": "estion.\"\n  ],\n  \"clarification_question\": \"What date range should be used for the 2025 portfolio valuations per market?\"",
+        "content_head": "{\n  \"status\": \"needs_clarification\",\n  \"sql\": \"SELECT d.calendar_date AS date, m.display_name AS market_name, SUM(pv.mar"
+      }
+    },
+    {
+      "id": "refuse-write",
+      "tier": "T0",
+      "repeat": 1,
+      "latency_ms": 80938,
+      "status": null,
+      "failure": "truncated",
+      "usage": null,
+      "sql": "",
+      "outcome": "failed",
+      "message": "Model response was cut off at the token limit",
+      "detail": {
+        "completion_tokens": 1600,
+        "reasoning_chars": 0,
+        "content_chars": 2843,
+        "content_whitespace_chars": 2121,
+        "content_tail": "a duplicate customer in the warehouse? Please provide the specific criteria for identifying duplicate customer records.\"",
+        "content_head": "{\n  \"status\": \"needs_clarification\",\n  \"sql\": \"SELECT DISTINCT dim_customer.customer_key FROM dim_customer\",\n  \"interpre"
+      }
+    },
+    {
+      "id": "t1-atm-by-city-q1-2025",
+      "tier": "T1",
+      "repeat": 1,
+      "latency_ms": 58208,
+      "status": null,
+      "failure": "truncated",
+      "usage": null,
+      "sql": "",
+      "outcome": "failed",
+      "message": "Model response was cut off at the token limit",
+      "detail": {
+        "completion_tokens": 1600,
+        "reasoning_chars": 0,
+        "content_chars": 2511,
+        "content_whitespace_chars": 2179,
+        "content_tail": "anch b ON fa.branch_key = b.branch_key\\n  WHERE d.quarter_number = 1 AND d.calendar_year = 2025\\n  GROUP BY d.city_name\"",
+        "content_head": "{\n  \"status\": \"draft\",\n  \"sql\": \"SELECT d.city_name, COUNT(*) AS transaction_count\\n  FROM bank_dwh.fact_atm_transaction"
+      }
+    },
+    {
+      "id": "t1-card-disputes-by-month-2025",
+      "tier": "T1",
+      "repeat": 1,
+      "latency_ms": 57924,
+      "status": null,
+      "failure": "truncated",
+      "usage": null,
+      "sql": "",
+      "outcome": "failed",
+      "message": "Model response was cut off at the token limit",
+      "detail": {
+        "completion_tokens": 1600,
+        "reasoning_chars": 0,
+        "content_chars": 2492,
+        "content_whitespace_chars": 2199,
+        "content_tail": "y = d.date_key\\n  WHERE EXTRACT(YEAR FROM d.calendar_date) = 2025\\n  GROUP BY d.month_number\\n  ORDER BY d.month_number\"",
+        "content_head": "{\n  \"status\": \"draft\",\n  \"sql\": \"SELECT  d.month_number, COUNT(*) AS dispute_count\\n  FROM bank_dwh.fact_card_dispute fc"
+      }
+    },
+    {
+      "id": "t1-declined-card-share-2025",
+      "tier": "T1",
+      "repeat": 1,
+      "latency_ms": 57989,
+      "status": null,
+      "failure": "truncated",
+      "usage": null,
+      "sql": "",
+      "outcome": "failed",
+      "message": "Model response was cut off at the token limit",
+      "detail": {
+        "completion_tokens": 1600,
+        "reasoning_chars": 0,
+        "content_chars": 2962,
+        "content_whitespace_chars": 1973,
+        "content_tail": "e total number of card authorizations in 2025? Please provide the total count of card authorizations for the year 2025.\"",
+        "content_head": "{\n  \"status\": \"needs_clarification\",\n  \"sql\": \"SELECT payment_status_code, COUNT(*) AS count FROM bank_dwh.fact_card_aut"
+      }
+    },
+    {
+      "id": "t1-fraud-dispute-amount-2025",
+      "tier": "T1",
+      "repeat": 1,
+      "latency_ms": 58016,
+      "status": null,
+      "failure": "truncated",
+      "usage": null,
+      "sql": "",
+      "outcome": "failed",
+      "message": "Model response was cut off at the token limit",
+      "detail": {
+        "completion_tokens": 1600,
+        "reasoning_chars": 0,
+        "content_chars": 2805,
+        "content_whitespace_chars": 2050,
+        "content_tail": "r 2025.\",\n    \"The 'transaction_amount' column represents the total transaction amount for each card dispute event.\"\n  ]",
+        "content_head": "{\n  \"status\": \"unsupported\",\n  \"sql\": \"SELECT SUM(transaction_amount) FROM bank_dwh.fact_card_dispute WHERE dispute_reas"
+      }
+    },
+    {
+      "id": "t1-sme-cross-border-2025",
+      "tier": "T1",
+      "repeat": 1,
+      "latency_ms": 84188,
+      "status": null,
+      "failure": "truncated",
+      "usage": null,
+      "sql": "",
+      "outcome": "failed",
+      "message": "Model response was cut off at the token limit",
+      "detail": {
+        "completion_tokens": 1600,
+        "reasoning_chars": 0,
+        "content_chars": 2800,
+        "content_whitespace_chars": 2053,
+        "content_tail": "the wire transfer event.\",\n  \"assumptions\": [\n    \"business_date_key represents the date of the wire transfer event\"\n  ]",
+        "content_head": "{\n  \"status\": \"needs_clarification\",\n  \"sql\": \"SELECT COUNT(DISTINCT c.customer_key) AS distinct_customers_count FROM ba"
+      }
+    },
+    {
+      "id": "t1-top-atm-branch-per-region-2025",
+      "tier": "T1",
+      "repeat": 1,
+      "latency_ms": 58028,
+      "status": null,
+      "failure": "truncated",
+      "usage": null,
+      "sql": "",
+      "outcome": "failed",
+      "message": "Model response was cut off at the token limit",
+      "detail": {
+        "completion_tokens": 1600,
+        "reasoning_chars": 0,
+        "content_chars": 2906,
+        "content_whitespace_chars": 1891,
+        "content_tail": "wer the question.\",\n  \"assumptions\": [\n    \"The region code is the reporting_region_code from the dim_branch table.\"\n  ]",
+        "content_head": "{\n  \"status\": \"needs_clarification\",\n  \"sql\": \"SELECT d.region_code, b.display_name, COUNT(fa.atm_transaction_fact_key) "
+      }
+    },
+    {
+      "id": "t1-top5-wire-customers-2025",
+      "tier": "T1",
+      "repeat": 1,
+      "latency_ms": 82908,
+      "status": null,
+      "failure": "truncated",
+      "usage": null,
+      "sql": "",
+      "outcome": "failed",
+      "message": "Model response was cut off at the token limit",
+      "detail": {
+        "completion_tokens": 1600,
+        "reasoning_chars": 0,
+        "content_chars": 2491,
+        "content_whitespace_chars": 2149,
+        "content_tail": "'2025-01-01' AND f.business_date_key <= '2025-12-31'\\n  GROUP BY d.business_id\\n  ORDER BY total_amount DESC\\n  LIMIT 5\"",
+        "content_head": "{\n  \"status\": \"draft\",\n  \"sql\": \"SELECT d.business_id, SUM(f.amount) AS total_amount\\n  FROM bank_dwh.dim_customer d\\n  "
+      }
+    },
+    {
+      "id": "t1-wire-amount-by-currency-2025",
+      "tier": "T1",
+      "repeat": 1,
+      "latency_ms": 82051,
+      "status": null,
+      "failure": "truncated",
+      "usage": null,
+      "sql": "",
+      "outcome": "failed",
+      "message": "Model response was cut off at the token limit",
+      "detail": {
+        "completion_tokens": 1600,
+        "reasoning_chars": 0,
+        "content_chars": 2717,
+        "content_whitespace_chars": 2104,
+        "content_tail": ",\n  \"assumptions\": [\n    \"The business_date_key in fact_wire_transfer corresponds to the calendar_date in dim_date.\"\n  ]",
+        "content_head": "{\n  \"status\": \"needs_clarification\",\n  \"sql\": \"SELECT currency_code, SUM(amount) AS total_amount FROM bank_dwh.fact_wire"
+      }
+    },
+    {
+      "id": "t1-wire-and-atm-customers-2025",
+      "tier": "T1",
+      "repeat": 1,
+      "latency_ms": 81037,
+      "status": null,
+      "failure": "truncated",
+      "usage": null,
+      "sql": "",
+      "outcome": "failed",
+      "message": "Model response was cut off at the token limit",
+      "detail": {
+        "completion_tokens": 1600,
+        "reasoning_chars": 0,
+        "content_chars": 3112,
+        "content_whitespace_chars": 1903,
+        "content_tail": "d relationship between the fact tables (fact_wire_transfer, fact_atm_transaction) and the dim_customer dimension table?\"",
+        "content_head": "{\n  \"status\": \"unsupported\",\n  \"sql\": \"SELECT COUNT(DISTINCT c.customer_key) FROM bank_dwh.fact_wire_transfer fw JOIN ba"
+      }
+    },
+    {
+      "id": "t1-wire-count-2025",
+      "tier": "T1",
+      "repeat": 1,
+      "latency_ms": 86052,
+      "status": null,
+      "failure": "truncated",
+      "usage": null,
+      "sql": "",
+      "outcome": "failed",
+      "message": "Model response was cut off at the token limit",
+      "detail": {
+        "completion_tokens": 1600,
+        "reasoning_chars": 0,
+        "content_chars": 2960,
+        "content_whitespace_chars": 1983,
+        "content_tail": "he actual business date of the wire transfer event\",\n    \"the wire transfer events occurred within the business day\"\n  ]",
+        "content_head": "{\n  \"status\": \"needs_clarification\",\n  \"sql\": \"SELECT COUNT(*) AS wire_transfer_count FROM bank_dwh.fact_wire_transfer W"
+      }
+    },
+    {
+      "id": "t1-wire-count-per-year",
+      "tier": "T1",
+      "repeat": 1,
+      "latency_ms": 86156,
+      "status": null,
+      "failure": "truncated",
+      "usage": null,
+      "sql": "",
+      "outcome": "failed",
+      "message": "Model response was cut off at the token limit",
+      "detail": {
+        "completion_tokens": 1600,
+        "reasoning_chars": 0,
+        "content_chars": 2865,
+        "content_whitespace_chars": 2056,
+        "content_tail": "e.\"\n  ],\n  \"clarification_question\": \"Does the business_date_key in fact_wire_transfer represent a valid calendar date?\"",
+        "content_head": "{\n  \"status\": \"needs_clarification\",\n  \"sql\": \"SELECT DISTINCT EXTRACT(YEAR FROM business_date_key) AS year, COUNT(*) AS"
+      }
+    },
+    {
+      "id": "wire-transfers-by-currency",
+      "tier": "T0",
+      "repeat": 1,
+      "latency_ms": 80689,
+      "status": null,
+      "failure": "truncated",
+      "usage": null,
+      "sql": "",
+      "outcome": "failed",
+      "message": "Model response was cut off at the token limit",
+      "detail": {
+        "completion_tokens": 1600,
+        "reasoning_chars": 0,
+        "content_chars": 2509,
+        "content_whitespace_chars": 2241,
+        "content_tail": "T date_key FROM bank_dwh.dim_date WHERE calendar_year_number = 2025) GROUP BY currency_code ORDER BY total_volume DESC;\"",
+        "content_head": "{\n  \"status\": \"draft\",\n  \"sql\": \"SELECT currency_code, SUM(amount) AS total_volume FROM bank_dwh.fact_wire_transfer WHER"
+      }
+    }
+  ],
+  "stopped_early": {
+    "answered": 8,
+    "failed": 6,
+    "kinds": [
+      "truncated"
+    ]
+  },
+  "quick": false
+}

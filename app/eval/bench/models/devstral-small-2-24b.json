@@ -1,13 +1,12 @@
 {
   "name": "devstral-small-2-24b",
-  "about": "Mistral AI Devstral Small 2 24B Instruct (2512), a coding model, FP8 as published (the only release). Apache-2.0, EU vendor. On the A100 its FP8 runs without hardware support: Ministral 3's FP8 failed to compile on an A40, so start with a fast run. Settings every Mistral 3 model needed: vLLM v0.29.0, Mistral's own format, reasoning_effort none.",
+  "about": "Mistral AI Devstral Small 2 24B Instruct (2512), a coding model, published only in FP8. Apache-2.0, EU vendor. DOES NOT RUN ON THE A100 with vLLM 0.29 (2026-09-27): with the defaults, torch.compile's inductor fails ('auto_functionalized was not removed', as Ministral 3's FP8 did on an A40); with --enforce-eager, the FP8 matrix kernel for the A100's generation fails (cutlass_scaled_mm_sm80). There is no BF16 release to fall back on. It may run on an Ada, Hopper or Blackwell card, which have FP8 in hardware; those come after the A100s in the list. Settings every Mistral 3 model needed: vLLM v0.29.0, Mistral's own format, reasoning_effort none.",
   "hf": "mistralai/Devstral-Small-2-24B-Instruct-2512",
   "image": "vllm/vllm-openai:v0.29.0",
   "cards": [
-    "NVIDIA A100-SXM4-80GB",
-    "NVIDIA A100 80GB PCIe",
     "NVIDIA L40S",
-    "NVIDIA H100 80GB HBM3"
+    "NVIDIA H100 80GB HBM3",
+    "NVIDIA RTX PRO 6000 Blackwell Server Edition"
   ],
   "disk_gb": 80,
   "vllm_args": [

@@ -1,6 +1,6 @@
 {
   "name": "eurollm-22b",
-  "about": "EuroLLM-22B-Instruct (2512), from the EU-funded EuroLLM project (Unbabel, Instituto Superior Técnico, University of Edinburgh and partners). Apache-2.0. 22.6B dense, Llama architecture, BF16 as released, 45 GB: fits an A100 without FP8. Trained for all EU languages, not for SQL. Default settings: nothing in its card asks for more.",
+  "about": "EuroLLM-22B-Instruct (2512), from the EU-funded EuroLLM project (Unbabel, Instituto Superior Técnico, University of Edinburgh and partners). Apache-2.0. 22.6B dense, Llama architecture, BF16 as released, 45 GB: fits an A100 without FP8. Trained for all EU languages, not for SQL. With vLLM's default JSON grammar it padded finished answers with whitespace until the token limit (the first run, 2026-09-27, stopped early on 21 cut-off replies); the grammar here disallows free whitespace, as SGLang needed. Result, 2026-09-27 on an A100: it wrote SQL but labelled 62 of 69 answers needs_clarification, often with placeholders (business_date_key = ?), so the app would show a question almost every time: 0 correct drafts.",
   "hf": "utter-project/EuroLLM-22B-Instruct-2512",
   "cards": [
     "NVIDIA A100-SXM4-80GB",
@@ -15,7 +15,9 @@
     "0.9",
     "--max-num-seqs",
     "64",
-    "--no-enable-prefix-caching"
+    "--no-enable-prefix-caching",
+    "--structured-outputs-config",
+    "{\"backend\": \"xgrammar\", \"disable_any_whitespace\": true}"
   ],
   "extra_body": {}
 }

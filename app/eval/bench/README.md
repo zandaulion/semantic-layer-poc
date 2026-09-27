@@ -85,9 +85,10 @@ than half of at least eight replies have failed.
 | `ministral-3-14b-bf16` | The same in BF16 | Works on the A100 |
 | `mistral-small-3.2-24b` | Mistral, 24B, BF16 | Works on the A100 |
 | `gemma-4-26b` | Google, 26B MoE | Does not work: loops under strict JSON, a known model regression |
-| `eurollm-22b` | EuroLLM (EU-funded), 22B, BF16 | Not yet run |
-| `devstral-small-2-24b` | Mistral, 24B coding model, FP8 | Not yet run; FP8 on the A100 is untested for it |
+| `eurollm-22b` | EuroLLM (EU-funded), 22B, BF16 | Runs on the A100 once free whitespace is disallowed in the JSON grammar; labels nearly every answer as a question, so 0 correct |
+| `devstral-small-2-24b` | Mistral, 24B coding model, FP8 only | Does not run on the A100: the compiler fails, and without it the FP8 kernel does. Profile points at FP8 cards instead |
 
+On the A100, Mistral's FP8 checkpoints do not start with vLLM (Ministral 3 on an A40, Devstral Small 2 on an A100): use a BF16 release where there is one.
 Every Mistral 3 model needs vLLM v0.29.0 (v0.30.0 cannot load them,
 vllm-project/vllm#58755) and `reasoning_effort: "none"`; their profiles set
 both. The `about` field of each profile records what was learned serving it.

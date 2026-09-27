@@ -34,6 +34,27 @@ test('a common table expression is not mistaken for a physical table', () => {
   assert.equal(checkSql(sql).tables, 'passed');
 });
 
+test('every common table expression is recognised, not only the first', () => {
+  // gpt-oss drafted exactly this for "customers with both a wire transfer and an
+  // ATM transaction", and the check flagged atm_customers as an unknown table.
+  const sql = `WITH wire_customers AS (
+      SELECT DISTINCT customer_key FROM bank_dwh.fact_wire_transfer
+    ), atm_customers AS (
+      SELECT DISTINCT customer_key FROM bank_dwh.fact_atm_transaction
+    ),
+    both_kinds AS (SELECT w.customer_key FROM wire_customers w JOIN atm_customers a USING (customer_key))
+    SELECT COUNT(*) FROM both_kinds`;
+  assert.deepEqual(referencedTables(sql).unknown, []);
+  assert.deepEqual(referencedTables(sql).known.sort(), ['fact_atm_transaction', 'fact_wire_transfer']);
+  assert.equal(checkSql(sql).tables, 'passed');
+});
+
+test('a recursive common table expression is recognised', () => {
+  const sql = `WITH RECURSIVE days AS (SELECT 1 AS n UNION ALL SELECT n + 1 FROM days WHERE n < 7)
+    SELECT d.n FROM days d JOIN bank_dwh.dim_date dd ON dd.day_of_week_number = d.n`;
+  assert.deepEqual(referencedTables(sql).unknown, []);
+});
+
 test('a write disguised behind a CTE still fails the statement check', () => {
   // The model produced exactly this shape when asked to delete duplicates.
   const sql = `WITH ranked AS (

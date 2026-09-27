@@ -406,15 +406,15 @@ async function loadTests() {
   // Best first: by the share of hard questions answered correctly. A run that
   // did not measure the model (a note says why) goes last whatever its score;
   // ties go to the newer run.
-  const runs = [...data.runs].sort((a, b) => Boolean(a.note) - Boolean(b.note)
-    || (b.summary.t1.accuracy_pct ?? -1) - (a.summary.t1.accuracy_pct ?? -1)
+  const runs = [...data.runs].sort((a, b) => Boolean(a.note || a.failed_start) - Boolean(b.note || b.failed_start)
+    || (b.summary?.t1.accuracy_pct ?? -1) - (a.summary?.t1.accuracy_pct ?? -1)
     || b.recorded_at.localeCompare(a.recorded_at));
   const panels = document.querySelectorAll('.tests-panel');
   if (!runs.length) { $('tests-status').textContent = 'No recorded runs yet. Run eval/bench/bench.mjs to add one.'; panels.forEach((p) => { p.hidden = true; }); return; }
   $('tests-status').hidden = true;
   panels.forEach((p) => { p.hidden = false; });
   renderTestsTable(runs);
-  renderTestsMatrix(runs, data.questions);
+  renderTestsMatrix(runs.filter((run) => run.summary), data.questions);
   renderQuickChecks(data.quick ?? []);
   const newest = runs.map((r) => r.recorded_at).sort().at(-1);
   $('tests-print-meta').textContent = `Bank DWH Studio · model benchmark · ${runs.length} recorded runs, the latest on ${newest.slice(0, 10)} · exported ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC. `
@@ -436,12 +436,21 @@ function renderTestsTable(runs) {
   for (const run of runs) {
     const s = run.summary;
     const row = body.insertRow();
-    if (run.note) { row.className = 'flagged'; notes.push(run); }
+    if (run.note || run.failed_start) { row.className = 'flagged'; notes.push(run); }
     const name = row.insertCell();
     name.append(el('span', 'model', run.model));
-    if (run.note) name.append(el('span', 'flag', 'NOT VALID'));
+    if (run.failed_start) name.append(el('span', 'flag', 'DID NOT RUN'));
+    else if (run.note) name.append(el('span', 'flag', 'NOT VALID'));
     name.append(el('span', 'card', `${run.card ? shortCard(run.card) : 'no GPU rented'} · ${run.server ?? 'server not recorded'} · ${run.recorded_at.slice(0, 10)}`));
     name.title = run.about || '';
+    if (!s) {
+      // Nothing was asked: every measure is empty, and the note below says why.
+      for (let i = 0; i < 7; i++) { const cell = row.insertCell(); cell.className = 'num'; cell.textContent = '—'; }
+      const last = row.insertCell();
+      last.className = 'num';
+      last.append(el('span', '', run.minutes === null ? '—' : `${run.minutes} min`), el('span', 'card', run.cost_usd ? `$${run.cost_usd.toFixed(2)}` : ''));
+      continue;
+    }
     const cells = [
       [`${cellText(s.t1.accuracy_pct)}%`, `${s.t1.correct} of ${s.t1.answers}`, tone(s.t1.accuracy_pct, 90, 60)],
       [`${cellText(s.confidently_wrong.pct_of_t1_t2)}%`, `${s.confidently_wrong.count} answers`, s.confidently_wrong.count === 0 ? 'metric-good' : s.confidently_wrong.pct_of_t1_t2 >= 5 ? 'metric-bad' : 'metric-warn'],
@@ -458,7 +467,9 @@ function renderTestsTable(runs) {
       cell.append(el('span', '', value), el('span', 'card', detail));
     }
   }
-  $('tests-notes').replaceChildren(...notes.map((run) => el('p', '', `NOT VALID — ${run.model}: ${run.note}`)));
+  $('tests-notes').replaceChildren(...notes.map((run) => el('p', '', run.failed_start
+    ? `DID NOT RUN — ${run.model} on ${shortCard(run.card)}: ${run.note ?? run.failed_start.reason}`
+    : `NOT VALID — ${run.model}: ${run.note}`)));
 }
 
 function renderQuickChecks(quick) {

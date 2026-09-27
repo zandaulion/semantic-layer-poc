@@ -200,11 +200,15 @@ export async function waitForServer({ id, apiKey: serverKey, model, deadline, on
             : `the container exited before vLLM wrote anything, so the cause is on the host. Pod system log: ${hostSide.slice(-4).join(' | ').slice(0, 500) || '(nothing beyond container starts)'}`;
           const error = new Error(`vLLM keeps restarting (${starts} starts): ${reason}`);
           error.logs = { container: tail.slice(-40), system: system.slice(-40) };
+          // With vLLM's own errors in the log, the model cannot be served this
+          // way: a result. With nothing, it was the machine: not one.
+          error.kind = tail.length ? 'model' : 'host';
           throw error;
         }
         if (tail.some((l) => FATAL.test(l))) {
           const error = new Error(`vLLM failed to start: ${rootCause(tail)}`);
           error.logs = { container: tail.slice(-40), system: system.slice(-40) };
+          error.kind = 'model';
           error.logged = true;
           throw error;
         }

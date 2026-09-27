@@ -1,0 +1,26 @@
+{
+  "name": "gemma-2-9b",
+  "about": "Google Gemma 2 9B instruct (June 2024), BF16, from Unsloth's ungated copy of Google's weights (google/gemma-2-9b-it is gated; same weights, Gemma licence). Gemma 2's own chat template refuses a system message, which every request of the app carries, so the profile serves it with the same template except that the system text opens the first user turn, as Google's Gemma 3 template does. Context is 8,192 tokens, the model's own limit. Free whitespace is disallowed in the JSON grammar: with vLLM's default, it padded finished answers until the token limit (the first run, 2026-09-27, stopped early on 21 cut-off replies), as EuroLLM did.",
+  "hf": "unsloth/gemma-2-9b-it",
+  "cards": [
+    "NVIDIA A100-SXM4-80GB",
+    "NVIDIA A100 80GB PCIe",
+    "NVIDIA L40S",
+    "NVIDIA GeForce RTX 4090"
+  ],
+  "disk_gb": 60,
+  "vllm_args": [
+    "--max-model-len",
+    "8192",
+    "--gpu-memory-utilization",
+    "0.9",
+    "--max-num-seqs",
+    "64",
+    "--no-enable-prefix-caching",
+    "--structured-outputs-config",
+    "{\"backend\": \"xgrammar\", \"disable_any_whitespace\": true}",
+    "--chat-template",
+    "{{ bos_token }}{% if messages[0]['role'] == 'system' %}{% set system = messages[0]['content'] | trim + '\n\n' %}{% set turns = messages[1:] %}{% else %}{% set system = '' %}{% set turns = messages %}{% endif %}{% for message in turns %}{% if (message['role'] == 'user') != (loop.index0 % 2 == 0) %}{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}{% endif %}{% if message['role'] == 'assistant' %}{% set role = 'model' %}{% else %}{% set role = message['role'] %}{% endif %}{{ '<start_of_turn>' + role + '\n' + (system if loop.first else '') + message['content'] | trim + '<end_of_turn>\n' }}{% endfor %}{% if add_generation_prompt %}{{ '<start_of_turn>model\n' }}{% endif %}"
+  ],
+  "extra_body": {}
+}

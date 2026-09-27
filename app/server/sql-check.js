@@ -48,7 +48,10 @@ function withoutKeywordArgumentCalls(sql) {
 export function referencedTables(sql) {
   if (typeof sql !== 'string' || !sql.trim()) return { known: [], unknown: [] };
   const body = withoutKeywordArgumentCalls(withoutQuotedContent(sql).trim().replace(/;\s*$/, '').trim());
-  const cteNames = new Set([...body.matchAll(/\b(?:WITH|,)\s*([a-z_][\w]*)\s+AS\s*\(/gi)]
+  // The boundary belongs to WITH alone: a second CTE's comma follows a closing
+  // parenthesis, where \b cannot match, so `\b(?:WITH|,)` saw only the first
+  // name and reported the rest as unknown tables.
+  const cteNames = new Set([...body.matchAll(/(?:\bWITH(?:\s+RECURSIVE)?|,)\s*([a-z_][\w]*)\s+AS\s*\(/gi)]
     .map((match) => match[1].toLowerCase()));
   const known = [];
   const unknown = [];

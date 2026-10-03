@@ -45,6 +45,7 @@ Write a profile in `models/`, named after the model:
 | `cards` | RunPod GPU ids to try, in order; the first with stock is rented. Every profile lists the two A100s first. `--card` overrides the list |
 | `disk_gb` | Container disk for the weights, about twice their size |
 | `vllm_args` | Passed to `vllm serve` after the model and its served name. Keep `--no-enable-prefix-caching` so the load figures are real |
+| `tool_parser` | vLLM's tool-call parser for the model's family, needed only by [agent runs](#agent-mode) |
 | `extra_body` | Fields merged over every request the app sends: a thinking mode, the vendor's recommended temperature, or a `reasoning_effort` the model accepts |
 | `image` | Optional: a different vLLM image, for a model the default one cannot load |
 
@@ -107,7 +108,7 @@ both. The `about` field of each profile records what was learned serving it.
 
 ## What it asks
 
-`cases.json` holds three tiers, and the original twelve questions come along as
+`cases.json` holds four tiers, and the original twelve questions come along as
 T0 so every run can be read against the earlier ones.
 
 | Tier | What it asks | Right answer | Scored by |
@@ -116,6 +117,7 @@ T0 so every run can be read against the earlier ones.
 | T1 | 23 questions with one correct answer: joins, periods, month-end snapshots, top-N, ratios, set operations | A draft whose result matches the reference | Running the draft and comparing results |
 | T2 | 6 questions about data the warehouse does not hold (salaries, churn, NPS) | A clarification, not a draft | The status of the reply |
 | T3 | 5 requests to write, including one hidden in an ordinary question | Never a write that reaches the user | The SQL check and the read-only database |
+| T4 | 17 harder questions: record history as of a past date, joins between two snapshot facts, currency conversion with daily rates, windows, medians, customers active in every quarter | As T1 | As T1, reported apart so T1 stays comparable with older runs |
 
 Each question is asked three times, sixteen at a time.
 
@@ -126,9 +128,40 @@ choosing either is right, and so that the real mistakes change the answer: a
 tenth of customers have a superseded record, and daily snapshots hold three
 dates a month.
 
+T4 was added once agents reached 94–99% on T1 and the remaining one to four
+questions could no longer rank them. Its references were each run against the
+seed and checked for a well-defined answer: a question whose answer was zero,
+or depended on which median function was used, was rephrased. One was removed
+after every agent failed it the same way: the loan balance fact carries its own
+`days_past_due` column with unrelated values, so "loans more than 90 days past
+due" had two defensible answers. Generic columns in the seed hold plausible
+values, so a new question should be checked against them too.
+
 A draft's result matches when every reference column is matched by one of its
 columns, whatever it is named, with the same rows; numbers within 0.01 unless
 the case says otherwise; row order only where the question asks for a ranking.
+
+## Agent mode
+
+`--answer agent` benchmarks the application's agent mode instead of the
+pipeline: the model looks tables up with tools and tests its drafts with
+`run_sql` against the application's warehouse (`banking-dwh-pg`, the same seed,
+cryptic copy for a cryptic run), which must be running. Scoring is unchanged.
+For vLLM it adds the profile's `tool_parser` (`openai` for gpt-oss, `hermes` for
+Qwen, `mistral` for Mistral models) with `--enable-auto-tool-choice`, raises the
+context to 32k tokens, since a conversation re-sends every table it has read,
+and turns prefix caching back on. A profile without `tool_parser` cannot run as
+an agent. The default deadline is 40 minutes.
+
+Four switches take the agent apart, to see where a gain comes from. The result
+is named after them, `gpt-oss-20b (agent, no run_sql)`, and the file too:
+
+| Option | Effect |
+| --- | --- |
+| `--no-run-sql` | The agent can look tables up but not test its drafts |
+| `--explain-only` | `run_sql` checks drafts with `EXPLAIN` and returns no rows |
+| `--no-domain-rules` | The agent is not given `banking-poc/domain-rules.md` |
+| `--pipeline-rules` | The pipeline is given those rules (pipeline only) |
 
 ## Cryptic names
 
@@ -258,7 +291,8 @@ Guards, all enforced by the daemon, whatever the page shows:
 | `--community` | Community Cloud instead of Secure. Cheaper, and less predictable |
 | `--repeats N`, `--concurrency N` | Default 3 and 16 |
 | `--load` | Adds a load test at 1, 8 and 32 requests in flight (`--load-levels`), stopped early if a level's median passes 30 s. Adds a few minutes |
-| `--max-minutes N` | Hard limit on the whole run, default 20 |
+| `--max-minutes N` | Hard limit on the whole run, default 20, or 40 with `--answer agent` |
+| `--answer agent` | The agent mode, and its ablations; see [Agent mode](#agent-mode) |
 | `--openrouter ID` | A closed model through OpenRouter; see [Closed models through OpenRouter](#closed-models-through-openrouter) |
 | `--weights open\|closed` | For `--endpoint`: whether the model's weights are published, which the Model tests tab marks. GPU runs are open and OpenRouter runs are looked up |
 | `--endpoint URL --served-name NAME --key-file F` | Benchmarks a server that already exists; rents nothing. `--provider NAME` labels it in the results |

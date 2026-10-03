@@ -54,3 +54,41 @@ test('query history persists, paginates, and stays private to a device', (t) => 
   assert.equal(auth.deleteDevice(owner.device_id), true);
   assert.deepEqual(auth.listHistory(owner.device_id).entries, []);
 });
+
+test('a conversation replays its earlier turns, oldest first, to its own device only', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'auth-conv-'));
+  const store = new AuthStore(path.join(dir, 'auth.sqlite'));
+  try {
+    const invite = store.createInvite('a');
+    const device = store.redeemInvite(invite.code, 'a');
+    const other = store.redeemInvite(store.createInvite('b').code, 'b');
+    const conversation = '11111111-2222-3333-4444-555555555555';
+    store.saveHistory(device.device_id, 'Clients in default at end of August', 'all', { status: 'needs_clarification', clarification_question: 'Which year?' }, conversation);
+    store.saveHistory(device.device_id, 'Answer to your question: 2025', 'all', { status: 'draft', interpretation: 'Counts clients.', sql: 'SELECT 1' }, conversation);
+    const turns = store.conversationTurns(device.device_id, conversation);
+    assert.deepEqual(turns.map((turn) => turn.question), ['Clients in default at end of August', 'Answer to your question: 2025']);
+    assert.match(turns[0].summary, /Which year/);
+    assert.match(turns[1].summary, /SELECT 1/);
+    assert.deepEqual(store.conversationTurns(other.device_id, conversation), []);
+  } finally {
+    store.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the audit log outlives the device it records', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'auth-audit-'));
+  const store = new AuthStore(path.join(dir, 'auth.sqlite'));
+  try {
+    const device = store.redeemInvite(store.createInvite('a').code, 'phone');
+    store.audit({ id: device.device_id, label: 'phone' }, 'execute', { sql: 'SELECT 1', ok: true });
+    store.deleteDevice(device.device_id);
+    const { entries } = store.listAudit();
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].device_label, 'phone');
+    assert.equal(entries[0].detail.sql, 'SELECT 1');
+  } finally {
+    store.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -1,7 +1,8 @@
 import { installUpdates } from '/pwa-update.js';
 
 const $ = (id) => document.getElementById(id);
-const state = { working: false, dirty: false, persisted: false, restoring: false, lastResult: null, lastQuestion: '', historyBefore: null, historyLoading: false, installPrompt: null };
+const state = { working: false, dirty: false, persisted: false, restoring: false, lastResult: null, lastQuestion: '', historyBefore: null, historyLoading: false, installPrompt: null, conversationId: null, turns: 0, warehouse: false };
+const MODE_KEY = 'banking-poc:mode';
 const DRAFT_KEY = 'banking-poc:workspace-v1';
 const fields = ['statement', 'tables', 'syntax', 'columns', 'business', 'execution'];
 const names = { statement: 'Read-only shape', tables: 'Table references', syntax: 'SQL syntax', columns: 'Column references', business: 'Business meaning', execution: 'Execution' };
@@ -21,6 +22,8 @@ function saveWorkspace() {
       sql: $('sql-editor').value,
       domain: $('domain-select').value,
       result: state.lastResult,
+      conversationId: state.conversationId,
+      turns: state.turns,
     };
     if (draft.question || draft.sql) sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
     else sessionStorage.removeItem(DRAFT_KEY);
@@ -36,6 +39,7 @@ function restoreWorkspace() {
     if (!draft || typeof draft !== 'object') return;
     state.restoring = true;
     $('question').value = String(draft.question || '').slice(0, 1000);
+    if (typeof draft.conversationId === 'string') setConversation(draft.conversationId, Number(draft.turns) || 0);
     if ([...$('domain-select').options].some((option) => option.value === draft.domain)) $('domain-select').value = draft.domain;
     if (draft.result && typeof draft.result.status === 'string') {
       renderDraft(draft.result);
@@ -95,7 +99,7 @@ async function api(path, options = {}) {
 
 function setWorking(working) {
   state.working = working;
-  for (const id of ['find-button', 'generate-button', 'check-button', 'clarification-continue', 'history-button']) $(id).disabled = working;
+  for (const id of ['find-button', 'generate-button', 'check-button', 'run-button', 'new-conversation', 'mode-select', 'clarification-continue', 'history-button']) $(id).disabled = working;
   $('generate-button').textContent = working ? 'Working…' : 'Generate draft ↗';
 }
 
@@ -175,6 +179,7 @@ function renderDraft(result) {
   $('sources').textContent = result.sources?.length ? `Sources: ${result.sources.join(', ')}` : '';
   renderContext(result.retrieved_tables || []);
   renderChecks(result.checks);
+  renderExecution(result.execution);
   const statuses = {
     draft: ['Draft ready for review', 'good'],
     needs_revision: ['Draft needs revision', 'warn'],
@@ -183,6 +188,176 @@ function renderDraft(result) {
   };
   resultStatus(...(statuses[result.status] || ['No draft returned', 'warn']));
   saveWorkspace();
+}
+
+// ------------------------------------------------------------ conversation
+
+function setConversation(id, turns = 0) {
+  state.conversationId = id;
+  state.turns = turns;
+  $('new-conversation').hidden = !id || turns === 0;
+  $('conversation-chip').textContent = id && turns ? `Conversation · ${turns} turn${turns === 1 ? '' : 's'} · follow-ups keep context` : 'PostgreSQL · bank_dwh';
+}
+
+function currentMode() {
+  return $('mode-select').value;
+}
+
+function applyMode() {
+  const agent = currentMode() === 'agent';
+  $('mode-hint').textContent = agent
+    ? 'The agent searches the table index, reads table definitions and tests its SQL before answering.'
+    : 'Elasticsearch retrieves the tables and one model call drafts the SQL.';
+  $('ask-hint').textContent = agent
+    ? 'The agent reads table definitions and may run read-only test queries, seeing up to 20 rows of synthetic data.'
+    : 'The model sees the retrieved synthetic schema, not DWH data rows.';
+  $('steps-title').textContent = agent ? 'Agent steps' : 'Pipeline steps';
+}
+
+// ------------------------------------------------------------ agent steps
+
+const TOOL_ICONS = { search_tables: '⌕', describe_table: '≡', run_sql: '▶', submit_answer: '✓' };
+
+function clearSteps() {
+  $('steps-list').replaceChildren();
+  $('steps-empty').hidden = false;
+  $('steps-meta').textContent = '';
+}
+
+function stepArgument(name, args = {}) {
+  if (name === 'search_tables') return `"${args.query ?? ''}"${args.domain ? ` in ${args.domain}` : ''}${args.type ? ` · ${args.type}s` : ''}`;
+  if (name === 'describe_table') return String(args.table ?? '');
+  if (name === 'run_sql') return String(args.sql ?? '').replace(/\s+/g, ' ').slice(0, 90) + (String(args.sql ?? '').length > 90 ? '…' : '');
+  if (name === 'submit_answer') return String(args.status ?? '').replaceAll('_', ' ');
+  return '';
+}
+
+function addStep({ name, args, summary = null, kind = '' }) {
+  $('steps-empty').hidden = true;
+  const li = document.createElement('li');
+  if (kind) li.className = kind;
+  const icon = document.createElement('span');
+  icon.className = 'icon';
+  icon.textContent = kind === 'wait' ? '⧗' : TOOL_ICONS[name] || '·';
+  const body = document.createElement('span');
+  const tool = document.createElement('span');
+  tool.className = 'tool';
+  tool.textContent = kind === 'wait' ? 'rate limit' : name;
+  const arg = document.createElement('span');
+  arg.className = 'arg';
+  arg.textContent = ` ${kind === 'wait' ? summary : stepArgument(name, args)}`;
+  const out = document.createElement('span');
+  out.className = 'out';
+  if (kind !== 'wait' && summary !== null) {
+    out.textContent = summary;
+    out.classList.toggle('bad', /^error|^No table/i.test(summary));
+  }
+  body.append(tool, arg, out);
+  li.append(icon, body);
+  $('steps-list').append(li);
+  return li;
+}
+
+function finishStep(name, summary) {
+  const pending = [...$('steps-list').querySelectorAll('li.pending')].reverse().find((li) => li.querySelector('.tool').textContent === name);
+  if (!pending) return addStep({ name, summary });
+  pending.classList.remove('pending');
+  const out = pending.querySelector('.out');
+  out.textContent = summary;
+  out.classList.toggle('bad', /^error|^No table/i.test(summary));
+}
+
+function renderTrace(result) {
+  clearSteps();
+  for (const step of result?.agent_trace || []) addStep({ name: step.tool, args: step.arguments || {}, summary: step.summary || '' });
+  if (result?.status && result.agent_trace) addStep({ name: 'submit_answer', args: { status: result.status }, summary: '' });
+  if (result?.usage?.model_calls) $('steps-meta').textContent = `${result.usage.model_calls} model calls · ${result.usage.total_tokens.toLocaleString()} tokens`;
+}
+
+// ------------------------------------------------------------ results
+
+function renderExecution(execution) {
+  $('results').hidden = !execution;
+  if (!execution) return;
+  const table = $('results-table');
+  table.replaceChildren();
+  $('results-error').hidden = execution.ok !== false;
+  $('results-error').textContent = execution.error || '';
+  if (execution.running) { $('results-meta').textContent = 'Running…'; return; }
+  if (!execution.ok) { $('results-meta').textContent = 'Query failed'; return; }
+  $('results-meta').textContent = `${execution.row_count} row${execution.row_count === 1 ? '' : 's'}${execution.truncated ? ' (first page)' : ''}${execution.ms != null ? ` · ${execution.ms} ms` : ''} · synthetic data`;
+  const head = document.createElement('tr');
+  for (const column of execution.columns || []) {
+    const th = document.createElement('th');
+    th.textContent = column;
+    head.append(th);
+  }
+  const thead = document.createElement('thead');
+  thead.append(head);
+  const tbody = document.createElement('tbody');
+  for (const row of execution.rows || []) {
+    const tr = document.createElement('tr');
+    for (const value of row) {
+      const td = document.createElement('td');
+      td.textContent = value === null ? 'null' : value;
+      if (value === null) td.className = 'null';
+      td.title = value ?? '';
+      tr.append(td);
+    }
+    tbody.append(tr);
+  }
+  table.append(thead, tbody);
+}
+
+async function runSql() {
+  const sql = $('sql-editor').value;
+  if (!sql.trim()) return flash('Enter or generate SQL before running it.');
+  flash('');
+  setWorking(true);
+  renderExecution({ running: true });
+  try {
+    const { execution, checks } = await api('/api/execute', { method: 'POST', body: JSON.stringify({ sql, conversation_id: state.conversationId }) });
+    renderExecution(execution);
+    renderChecks(checks);
+    if (!execution.ok) flash('The warehouse refused or could not run this SQL. See the error under the draft.');
+  } catch (error) { renderExecution(null); flash(error.message); }
+  finally { setWorking(false); }
+}
+
+/** POSTs a question and hands each server-sent event to `onEvent` as it arrives. */
+async function streamAsk(body, onEvent) {
+  const response = await fetch('/api/ask', {
+    method: 'POST', credentials: 'same-origin', cache: 'no-store',
+    headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  if (response.status === 401) {
+    showGate('This device is no longer registered. Enter a new invite code.');
+    throw new Error('This device is no longer registered.');
+  }
+  if (!response.ok || !(response.headers.get('content-type') || '').startsWith('text/event-stream')) {
+    let payload = {};
+    try { payload = await response.json(); } catch { /* no body */ }
+    throw new Error(payload.message || payload.error?.replaceAll('_', ' ') || `Request failed (${response.status})`);
+  }
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += value;
+    let end;
+    while ((end = buffer.indexOf('\n\n')) >= 0) {
+      const block = buffer.slice(0, end);
+      buffer = buffer.slice(end + 2);
+      let event = 'message';
+      let data = '';
+      for (const line of block.split('\n')) {
+        if (line.startsWith('event: ')) event = line.slice(7);
+        else if (line.startsWith('data: ')) data += line.slice(6);
+      }
+      if (data) onEvent(event, JSON.parse(data));
+    }
+  }
 }
 
 function closeHistory() {
@@ -250,6 +425,8 @@ async function openHistoryEntry(id) {
     $('question').value = entry.question;
     if ([...$('domain-select').options].some((option) => option.value === entry.domain)) $('domain-select').value = entry.domain;
     renderDraft(entry.result);
+    renderTrace(entry.result);
+    setConversation(entry.conversation_id || null, entry.conversation_id ? 1 : 0);
     $('clarification-reply').hidden = entry.result.status !== 'needs_clarification';
     if (entry.result.status === 'needs_clarification') {
       $('clarification-answer').value = '';
@@ -277,6 +454,14 @@ async function loadMetadata() {
   $('elastic-status').classList.toggle('bad', !status.elasticsearch.available);
   $('model-status').textContent = status.model_configured ? 'Configured' : 'Needs API key';
   $('model-status').classList.toggle('bad', !status.model_configured);
+  state.warehouse = Boolean(status.warehouse_configured);
+  $('warehouse-status').textContent = state.warehouse ? 'Read-only' : 'Not configured';
+  $('warehouse-status').classList.toggle('bad', !state.warehouse);
+  $('run-button').hidden = !state.warehouse;
+  let saved = null;
+  try { saved = localStorage.getItem(MODE_KEY); } catch { /* private window */ }
+  $('mode-select').value = saved === 'agent' || saved === 'pipeline' ? saved : status.answer_mode || 'pipeline';
+  applyMode();
   const select = $('domain-select');
   select.replaceChildren(new Option('All banking domains', 'all'));
   for (const domain of domainResult.domains || []) select.add(new Option(domain.replaceAll('_', ' '), domain));
@@ -303,14 +488,50 @@ async function generate() {
   $('clarification-reply').hidden = true;
   saveWorkspace();
   setWorking(true);
-  resultStatus('Retrieving metadata and drafting…');
+  clearSteps();
+  renderExecution(null);
+  const agent = currentMode() === 'agent';
+  resultStatus(agent ? 'Agent is looking up tables…' : 'Retrieving metadata and drafting…');
+  // The agent carries earlier turns itself, so it is only shown SQL the user
+  // has changed; the pipeline revises whatever is in the editor, as before.
+  const editorSql = $('sql-editor').value;
+  const edited = editorSql.trim() && editorSql !== (state.lastResult?.sql || '');
+  let result = null;
+  let failed = null;
   try {
-    const result = await api('/api/generate', {
-      method: 'POST', body: JSON.stringify({ question, domain: $('domain-select').value, previous_sql: $('sql-editor').value }),
+    await streamAsk({
+      question, domain: $('domain-select').value, mode: currentMode(),
+      conversation_id: state.conversationId, previous_sql: agent ? (edited ? editorSql : '') : editorSql,
+    }, (event, data) => {
+      if (event === 'conversation') state.conversationId = data.conversation_id;
+      else if (event === 'tool_call') addStep({ name: data.name, args: data.arguments, kind: data.name === 'submit_answer' ? '' : 'pending', summary: data.name === 'submit_answer' ? '' : null });
+      else if (event === 'tool_result') finishStep(data.name, data.summary);
+      else if (event === 'waiting') addStep({ kind: 'wait', summary: `waiting ${Math.round(data.ms / 1000)} s for the provider` });
+      else if (event === 'step') $('steps-meta').textContent = typeof data.step === 'number' ? `step ${data.step}` : 'finishing';
+      else if (event === 'answer') {
+        result = data;
+        renderDraft(result);
+        if (result.usage?.model_calls) $('steps-meta').textContent = `${result.usage.model_calls} model calls · ${result.usage.total_tokens.toLocaleString()} tokens`;
+      } else if (event === 'executing') renderExecution({ running: true });
+      else if (event === 'execution') {
+        if (result) result.execution = data;
+        renderExecution(data);
+        saveWorkspace();
+      } else if (event === 'checks') {
+        if (result) result.checks = data;
+        renderChecks(data);
+        saveWorkspace();
+      } else if (event === 'saved') {
+        setConversation(data.conversation_id, state.turns + 1);
+        if (data.history_id === null) flash('Answer shown, but it could not be saved to history. Copy it before leaving this page.');
+      } else if (event === 'error') failed = data;
     });
-    renderDraft(result);
+    if (failed) throw new Error(failed.message || failed.error);
+    if (!result) throw new Error('The server finished without an answer.');
     if (result.status === 'draft') {
-      flash('SQL draft ready. Review the SQL and assumptions before using it.', true);
+      flash(result.execution && !result.execution.ok
+        ? 'The draft passed the basic checks but the warehouse could not run it. See the error under the draft.'
+        : 'SQL draft ready. Review the SQL, assumptions and results before using it.', !(result.execution && !result.execution.ok));
       $('draft-title').scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else if (result.status === 'needs_revision') {
       flash('The model returned SQL, but a basic check needs review. See the draft and checks below.');
@@ -325,7 +546,6 @@ async function generate() {
     } else {
       flash('No SQL draft was returned. Try a more specific question.');
     }
-    if (result.history_saved === false) flash('Answer shown, but it could not be saved to history. Copy it before leaving this page.');
     if (!$('history-panel').hidden) await loadHistory(true);
   } catch (error) {
     resultStatus('Draft unavailable', 'bad');
@@ -386,8 +606,8 @@ function showView(view) {
 }
 const viewFromHash = () => Object.keys(VIEWS).find((name) => VIEWS[name] && VIEWS[name] === location.hash) ?? 'draft';
 
-const TIER_LABEL = { T1: 'Hard questions: the drafted query must return the reference answer', T2: 'Data the warehouse does not hold: the model should ask', T3: 'Requests to change data: no write may reach the user' };
-const GOOD = { T1: 'correct', T2: 'asked', T3: 'safe' };
+const TIER_LABEL = { T1: 'Hard questions: the drafted query must return the reference answer', T4: 'Harder questions: history as of a date, two snapshot facts, currency conversion, windows',  T2: 'Data the warehouse does not hold: the model should ask', T3: 'Requests to change data: no write may reach the user' };
+const GOOD = { T1: 'correct', T4: 'correct', T2: 'asked', T3: 'safe' };
 const cellText = (value) => (value === null || value === undefined ? '—' : String(value));
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -442,7 +662,7 @@ function renderTestsTable(runs, tableId, notesId) {
   table.replaceChildren();
   if (!runs.length) { $(notesId).replaceChildren(); return; }
   const head = table.createTHead().insertRow();
-  for (const [label, num] of [['Model', false], ['Correct', true], ['Confidently wrong', true], ['Asked', true], ['Unsafe writes', true], ['Answer time', true], ['Per minute', true], ['Per 1,000', true], ['Run', true]]) {
+  for (const [label, num] of [['Model', false], ['Correct', true], ['Harder', true], ['Confidently wrong', true], ['Asked', true], ['Unsafe writes', true], ['Answer time', true], ['Per minute', true], ['Per 1,000', true], ['Run', true]]) {
     const th = el('th', num ? 'num' : '', label);
     th.scope = 'col';
     head.append(th);
@@ -462,7 +682,7 @@ function renderTestsTable(runs, tableId, notesId) {
     name.title = run.about || '';
     if (!s) {
       // Nothing was asked: every measure is empty, and the note below says why.
-      for (let i = 0; i < 7; i++) { const cell = row.insertCell(); cell.className = 'num'; cell.textContent = '—'; }
+      for (let i = 0; i < 8; i++) { const cell = row.insertCell(); cell.className = 'num'; cell.textContent = '—'; }
       const last = row.insertCell();
       last.className = 'num';
       last.append(el('span', '', run.minutes === null ? '—' : `${run.minutes} min`), el('span', 'card', run.cost_usd ? `$${run.cost_usd.toFixed(2)}` : ''));
@@ -470,6 +690,7 @@ function renderTestsTable(runs, tableId, notesId) {
     }
     const cells = [
       [`${cellText(s.t1.accuracy_pct)}%`, `${s.t1.correct} of ${s.t1.answers}`, tone(s.t1.accuracy_pct, 90, 60)],
+      s.t4 ? [`${cellText(s.t4.accuracy_pct)}%`, `${s.t4.correct} of ${s.t4.answers} · ${s.t4.wrong_result} wrong`, tone(s.t4.accuracy_pct, 90, 60)] : ['—', 'not asked', ''],
       [`${cellText(s.confidently_wrong.pct_of_t1_t2)}%`, `${s.confidently_wrong.count} answers`, s.confidently_wrong.count === 0 ? 'metric-good' : s.confidently_wrong.pct_of_t1_t2 >= 5 ? 'metric-bad' : 'metric-warn'],
       [`${cellText(s.t2.asked_pct)}%`, `${s.t2.asked} of ${s.t2.answers}`, tone(s.t2.asked_pct, 90, 60)],
       [String(s.t3.unsafe), `of ${s.t3.answers}`, s.t3.unsafe === 0 ? 'metric-good' : 'metric-bad'],
@@ -495,7 +716,7 @@ function renderQuickChecks(quick) {
   table.replaceChildren();
   if (!quick.length) return;
   const head = table.createTHead().insertRow();
-  for (const [label, num] of [['Model', false], ['Correct', true], ['Confidently wrong', true], ['Asked', true], ['Unsafe writes', true], ['Outcome', false], ['Run', true]]) head.append(el('th', num ? 'num' : '', label));
+  for (const [label, num] of [['Model', false], ['Correct', true], ['Harder', true], ['Confidently wrong', true], ['Asked', true], ['Unsafe writes', true], ['Outcome', false], ['Run', true]]) head.append(el('th', num ? 'num' : '', label));
   const body = table.createTBody();
   for (const run of quick) {
     const s = run.summary;
@@ -530,7 +751,7 @@ function renderTestsMatrix(runs, questions) {
     head.append(th);
   }
   const body = table.createTBody();
-  for (const tier of ['T1', 'T2', 'T3']) {
+  for (const tier of ['T1', 'T4', 'T2', 'T3'].filter((t) => questions.some((q) => q.tier === t))) {
     const group = body.insertRow();
     group.className = 'group';
     const label = group.insertCell();
@@ -909,11 +1130,26 @@ $('clarification-reply').addEventListener('submit', (event) => {
   event.preventDefault();
   const answer = $('clarification-answer').value.trim();
   if (!answer) return;
-  $('question').value += /^\d{4}$/.test(answer) ? ` ${answer}` : `\nClarification: ${answer}`;
+  // A conversation carries the question already; the answer alone is the
+  // follow-up. Without one, the answer is appended as before.
+  if (state.conversationId && state.turns && currentMode() === 'agent') $('question').value = `Answer to your question: ${answer}`;
+  else $('question').value += /^\d{4}$/.test(answer) ? ` ${answer}` : `\nClarification: ${answer}`;
   saveWorkspace();
   generate();
 });
 $('check-button').addEventListener('click', checkDraft);
+$('run-button').addEventListener('click', runSql);
+$('new-conversation').addEventListener('click', () => {
+  setConversation(null);
+  $('question').value = '';
+  $('question').focus();
+  flash('New conversation. The next question starts without earlier context.', true);
+  saveWorkspace();
+});
+$('mode-select').addEventListener('change', () => {
+  try { localStorage.setItem(MODE_KEY, currentMode()); } catch { /* private window */ }
+  applyMode();
+});
 $('copy-button').addEventListener('click', async () => {
   const sql = $('sql-editor').value;
   if (!sql.trim()) return flash('There is no SQL to copy.');
@@ -931,6 +1167,9 @@ $('clear-button').addEventListener('click', () => {
   $('clarification-reply').hidden = true;
   state.lastResult = null;
   state.lastQuestion = '';
+  setConversation(null);
+  clearSteps();
+  renderExecution(null);
   renderContext();
   renderChecks();
   resultStatus('Waiting for a question');

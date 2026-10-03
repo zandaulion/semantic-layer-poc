@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { config } from '../../server/config.js';
 import { elasticHealth } from '../../server/elastic.js';
 import { runCase } from '../pipeline.mjs';
+import { explainWarehouseQuery, runWarehouseQuery } from '../../server/warehouse.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -50,6 +51,13 @@ const original = JSON.parse(await readFile(flag('--t0-cases', path.join(here, '.
 // --quick: the cases marked quick, without T0. It answers one question --
 // does this model serve correctly at all? -- before a full run is paid for.
 const quick = argv.includes('--quick');
+// --run-sql: the agent may test its drafts against the warehouse in DWH_URL,
+// as it does in the application. Without it the agent has no run_sql tool.
+const runSql = argv.includes('--run-sql') && config.dwhUrl ? (sql, options) => (options?.explainOnly ? explainWarehouseQuery(sql) : runWarehouseQuery(sql, options)) : null;
+if (argv.includes('--run-sql') && !config.dwhUrl) {
+  console.error('--run-sql needs DWH_URL.');
+  process.exit(2);
+}
 const cases = quick ? bench.filter((c) => c.quick) : [...original, ...bench];
 
 // --resume FILE: answers from an earlier, stopped run of the same benchmark
@@ -71,7 +79,7 @@ let done = results.length;
 // deadline, by a spent allowance -- leaves what it had, to score or resume.
 const save = (final) => writeFile(out, `${JSON.stringify({
   recorded_at: new Date().toISOString(),
-  backend: { model: config.modelName, extra_body: config.modelExtraBody },
+  backend: { model: config.modelName, extra_body: config.modelExtraBody, answer_mode: config.answerMode, run_sql: Boolean(runSql) },
   catalog: config.catalogPath, index: config.elasticIndex,
   repeats, concurrency, quick, stopped_early: stoppedEarly, complete: final && !stoppedEarly,
   wall_ms: Date.now() - started,
@@ -84,7 +92,7 @@ let saving = Promise.resolve();
 let stoppedEarly = null;
 await Promise.all(Array.from({ length: concurrency }, async () => {
   for (let item = queue.shift(); item && !stoppedEarly; item = queue.shift()) {
-    const result = await runCase(item.testCase);
+    const result = await runCase(item.testCase, { runSql });
     results.push({ tier: item.testCase.tier, repeat: item.repeat, ...result });
     done += 1;
     saving = saving.then(() => save(false));

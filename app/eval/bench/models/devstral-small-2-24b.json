@@ -27,5 +27,6 @@
   "extra_body": {
     "temperature": 0.1,
     "reasoning_effort": "none"
-  }
+  },
+  "tool_parser": "mistral"
 }

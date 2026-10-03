@@ -1,16 +1,18 @@
 # Banking DWH Studio PWA
 
-The app serves an installable PWA with an invite gate, synthetic catalog search, GPT-OSS SQL drafting, an editable SQL review panel, and query history, plus two tabs for the model benchmark: recorded results, and running a new test. Node and Elasticsearch each run as a rootless container on the A1 host, on a private network between them. The browser talks only to the Node server; the model key stays on that host. There are no npm runtime dependencies.
+The app serves an installable PWA with an invite gate, synthetic catalog search, SQL drafting in two modes (an agent with lookup tools, or a retrieval pipeline), an editable SQL review panel that can run a draft read-only against a seeded warehouse, conversations and query history, plus two tabs for the model benchmark: recorded results, and running a new test. Node, Elasticsearch and the warehouse each run as a rootless container on the A1 host, on a private network between them. The browser talks only to the Node server; the model key stays on that host. There are no npm runtime dependencies.
 
 ## Local run
 
-From this directory, run `npm test`, then `npm start`. The default listener is `127.0.0.1:4387`. Run `npm run ingest` after Elasticsearch is available. `GET /api/health` checks the Node process; `GET /api/status` behind the invite gate reports Elasticsearch and model configuration. The app needs HTTPS (or localhost) for service worker installation. `npm run eval` scores the model backend against the [evaluation set](eval/README.md); it needs Elasticsearch and a model key, and exits non-zero if a case fails. `npm run eval:load` measures the model backend's latency and throughput under rising concurrency. To compare against a locally served model or a rented GPU instead of the hosted one, see [the harness README](eval/README.md). The server itself generates one draft at a time for all users; a concurrent request gets `429 busy`.
+From this directory, run `npm test`, then `npm start`. The default listener is `127.0.0.1:4387`. Run `npm run ingest` after Elasticsearch is available. `GET /api/health` checks the Node process; `GET /api/status` behind the invite gate reports Elasticsearch and model configuration. The app needs HTTPS (or localhost) for service worker installation. `npm run eval` scores the model backend against the [evaluation set](eval/README.md); it needs Elasticsearch and a model key, and exits non-zero if a case fails. `npm run eval:load` measures the model backend's latency and throughput under rising concurrency. To compare against a locally served model or a rented GPU instead of the hosted one, see [the harness README](eval/README.md). The server itself generates one draft at a time for all users; a concurrent request gets `429 busy`. `ANSWER_MODE=agent` makes the agent the default, and `DWH_URL` (a read-only `postgres://` URL) turns on execution; without it there is no Run button and no `run_sql` tool. See [configuration](../configuration.md#answer-mode-and-agent).
 
 The catalog is generated from [`../banking-poc/catalog.json`](../banking-poc/catalog.json). Indexing creates a new physical index and swaps `banking-poc-current` to it; it leaves any prior index for manual cleanup. Search uses Elasticsearch BM25 over 100 table documents. It does not index data rows or all 5,000 columns as separate documents. `POST /api/check` only checks a small set of read-only statement and physical table reference rules. It deliberately reports syntax, columns, business meaning, and execution as unverified.
 
 ## Query history
 
 Each successful generation saves its question, subject area, and complete answer in the app's SQLite database under the registered device ID. This includes SQL drafts and clarification responses. The History button lists saved answers newest first, lets the user restore a response, and lets them delete individual entries. History survives PWA reloads and server restarts. It is available only to that registered device; deleting the device removes its history. The list loads 20 entries at a time. Earlier generations made before this feature was deployed are not backfilled, and manual edits to the SQL editor remain in the current tab's session storage rather than being added to history.
+
+Answers from `/api/ask` also carry a conversation id. A follow-up in the same conversation is answered with its earlier questions and SQL in view; **New conversation** starts afresh. Separately, an append-only `audit_log` table records every question, every statement executed and by whom (the agent, the app after an answer, or the user's Run SQL), and every answer with its model, steps and token use. It is not tied to a device, so deleting a device or its history does not delete it. `GET /api/admin/audit` lists it behind the admin token.
 
 ## Model tests and Run a test
 
@@ -116,12 +118,15 @@ process rather than a reload.
 
 Both halves run as rootless Podman containers managed by Quadlet. `./deploy.sh`
 from the repository root does the whole cycle: run the tests, build the image,
-install the units, start Elasticsearch, wait for it, then start the app and
-check its health.
+install the units, start Elasticsearch, wait for it, restart the warehouse,
+then start the app and check its health. The first run also prepares the
+warehouse (`app/deploy/a1/setup-warehouse.mjs`): its seed, a cryptic copy, a
+read-only role, and two private environment files, `warehouse-pg.env` for the
+database and `warehouse-app.env` (one read-only URL) for the app.
 
 1. Ensure rootless Podman and enough RAM are available. Elasticsearch recommends `vm.max_map_count=1048576`. On Oracle Linux, set this persistently in `/etc/sysctl.d/99-banking-poc.conf` and load it with `sudo sysctl --system`.
 2. Run `node app/deploy/a1/create-env.mjs https://your-public-pwa.example.com` to create a private environment file, mode `0600`, with a random `ADMIN_TOKEN`. Add the hosted model API key to that file when available. Do not put secrets in Git, shell history, or the PWA.
-3. Run `./deploy.sh`. It installs three units from [`app/deploy/quadlet/`](deploy/quadlet): a private network, Elasticsearch, and the app.
+3. Run `./deploy.sh`. It installs four units from [`app/deploy/quadlet/`](deploy/quadlet): a private network, Elasticsearch, the warehouse (`banking-dwh-pg`), and the app.
 4. Populate the index with `podman exec banking-dwh node server/ingest.js`. Re-run it after changing the catalog: each run builds a new index, moves the `banking-poc-current` alias onto it, and then deletes the generations it replaced, so repeated ingestion does not accumulate copies of the catalogue. The catalogue ships inside the image, so this needs no checkout on the host.
 5. Publish a dedicated Cloudflare application route for the PWA hostname at path `/`, with HTTP service URL `http://127.0.0.1:4387`. The app also has a separate tailnet HTTPS route on port 8443 (`tailscale serve --bg --https=8443 http://127.0.0.1:4387`). Keep the existing tailnet port 443 route for the other PWAs. Set `PUBLIC_BASE_URL` to the public HTTPS origin so new invite URLs use it.
 6. Run `sudo python3 app/deploy/a1/install-console-route.py` to add the `/dwh/api/*` route to the existing private Caddy listener and a Bank DWH Studio entry to the invite console. The script reads the private admin token, validates Caddy, creates backups, and reloads it. The console's route remains tailnet-only; the public app's admin endpoints return 404 without the token.
@@ -132,6 +137,12 @@ check its health.
 disabled, which is only defensible while nothing can reach it. Rather than bind
 it to loopback and trust that, it is bound to nothing at all: the app container
 reaches it by name over the private network, and the host cannot.
+
+**The warehouse publishes no port and keeps nothing.** Like Elasticsearch it is
+reachable only by name on the private network. Its data lives on a tmpfs and is
+loaded from the seed at every start, so nothing a query could do outlives a
+restart. The app gets only the read-only role's URL; the superuser password
+stays in the database container's environment.
 
 **The two data directories are siblings, never nested.** `:Z` gives a bind mount
 a private SELinux label, so two containers relabelling overlapping paths take

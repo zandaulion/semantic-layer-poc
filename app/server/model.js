@@ -2,6 +2,8 @@ import { config } from './config.js';
 import { contextForHits, schemaName, DOCUMENT_STATUS } from './catalog.js';
 import { expandSearchQuery } from './elastic.js';
 import { checkSql } from './sql-check.js';
+import { chatCompletion } from './model-client.js';
+import { domainRules } from './domain-rules.js';
 
 export const responseSchema = {
   type: 'object',
@@ -219,6 +221,7 @@ export async function generateDraft({ question, previousSql = '', hits }) {
     defaultHint,
     'Do not invent a metric definition, date role, or join not supported by this context. If no period is stated, use all available rows and disclose that assumption. For an unqualified transaction request, prefer account transactions; do not ask about payment or ATM facts unless the user mentions them. Ask one focused question only if essential business meaning remains missing after checking the supplied tables and columns. Keep clarification_question under 160 characters, with no schema narrative or second question; put context in interpretation and assumptions.',
     'Return one read-only SQL draft or a clarification. Never execute SQL.',
+    config.pipelineDomainRules ? domainRules() : '',
     renderContext(context),
   ].filter(Boolean).join('\n\n');
   if (prompt.length > 40_000) {
@@ -229,82 +232,28 @@ export async function generateDraft({ question, previousSql = '', hits }) {
       metadata_status: DOCUMENT_STATUS,
     };
   }
-  let usage = null;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.modelTimeoutMs);
-  const body = {
-    model: config.modelName,
-    temperature: 0.1,
-    max_completion_tokens: 1600,
-    reasoning_effort: 'low',
-    messages: [
-      { role: 'system', content: 'You draft reviewable PostgreSQL SQL from supplied synthetic DWH metadata. Output only the requested JSON object. Resolve table and column questions from the supplied metadata; ask only when a necessary business rule is still unknown.' },
-      { role: 'user', content: prompt },
-    ],
-    response_format: { type: 'json_schema', json_schema: { name: 'sql_draft', strict: true, schema: responseSchema } },
-    ...config.modelExtraBody,
-  };
-  // A null in MODEL_EXTRA_BODY leaves that field out: some models refuse a
-  // parameter the app sends by default (Claude Sonnet 5 takes no temperature).
-  for (const [field, value] of Object.entries(config.modelExtraBody)) if (value === null) delete body[field];
-  const requestBody = JSON.stringify(body);
-  let result;
+  let payload;
   try {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const response = await fetch(`${config.modelBaseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${config.modelApiKey}`, 'content-type': 'application/json' },
-        body: requestBody,
-        signal: controller.signal,
-      });
-      if (!response.ok) {
-        const failure = await response.json().catch(() => ({}));
-        const code = failure.error?.code || failure.error?.type || 'unknown';
-        const reason = String(failure.error?.message || failure.message || 'request failed').slice(0, 300);
-        if (response.status === 400 && attempt === 0) continue;
-        const error = new Error(`Model API returned ${response.status} (${code}): ${reason}`);
-        error.publicCode = 'model_provider_error';
-        error.publicMessage = response.status === 429
-          ? 'The model rate limit was reached. Wait a moment and try again.'
-          : response.status === 401 || response.status === 403
-            ? 'The hosted model key was rejected. Check the key on the server.'
-            : 'The hosted model could not produce a draft for this request. Try a more specific question.';
-        throw error;
-      }
-      const payload = await response.json();
-      // A reply that hit the token limit is cut off mid-object and will not
-      // parse. Say so, rather than letting it read as a server that ignored
-      // the schema: under load, SGLang's default JSON grammar let the model
-      // pad a finished answer with whitespace until it ran out of tokens.
-      if (payload.choices?.[0]?.finish_reason === 'length') {
-        const error = new Error('Model response was cut off at the token limit');
-        error.publicCode = 'model_truncated';
-        // What filled the budget, for evaluation: reasoning that never ended,
-        // an answer padded with whitespace, or an answer that was simply long.
-        // Lengths and the last few characters only, never the whole reply.
-        const message = payload.choices[0].message ?? {};
-        const reasoning = String(message.reasoning_content ?? message.reasoning ?? '');
-        const content = String(message.content ?? '');
-        error.detail = {
-          completion_tokens: payload.usage?.completion_tokens ?? null,
-          reasoning_chars: reasoning.length,
-          content_chars: content.length,
-          content_whitespace_chars: content.length - content.trimEnd().length,
-          content_tail: content.trimEnd().slice(-120),
-          content_head: content.slice(0, 120),
-        };
-        error.publicMessage = 'The model ran out of room before finishing the draft. Try again, or ask a narrower question.';
-        throw error;
-      }
-      result = JSON.parse(payload.choices?.[0]?.message?.content || '{}');
-      // Reported so evaluation can size a prompt against an on-prem KV cache;
-      // not every server returns it, so it stays optional.
-      usage = payload.usage ?? null;
-      break;
-    }
+    payload = await chatCompletion({
+      model: config.modelName,
+      temperature: 0.1,
+      max_completion_tokens: 1600,
+      reasoning_effort: 'low',
+      messages: [
+        { role: 'system', content: 'You draft reviewable PostgreSQL SQL from supplied synthetic DWH metadata. Output only the requested JSON object. Resolve table and column questions from the supplied metadata; ask only when a necessary business rule is still unknown.' },
+        { role: 'user', content: prompt },
+      ],
+      response_format: { type: 'json_schema', json_schema: { name: 'sql_draft', strict: true, schema: responseSchema } },
+    }, { signal: controller.signal });
   } finally {
     clearTimeout(timer);
   }
+  const result = JSON.parse(payload.choices?.[0]?.message?.content || '{}');
+  // Reported so evaluation can size a prompt against an on-prem KV cache;
+  // not every server returns it, so it stays optional.
+  const usage = payload.usage ?? null;
   if (!['draft', 'needs_clarification', 'unsupported'].includes(result.status)) throw new Error('Model response status is invalid');
   const allowedSources = new Set(context.tables.map((table) => `table.${schemaName}.${table.table_name}`));
   const sources = (Array.isArray(result.sources) ? result.sources : []).filter((id) => allowedSources.has(id));

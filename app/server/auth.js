@@ -83,7 +83,26 @@ export class AuthStore {
         response_json TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS query_history_device_id_idx ON query_history(device_id, id DESC);
+      -- Append-only, and deliberately without a foreign key: deleting a
+      -- device or its history must not delete the record of what it asked
+      -- and what was run.
+      CREATE TABLE IF NOT EXISTS audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TEXT NOT NULL,
+        device_id TEXT,
+        device_label TEXT,
+        event TEXT NOT NULL,
+        conversation_id TEXT,
+        detail_json TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS audit_log_conversation_idx ON audit_log(conversation_id, id);
     `);
+    // Added with the agent mode; databases made before it gain the column.
+    const historyColumns = this.db.prepare('PRAGMA table_info(query_history)').all().map((column) => column.name);
+    if (!historyColumns.includes('conversation_id')) {
+      this.db.exec('ALTER TABLE query_history ADD COLUMN conversation_id TEXT');
+    }
+    this.db.exec('CREATE INDEX IF NOT EXISTS query_history_conversation_idx ON query_history(device_id, conversation_id, id)');
     this.failures = [];
   }
 
@@ -179,19 +198,53 @@ export class AuthStore {
     return this.db.prepare('DELETE FROM devices WHERE id=?').run(id).changes === 1;
   }
 
-  saveHistory(deviceId, question, domain, response) {
+  saveHistory(deviceId, question, domain, response, conversationId = null) {
     const summary = response.status === 'needs_clarification'
       ? response.clarification_question : response.interpretation;
     const result = this.db.prepare(`
-      INSERT INTO query_history (device_id, created_at, question, domain, status, summary, response_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(deviceId, now(), question, domain, response.status, String(summary || '').slice(0, 240), JSON.stringify(response));
+      INSERT INTO query_history (device_id, created_at, question, domain, status, summary, response_json, conversation_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(deviceId, now(), question, domain, response.status, String(summary || '').slice(0, 240), JSON.stringify(response), conversationId);
     return Number(result.lastInsertRowid);
+  }
+
+  /**
+   * The earlier turns of one conversation, oldest first, as the agent is
+   * shown them: the question, and what was answered -- the interpretation and
+   * SQL, or the question asked back. Rows are not repeated.
+   */
+  conversationTurns(deviceId, conversationId, limit = 6) {
+    if (!conversationId) return [];
+    return this.db.prepare(`
+      SELECT question, response_json FROM query_history
+      WHERE device_id=? AND conversation_id=? ORDER BY id DESC LIMIT ?
+    `).all(deviceId, conversationId, limit).reverse().map((row) => {
+      const response = JSON.parse(row.response_json);
+      const answer = response.status === 'needs_clarification'
+        ? `I asked: ${response.clarification_question}`
+        : [`(${response.status}) ${response.interpretation || ''}`.trim(), response.sql ? `SQL:\n${response.sql}` : ''].filter(Boolean).join('\n');
+      return { question: row.question, summary: answer };
+    });
+  }
+
+  audit(device, event, detail = {}, conversationId = null) {
+    this.db.prepare(`
+      INSERT INTO audit_log (created_at, device_id, device_label, event, conversation_id, detail_json)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(now(), device?.id ?? null, device?.label ?? null, event, conversationId, JSON.stringify(detail));
+  }
+
+  listAudit(limit = 100, before = null) {
+    const rows = this.db.prepare(`
+      SELECT * FROM audit_log WHERE (? IS NULL OR id < ?) ORDER BY id DESC LIMIT ?
+    `).all(before, before, limit + 1).map(({ detail_json, ...row }) => ({ ...row, detail: JSON.parse(detail_json) }));
+    const entries = rows.slice(0, limit);
+    return { entries, next_before: rows.length > limit ? entries.at(-1).id : null };
   }
 
   listHistory(deviceId, limit = 20, before = null) {
     const rows = this.db.prepare(`
-      SELECT id, created_at, question, domain, status, summary
+      SELECT id, created_at, question, domain, status, summary, conversation_id
       FROM query_history
       WHERE device_id=? AND (? IS NULL OR id < ?)
       ORDER BY id DESC LIMIT ?
@@ -202,7 +255,7 @@ export class AuthStore {
 
   getHistory(deviceId, id) {
     const row = this.db.prepare(`
-      SELECT id, created_at, question, domain, status, response_json
+      SELECT id, created_at, question, domain, status, response_json, conversation_id
       FROM query_history WHERE device_id=? AND id=?
     `).get(deviceId, id);
     if (!row) return null;

@@ -23,6 +23,7 @@ import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { appendFileSync } from 'node:fs';
 import { mkdir, readdir, readFile, writeFile, rm } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -133,10 +134,39 @@ async function loadProfile() {
 
 // ------------------------------------------------------------ the pipeline
 
+/**
+ * vLLM arguments for an agent run. The model must emit tool calls vLLM can
+ * parse, which takes the parser for its family (the profile's tool_parser),
+ * and a conversation re-sends every table it has read, so it needs more room
+ * than one pipeline prompt: at least 32k tokens.
+ */
+function agentArgs(profile) {
+  if (!profile.tool_parser) throw new Error(`${profile.name} has no tool_parser in its profile; an agent run needs one (openai, hermes, mistral...).`);
+  // Prefix caching back on: every step re-sends the conversation so far, and
+  // an agent deployment would not pay for that prefix again at each one.
+  const args = profile.vllm_args.filter((arg) => arg !== '--no-enable-prefix-caching');
+  const at = args.indexOf('--max-model-len');
+  if (at === -1) args.push('--max-model-len', '32768');
+  else args[at + 1] = String(Math.max(Number(args[at + 1]), 32768));
+  return [...args, '--enable-auto-tool-choice', '--tool-call-parser', profile.tool_parser];
+}
+
+/**
+ * The read-only URL the application uses (deploy/a1/setup-warehouse.mjs), on
+ * the cryptic copy for a cryptic run. The agent's test queries go there; the
+ * scoring still runs in the benchmark's own database, from the same seed.
+ */
+async function warehouseUrl(cryptic) {
+  const file = path.join(os.homedir(), '.config', 'banking-sql-poc', 'warehouse-app.env');
+  const url = (await readFile(file, 'utf8').catch(() => '')).match(/^DWH_URL=(.+)$/m)?.[1];
+  if (!url) throw new Error(`No DWH_URL in ${file}: run app/deploy/a1/setup-warehouse.mjs and start banking-dwh-pg.`);
+  return cryptic ? url.replace(/\/dwh$/, '/dwh_cryptic') : url;
+}
+
 async function preflight() {
   const { stdout } = await run('podman', ['ps', '--format', '{{.Names}}']);
   const names = stdout.split('\n');
-  for (const needed of ['banking-poc-elasticsearch']) {
+  for (const needed of ['banking-poc-elasticsearch', ...(flag('--answer') === 'agent' ? ['banking-dwh-pg'] : [])]) {
     if (!names.includes(needed)) throw new Error(`${needed} is not running; start the POC first.`);
   }
 }
@@ -304,7 +334,7 @@ const ranked = (results) => [...results].sort((a, b) => Boolean(a.note || a.fail
   || b.recorded_at.localeCompare(a.recorded_at));
 
 function table(results) {
-  const header = ['Date', 'Model', 'Card', 'T1 correct', 'Confidently wrong', 'T2 asked', 'T3 unsafe', 'T0 pass', 'p50', 'q/min', '$ / 1k q', 'Run', 'Cost'];
+  const header = ['Date', 'Model', 'Card', 'T1 correct', 'T4 hard', 'Confidently wrong', 'T2 asked', 'T3 unsafe', 'T0 pass', 'p50', 'q/min', '$ / 1k q', 'Run', 'Cost'];
   const rows = results.map((r) => {
     const s = r.summary;
     if (!s) return [r.recorded_at.slice(0, 10), `${r.model.name} (did not run)`, r.card ?? '—', '—', '—', '—', '—', '—', '—', '—', '—', `${Math.round(r.timings.total_s / 60 * 10) / 10} min`, r.cost_usd !== null && r.cost_usd !== undefined ? `$${r.cost_usd.toFixed(2)}` : '—'];
@@ -312,6 +342,7 @@ function table(results) {
     return [
       r.recorded_at.slice(0, 10), r.model.name, r.card ?? '—',
       `${pct(s.t1.accuracy_pct)} (${s.t1.correct}/${s.t1.answers})`,
+      s.t4 ? `${pct(s.t4.accuracy_pct)} (${s.t4.correct}/${s.t4.answers}, ${s.t4.wrong_result} wrong)` : '—',
       `${pct(s.confidently_wrong.pct_of_t1_t2)} (${s.confidently_wrong.count})`,
       `${pct(s.t2.asked_pct)}`, `${s.t3.unsafe}/${s.t3.answers}`, pct(s.t0.pass_pct),
       s.latency_ms.p50 ? `${(s.latency_ms.p50 / 1000).toFixed(1)} s` : '—',
@@ -377,6 +408,25 @@ async function main() {
     }
     : await loadProfile();
   const quick = has('--quick');
+  // --answer agent: the model looks tables up with tools and tests its drafts
+  // against the application's warehouse (banking-dwh-pg), instead of the
+  // pipeline's one retrieval and one call.
+  const answer = flag('--answer', 'pipeline');
+  if (!['pipeline', 'agent'].includes(answer)) throw new Error('--answer is pipeline or agent.');
+  const agent = answer === 'agent';
+  // Ablations, to find out where an agent's gain comes from:
+  // --no-run-sql      the agent looks tables up but cannot test its drafts
+  // --no-domain-rules neither mode is given banking-poc/domain-rules.md
+  // --pipeline-rules  the pipeline is given those rules too
+  const noRunSql = has('--no-run-sql');
+  // --explain-only: run_sql checks drafts with EXPLAIN and shows no rows
+  const explainOnly = has('--explain-only');
+  if (explainOnly && (!agent || noRunSql)) throw new Error('--explain-only is for --answer agent, without --no-run-sql.');
+  const noRules = has('--no-domain-rules');
+  const pipelineRules = has('--pipeline-rules');
+  if ((noRunSql && !agent) || (pipelineRules && agent) || (noRules && pipelineRules)) throw new Error('--no-run-sql is for --answer agent, --pipeline-rules for the pipeline, and not with --no-domain-rules.');
+  const variant = [agent ? 'agent' : (pipelineRules ? 'pipeline' : null), noRunSql ? 'no run_sql' : null, explainOnly ? 'explain only' : null, noRules ? 'no rules' : null, pipelineRules ? 'with rules' : null].filter(Boolean);
+  const variantSlug = variant.length ? `-${variant.join('-').replace(/[^a-z]+/gi, '-')}` : '';
   const names = flag('--names', 'descriptive');
   if (!['descriptive', 'cryptic'].includes(names)) throw new Error('--names is descriptive or cryptic.');
   const cryptic = names === 'cryptic';
@@ -386,7 +436,8 @@ async function main() {
   const concurrency = Number(flag('--concurrency', flag('--openrouter') ? 4 : 16));
   const levels = flag('--load-levels', '1,8,32');
   const cloud = has('--community') ? 'COMMUNITY' : 'SECURE';
-  const maxMinutes = Number(flag('--max-minutes', 20));
+  // An agent asks several times per question, so its runs get longer.
+  const maxMinutes = Number(flag('--max-minutes', flag('--answer') === 'agent' ? 40 : 20));
   const deadline = t0 + maxMinutes * 60_000;
 
   const offline = Boolean(external || flag('--drafts'));
@@ -472,7 +523,7 @@ async function main() {
       const created = await createPod({
         name, cards: profile.cards, cloud, image: profile.image ?? IMAGE, disk: profile.disk_gb,
         minCuda: profile.min_cuda ?? '12.8', env: { VLLM_API_KEY: serverKey },
-        cmd: ['--model', profile.hf, '--served-model-name', profile.name, ...profile.vllm_args],
+        cmd: ['--model', profile.hf, '--served-model-name', profile.name, ...(agent ? agentArgs(profile) : profile.vllm_args)],
       });
       podId = created.pod.id;
       podStarted = Date.now();
@@ -509,7 +560,9 @@ async function main() {
           const slug = (text) => text.replace(/^NVIDIA (GeForce )?/, '').replace(/[^A-Za-z0-9.]+/g, '-');
           const failed = {
             recorded_at: recordedAt,
-            model: { name: profile.name, hf: profile.hf, about: profile.about, vllm_args: profile.vllm_args ?? null, extra_body: profile.extra_body ?? {} },
+            // Named apart, so the tables show an agent run beside the same model's
+    // pipeline runs rather than as one more run of it.
+    model: { name: variant.length ? `${profile.name} (${variant.join(', ')})` : profile.name, hf: profile.hf, about: profile.about, vllm_args: profile.vllm_args ?? null, extra_body: profile.extra_body ?? {} },
             server: `vLLM ${(profile.image ?? IMAGE).split(':').pop()}`, server_image: profile.image ?? IMAGE,
             card, cloud, price_per_hour: price,
             cost_usd: price && timings.pod_s ? Math.round(price * timings.pod_s / 36) / 100 : null,
@@ -519,7 +572,7 @@ async function main() {
           };
           const dir = cryptic ? crypticDir : resultsDir;
           await mkdir(dir, { recursive: true });
-          const out = path.join(dir, `${recordedAt.slice(0, 16).replace(/[:T-]/g, '')}-${slug(profile.name)}-${slug(card)}${cryptic ? '-cryptic' : ''}.json`);
+          const out = path.join(dir, `${recordedAt.slice(0, 16).replace(/[:T-]/g, '')}-${slug(profile.name)}-${slug(card)}${cryptic ? '-cryptic' : ''}${variantSlug}.json`);
           await writeFile(out, `${JSON.stringify(failed, null, 2)}\n`);
           say(`recorded as a run that did not start: ${path.relative(process.cwd(), out)}`);
         }
@@ -546,6 +599,10 @@ async function main() {
       // --rate-limit-attempts raises how long a question may wait for room.
       MODEL_RATE_LIMIT_ATTEMPTS: flag('--rate-limit-attempts', openrouter ? '12' : '4'),
       ...namesEnv,
+      ...(agent ? { ANSWER_MODE: 'agent', AGENT_TIMEOUT_MS: '600000', ...(noRunSql ? {} : { DWH_URL: await warehouseUrl(cryptic) }) } : {}),
+      ...(noRules ? { DOMAIN_RULES_PATH: '/dev/null' } : {}),
+      ...(explainOnly ? { AGENT_SQL_CHECK: 'explain' } : {}),
+      ...(pipelineRules ? { PIPELINE_DOMAIN_RULES: '1' } : {}),
     };
     await probe(baseUrl, serverKey, profile);
     let started = Date.now();
@@ -553,7 +610,7 @@ async function main() {
     // --resume FILE: a stopped run's saved answers, kept rather than asked again.
     const resume = flag('--resume');
     if (resume) await writeFile(path.join(outDir, 'previous.json'), await readFile(resume));
-    await inRunner('eval/bench/drafts.mjs', ['--out', '/out/drafts.json', '--repeats', String(repeats), '--concurrency', String(concurrency), ...(quick ? ['--quick'] : []), ...(namesEnv.CATALOG_PATH ? ['--t0-cases', '/out/t0-cases.json'] : []), ...(resume ? ['--resume', '/out/previous.json'] : [])], env, outDir, (line) => {
+    await inRunner('eval/bench/drafts.mjs', ['--out', '/out/drafts.json', '--repeats', String(repeats), '--concurrency', String(concurrency), ...(quick ? ['--quick'] : []), ...(namesEnv.CATALOG_PATH ? ['--t0-cases', '/out/t0-cases.json'] : []), ...(resume ? ['--resume', '/out/previous.json'] : []), ...(agent && !noRunSql ? ['--run-sql'] : [])], env, outDir, (line) => {
       if (/STOPPED quota/.test(line)) { say('stopping: the provider\'s daily allowance is used up'); return; }
       if (/STOPPED \d/.test(line)) { say(`stopping early: ${line.slice(line.indexOf('STOPPED') + 8)} replies so far failed`); return; }
       // Anywhere in the line: a rate-limit notice ("rate limited, waiting
@@ -630,7 +687,9 @@ async function main() {
   const recordedAt = new Date().toISOString();
   const result = {
     recorded_at: recordedAt,
-    model: { name: profile.name, hf: profile.hf, about: profile.about, vllm_args: profile.vllm_args ?? null, extra_body: profile.extra_body ?? {} },
+    // Named apart, so the tables show an agent run beside the same model's
+    // pipeline runs rather than as one more run of it.
+    model: { name: variant.length ? `${profile.name} (${variant.join(', ')})` : profile.name, hf: profile.hf, about: profile.about, vllm_args: profile.vllm_args ?? null, extra_body: profile.extra_body ?? {} },
     // How the model was served: the vLLM image (whose tag is the vLLM version)
     // for a rented pod, or the API's host for an existing endpoint.
     server: external ? `API: ${openrouter ? 'OpenRouter' : flag('--provider', new URL(external).host)}` : `vLLM ${(profile.image ?? IMAGE).split(':').pop()}`,
@@ -640,6 +699,10 @@ async function main() {
     // Which names the model was shown: the catalog as written, or the same
     // tables and columns abbreviated (cryptic-names.mjs), descriptions kept.
     names,
+    // pipeline: retrieval and one call. agent: lookups with tools and test
+    // queries.
+    answer_mode: answer,
+    ablation: { run_sql: agent && !noRunSql ? (explainOnly ? 'explain' : 'run') : false, domain_rules: agent ? !noRules : pipelineRules },
     // Whether the bank could run this model itself: a rented GPU serves only
     // open weights; OpenRouter says which of its models are; another API is
     // whatever --weights says, or unknown.
@@ -659,7 +722,7 @@ async function main() {
   result.quick = quick;
   await mkdir(target, { recursive: true });
   const slug = (text) => text.replace(/^NVIDIA (GeForce )?/, '').replace(/[^A-Za-z0-9.]+/g, '-');
-  const file = path.join(target, `${recordedAt.slice(0, 16).replace(/[:T-]/g, '')}-${slug(profile.name)}-${slug(card ?? (openrouter ? 'openrouter' : 'external'))}${cryptic ? '-cryptic' : ''}.json`);
+  const file = path.join(target, `${recordedAt.slice(0, 16).replace(/[:T-]/g, '')}-${slug(profile.name)}-${slug(card ?? (openrouter ? 'openrouter' : 'external'))}${cryptic ? '-cryptic' : ''}${variantSlug}.json`);
   await writeFile(file, `${JSON.stringify(result, null, 2)}\n`);
   await rm(outDir, { recursive: true, force: true });
   if (!has('--keep-db')) await stopDatabase();
@@ -668,7 +731,7 @@ async function main() {
   console.log(`
   ${profile.name} on ${card ?? external ?? 'saved answers'}
   T1 hard questions   ${s.t1.correct}/${s.t1.answers} correct (${pct(s.t1.accuracy_pct)}): ${s.t1.wrong_result} wrong result, ${s.t1.sql_error} did not run, ${s.t1.asked} asked, ${s.t1.failed} failed
-  T2 unanswerable     ${s.t2.asked}/${s.t2.answers} asked, ${s.t2.drafted} drafted anyway
+${s.t4 ? `  T4 harder           ${s.t4.correct}/${s.t4.answers} correct (${pct(s.t4.accuracy_pct)}): ${s.t4.wrong_result} wrong result, ${s.t4.sql_error} did not run, ${s.t4.asked} asked, ${s.t4.failed} failed\n` : ''}  T2 unanswerable     ${s.t2.asked}/${s.t2.answers} asked, ${s.t2.drafted} drafted anyway
   T3 writes           ${s.t3.unsafe} unsafe of ${s.t3.answers}, model wrote DML ${s.t3.emitted_write} times (caught)
   T0 original twelve  ${s.t0.pass}/${s.t0.answers} (${pct(s.t0.pass_pct)})
   confidently wrong   ${s.confidently_wrong.count} (${pct(s.confidently_wrong.pct_of_t1_t2)} of T1+T2)

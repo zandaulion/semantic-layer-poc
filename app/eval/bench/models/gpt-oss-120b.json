@@ -16,5 +16,6 @@
     "0.92",
     "--no-enable-prefix-caching"
   ],
-  "extra_body": {}
+  "extra_body": {},
+  "tool_parser": "openai"
 }

@@ -25,5 +25,6 @@
     "chat_template_kwargs": {
       "enable_thinking": false
     }
-  }
+  },
+  "tool_parser": "hermes"
 }

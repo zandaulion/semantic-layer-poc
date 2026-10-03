@@ -163,12 +163,16 @@ medians, customers active in every quarter. Each is asked three times.
 | Model | T4 agent | T4 pipeline | T1 agent | T1 pipeline | Agent confidently wrong, T1+T2 | Agent answer time (p50) |
 | --- | --- | --- | --- | --- | --- | --- |
 | Qwen3.8-27B (FP8) | 96% | 47% | 98.6% | 71% | 1 | 60 s |
-| gpt-oss-120b | 96% | not run | 92.8% | 62%¹ | 5 | 22 s |
+| gpt-oss-120b | 96% | 51% | 92.8% | 65% | 5 | 22 s |
 | Qwen3.6-35B-A3B (FP8) | 92% | 39% | 97.1% | 61% | 1 | 23 s |
 | Qwen3.6-35B-A3B, `EXPLAIN` only | 84% | — | 100% | — | 0 | 19 s |
 | gpt-oss-20b | 76% | 49% | 91.3% | 49% | 3 | 11 s |
 
-¹ From the 2026-09-27 run, before T4 existed.
+For scale, the closed models through OpenRouter, in pipeline mode, on T4: Claude
+Sonnet 5 71%, Gemini 3.8 Flash 69% (3 wrong, the most careful), GPT-4.1 mini
+55%, GPT-4.1 49% (19 wrong), GPT-6 Luna 22% (it asks back on most questions).
+Every open model run as an agent scored above every closed model run as a
+pipeline.
 
 Where the gain comes from was measured by taking the agent apart, with
 gpt-oss-20b on T1:

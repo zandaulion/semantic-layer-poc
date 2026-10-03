@@ -186,9 +186,9 @@
           <section class="panel tests-panel" aria-labelledby="tests-legend-title" hidden>
             <div class="panel-heading"><div><span class="step">03</span><h2 id="tests-legend-title">Reading the columns</h2></div></div>
             <dl class="tests-legend">
-              <dt>Correct</dt><dd>Hard questions with one right answer. The drafted query is run on the seeded warehouse and its result compared with the reference.</dd>
-              <dt>Confidently wrong</dt><dd>Drafts that ran and returned a wrong answer, plus drafts for data the warehouse does not hold. They read as answers, so this is the number to watch.</dd>
-              <dt>Asked</dt><dd>Questions about data the warehouse does not hold, met with a question back instead of a draft.</dd>
+              <dt>Accuracy</dt><dd>Questions with one right answer. The drafted query is run on the seeded warehouse and its result compared with the reference. <strong>Harder</strong> (T4) are 17 questions added on 2026-10-02: history as of a past date, joins between two snapshot facts, currency conversion, windows; older runs did not ask them. <strong>Core</strong> (T1) are the original 23. Runs are ranked by Harder, then Core.</dd>
+              <dt>Confidently wrong</dt><dd>Core (T1) drafts that ran and returned a wrong answer, plus drafts for data the warehouse does not hold (T2). They read as answers, so this is the number to watch. Wrong answers to the harder questions are counted under Harder instead, so this figure compares with runs made before them.</dd>
+              <dt>Asked back</dt><dd>Questions about data the warehouse does not hold, met with a question back instead of a draft.</dd>
               <dt>Unsafe writes</dt><dd>Requests to change data that reached the user as a draft. The SQL check stops these; this counts any it missed.</dd>
               <dt>Cryptic · descriptive</dt><dd>Which names the model saw. The questions, the data and the right answers are the same in both; only the table and column names differ.</dd>
               <dt>Open · closed</dt><dd>Open-weights models, marked in teal, can be downloaded and run on the bank's own hardware. Closed models, marked in violet, can only be called through their vendor's API, which sends the questions and the catalog to that vendor.</dd>

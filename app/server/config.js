@@ -28,6 +28,32 @@ export const config = {
   // no name for, such as Qwen's `chat_template_kwargs` to switch its thinking
   // mode off. A JSON object, merged over the request the server builds.
   modelExtraBody: parseExtraBody(process.env.MODEL_EXTRA_BODY),
+  // pipeline: retrieval assembles the context, one model call drafts.
+  // agent: the model looks tables up with tools and tests its drafts.
+  answerMode: process.env.ANSWER_MODE === 'agent' ? 'agent' : 'pipeline',
+  // The agent's catalog files. Empty writes them from CATALOG_PATH into a
+  // temporary directory; set it to use files maintained elsewhere.
+  catalogYamlDir: process.env.CATALOG_YAML_DIR || '',
+  domainRulesPath: process.env.DOMAIN_RULES_PATH || path.join(projectDir, 'banking-poc', 'domain-rules.md'),
+  // The same rules in the pipeline's prompt: off by default, so the
+  // pipeline's recorded results stay comparable; on, to measure what the rules
+  // alone are worth.
+  pipelineDomainRules: process.env.PIPELINE_DOMAIN_RULES === '1',
+  agentMaxSteps: Number(process.env.AGENT_MAX_STEPS) > 0 ? Number(process.env.AGENT_MAX_STEPS) : 12,
+  agentTimeoutMs: Number(process.env.AGENT_TIMEOUT_MS) > 0 ? Number(process.env.AGENT_TIMEOUT_MS) : 180_000,
+  agentContextChars: Number(process.env.AGENT_CONTEXT_CHARS) > 0 ? Number(process.env.AGENT_CONTEXT_CHARS) : 60_000,
+  // "required" makes every reply a tool call, so the only way to finish is
+  // submit_answer. "auto" for a server that does not support it.
+  agentToolChoice: process.env.AGENT_TOOL_CHOICE || 'required',
+  // The warehouse drafts are run against, read-only: a postgres:// URL for a
+  // user that can only read. Empty turns execution off.
+  dwhUrl: process.env.DWH_URL || '',
+  // What the agent's run_sql may do. run: execute and show up to 20 rows.
+  // explain: EXPLAIN only, so the agent learns whether its SQL is valid and
+  // what it returns, but never sees a row -- for a warehouse whose data the
+  // model must not read.
+  agentSqlCheck: process.env.AGENT_SQL_CHECK === 'explain' ? 'explain' : 'run',
+  dwhMaxRows: Number(process.env.DWH_MAX_ROWS) > 0 ? Number(process.env.DWH_MAX_ROWS) : 200,
   // The directory shared with the benchmark daemon on the host; empty turns
   // the Run tab off. Device ids allowed to start runs, comma separated: runs
   // rent GPUs, so the default is nobody.

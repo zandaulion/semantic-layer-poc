@@ -1,7 +1,7 @@
 [Unit]
 Description=Bank DWH Studio PWA and API
-After=network-online.target banking-poc-elasticsearch.service
-Wants=network-online.target banking-poc-elasticsearch.service
+After=network-online.target banking-poc-elasticsearch.service banking-dwh-pg.service
+Wants=network-online.target banking-poc-elasticsearch.service banking-dwh-pg.service
 
 [Container]
 Image=localhost/banking-dwh:latest
@@ -14,6 +14,10 @@ PublishPort=127.0.0.1:4387:4387
 # invites survive the move into a container.
 Volume=%h/.local/share/banking-sql-poc:/data:Z
 EnvironmentFile=%h/.config/banking-sql-poc/server.env
+# DWH_URL only: the read-only user's URL for banking-dwh-pg, written by
+# app/deploy/a1/setup-warehouse.mjs. The superuser password stays with the
+# database container.
+EnvironmentFile=%h/.config/banking-sql-poc/warehouse-app.env
 # Bind to every interface *inside the container*, which is not the same as
 # exposing it. The default of 127.0.0.1 is right for a host process and wrong
 # here: PublishPort forwards to the container's external address, so a server

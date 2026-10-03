@@ -9,8 +9,9 @@ import { loadBenchResults } from './bench-results.js';
 import { benchAvailable, benchRequest, mayRunBench } from './bench-runner.js';
 import { domains, tables, DOCUMENT_STATUS } from './catalog.js';
 import { elasticHealth, searchTables } from './elastic.js';
-import { generateDraft } from './model.js';
+import { answerQuestion } from './answer.js';
 import { checkSql } from './sql-check.js';
+import { checksAfterExecution, explainWarehouseQuery, runWarehouseQuery, warehouseConfigured } from './warehouse.js';
 
 const typeByExtension = {
   '.html': 'text/html; charset=utf-8',
@@ -90,6 +91,14 @@ function sameOrigin(req) {
   catch { return false; }
 }
 
+function requestedMode(mode) {
+  return mode === 'agent' || mode === 'pipeline' ? mode : config.answerMode;
+}
+
+function validConversationId(value) {
+  return typeof value === 'string' && /^[0-9a-f-]{36}$/.test(value) ? value : null;
+}
+
 function publicDevice(device) {
   return { id: device.id, label: device.label, created_at: device.created_at, last_seen: device.last_seen };
 }
@@ -97,6 +106,78 @@ function publicDevice(device) {
 export function createAppServer({ auth = new AuthStore(path.join(config.dataDir, 'auth.sqlite')) } = {}) {
   const webHash = hashWebDirectory(config.webDir);
   let generating = false;
+
+  /**
+   * One question, answered over server-sent events: each step the agent takes
+   * as it happens, then the answer, then -- for a draft that passed the
+   * statement check -- the result of running it. Every question, every
+   * statement run and every outcome goes to the audit log.
+   */
+  async function streamAnswer({ res, device, question, domain, previousSql, mode, conversationId }) {
+    res.writeHead(200, {
+      'content-type': 'text/event-stream; charset=utf-8',
+      'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff',
+      // Proxies that buffer would hold every step back until the end.
+      'x-accel-buffering': 'no',
+    });
+    const send = (event, data) => { if (!res.writableEnded) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); };
+    // A comment line now and then keeps the tunnel from closing a quiet
+    // stream while the model thinks or waits out a rate limit.
+    const heartbeat = setInterval(() => { if (!res.writableEnded) res.write(': keep-alive\n\n'); }, 15_000);
+    const started = Date.now();
+    send('conversation', { conversation_id: conversationId, mode });
+    auth.audit(device, 'question', { question, domain, mode, revising: Boolean(previousSql.trim()) }, conversationId);
+    try {
+      const runSql = warehouseConfigured()
+        ? async (sql, options) => {
+          const execution = options?.explainOnly ? await explainWarehouseQuery(sql) : await runWarehouseQuery(sql, options);
+          auth.audit(device, options?.explainOnly ? 'explain' : 'execute', { source: 'agent', sql, ok: execution.ok, row_count: execution.row_count ?? null, error: execution.error ?? null, ms: execution.ms ?? null }, conversationId);
+          return execution;
+        }
+        : null;
+      const result = await answerQuestion({
+        question, domain, previousSql, mode, runSql,
+        history: auth.conversationTurns(device.id, conversationId),
+        onEvent: (event) => send(event.type, event),
+      });
+      if (result.status === 'error') {
+        auth.audit(device, 'error', { code: result.code }, conversationId);
+        send('error', { error: result.code, message: result.message });
+        return;
+      }
+      send('answer', result);
+      if (result.status === 'draft' && result.checks?.statement === 'passed' && warehouseConfigured()) {
+        send('executing', {});
+        const execution = await runWarehouseQuery(result.sql);
+        auth.audit(device, 'execute', { source: 'answer', sql: result.sql, ok: execution.ok, row_count: execution.row_count ?? null, error: execution.error ?? null, ms: execution.ms ?? null }, conversationId);
+        // Kept with the answer, a page of it: history is for finding a
+        // query again, not a copy of the warehouse.
+        result.execution = { ...execution, rows: execution.rows?.slice(0, 50) };
+        result.checks = checksAfterExecution(result.checks, execution);
+        send('execution', execution);
+        send('checks', result.checks);
+      }
+      let historyId = null;
+      try { historyId = auth.saveHistory(device.id, question, domain, result, conversationId); }
+      catch (error) { console.error(`Could not save query history: ${error.message}`); }
+      auth.audit(device, 'answer', {
+        status: result.status, mode: result.mode, model: result.model, sql: result.sql, sources: result.sources,
+        steps: result.agent_trace?.map(({ tool, summary }) => `${tool}: ${summary}`) ?? null,
+        usage: result.usage ?? null, ms: Date.now() - started, history_id: historyId,
+      }, conversationId);
+      send('saved', { history_id: historyId, conversation_id: conversationId });
+    } catch (error) {
+      console.error(`/api/ask: ${error.message}`);
+      auth.audit(device, 'error', { code: error.publicCode || 'service_unavailable', message: String(error.message).slice(0, 300) }, conversationId);
+      send('error', { error: error.publicCode || 'service_unavailable', message: error.publicMessage || 'The service is temporarily unavailable.' });
+    } finally {
+      clearInterval(heartbeat);
+      send('done', {});
+      res.end();
+    }
+  }
+
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://local.invalid');
     const pathname = url.pathname;
@@ -125,6 +206,11 @@ export function createAppServer({ auth = new AuthStore(path.join(config.dataDir,
         if (!constantTimeTokenMatch(req.headers['x-admin-token'], config.adminToken)) return json(res, 404, { error: 'not_found' });
         if (pathname === '/api/admin/devices' && req.method === 'GET') return json(res, 200, auth.listDevices());
         if (pathname === '/api/admin/invites' && req.method === 'GET') return json(res, 200, auth.listInvites());
+        if (pathname === '/api/admin/audit' && req.method === 'GET') {
+          const limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit')) || 100));
+          const before = Number(url.searchParams.get('before')) || null;
+          return json(res, 200, auth.listAudit(limit, before));
+        }
         if (pathname === '/api/admin/invites' && req.method === 'POST') {
           const body = await readJson(req);
           return json(res, 201, auth.createInvite(body.label, config.publicBaseUrl));
@@ -154,7 +240,7 @@ export function createAppServer({ auth = new AuthStore(path.join(config.dataDir,
         const device = auth.deviceForToken(tokenFromCookie(req.headers.cookie));
         if (!device) return json(res, 401, { error: 'not_registered', message: 'Enter an invite code to use this device.' });
         if (pathname === '/api/status' && req.method === 'GET') {
-          return json(res, 200, { elasticsearch: await elasticHealth(), model_configured: Boolean(config.modelApiKey), model: config.modelName, tables: tables.length, metadata_status: DOCUMENT_STATUS });
+          return json(res, 200, { elasticsearch: await elasticHealth(), model_configured: Boolean(config.modelApiKey), model: config.modelName, answer_mode: config.answerMode, warehouse_configured: warehouseConfigured(), tables: tables.length, metadata_status: DOCUMENT_STATUS });
         }
         if (pathname === '/api/domains' && req.method === 'GET') return json(res, 200, { domains });
         if (pathname === '/api/bench' && req.method === 'GET') {
@@ -219,6 +305,29 @@ export function createAppServer({ auth = new AuthStore(path.join(config.dataDir,
           const body = await readJson(req);
           return json(res, 200, { checks: checkSql(body.sql) });
         }
+        if (pathname === '/api/execute' && req.method === 'POST') {
+          const body = await readJson(req);
+          const sql = String(body.sql || '');
+          const conversationId = validConversationId(body.conversation_id);
+          if (!sql.trim() || sql.length > 20_000) return json(res, 400, { error: 'invalid_request' });
+          if (!warehouseConfigured()) return json(res, 503, { error: 'warehouse_unconfigured', message: 'No warehouse is configured on this server.' });
+          const execution = await runWarehouseQuery(sql);
+          auth.audit(device, 'execute', { source: 'user', sql, ok: execution.ok, row_count: execution.row_count ?? null, error: execution.error ?? null, ms: execution.ms ?? null }, conversationId);
+          return json(res, 200, { execution, checks: checksAfterExecution(checkSql(sql), execution) });
+        }
+        if (pathname === '/api/ask' && req.method === 'POST') {
+          const body = await readJson(req);
+          const question = String(body.question || '').trim();
+          const domain = String(body.domain || 'all');
+          const previousSql = String(body.previous_sql || '');
+          const mode = requestedMode(body.mode);
+          if (question.length < 2 || question.length > 1000 || previousSql.length > 20_000 || (domain !== 'all' && !domains.includes(domain))) return json(res, 400, { error: 'invalid_request' });
+          if (body.conversation_id && !validConversationId(body.conversation_id)) return json(res, 400, { error: 'invalid_conversation' });
+          if (generating) return json(res, 429, { error: 'busy', message: 'A draft is already being generated. Try again shortly.' });
+          generating = true;
+          return streamAnswer({ res, device, question, domain, previousSql, mode, conversationId: body.conversation_id || crypto.randomUUID() })
+            .finally(() => { generating = false; });
+        }
         if (pathname === '/api/generate' && req.method === 'POST') {
           const body = await readJson(req);
           const question = String(body.question || '').trim();
@@ -228,8 +337,7 @@ export function createAppServer({ auth = new AuthStore(path.join(config.dataDir,
           if (generating) return json(res, 429, { error: 'busy', message: 'A draft is already being generated. Try again shortly.' });
           generating = true;
           try {
-            const hits = await searchTables(question, domain);
-            const result = await generateDraft({ question, previousSql, hits });
+            const result = await answerQuestion({ question, domain, previousSql, mode: requestedMode(body.mode) });
             if (result.status === 'error') return json(res, 503, result);
             let historyId = null;
             try { historyId = auth.saveHistory(device.id, question, domain, result); }

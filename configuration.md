@@ -52,6 +52,40 @@ one, refuse `reasoning_effort: 'low'` outright. See
 [the evaluation harness](app/eval/README.md) and
 [the model benchmark](app/eval/bench/README.md).
 
+### Answer mode and agent
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `ANSWER_MODE` | `pipeline` | `pipeline`: Elasticsearch retrieves the tables, the app assembles a bounded context, one model call drafts. `agent`: the model looks tables up itself with tools -- a fuzzy search over a table index, one YAML definition per table, read-only test queries -- and ends by calling `submit_answer`. The sidebar lets each user pick either; this sets the default |
+| `CATALOG_YAML_DIR` | — | The agent's catalog files (`tables/<name>.yaml` and `table-index.json`). Empty writes them from `CATALOG_PATH` into a temporary directory at first use; `node app/scripts/export-catalog-files.mjs DIR` writes a copy to read |
+| `DOMAIN_RULES_PATH` | `<repo>/banking-poc/domain-rules.md` | Business rules injected into the agent's instructions. They name concepts, not tables, so they hold under any physical names |
+| `AGENT_MAX_STEPS` | `12` | Model calls before the agent is made to answer from what it has read |
+| `AGENT_TIMEOUT_MS` | `180000` | The whole question, every step included. Each call still has `MODEL_TIMEOUT_MS` |
+| `AGENT_CONTEXT_CHARS` | `60000` | The conversation size at which the agent stops looking and answers. Every step re-sends the conversation, so this is also what bounds a question's tokens |
+| `AGENT_TOOL_CHOICE` | `required` | `required` makes every reply a tool call, so the only way to finish is `submit_answer`. `auto` for a server that does not support it |
+
+The agent costs more tokens than the pipeline: about 25,000 for a question the
+pipeline answers in one call of about 5,000, because each step sends the
+conversation so far. A provider's tokens-per-minute limit binds first -- Groq's
+free tier, at 8,000 a minute, held one agent question to about three minutes.
+The agent waits out a 429 when the provider says how long, within its deadline.
+
+### Warehouse
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `DWH_URL` | — | `postgres://` URL of a user that can only read. Empty turns execution off: no Run SQL button, no `run_sql` tool. The deployment's comes from `warehouse-app.env` |
+| `DWH_MAX_ROWS` | `200` | Rows returned for a run; the agent's test queries see 20 |
+
+`app/deploy/a1/setup-warehouse.mjs` prepares `banking-dwh-pg`: the benchmark's
+seed under readable names (`dwh`) and cryptic ones (`dwh_cryptic`), a role
+`dwh_ro` with `SELECT` only, `default_transaction_read_only`, a 15 s
+`statement_timeout`, and its passwords, in two files so each container gets only
+its own: `warehouse-pg.env` for the database and `warehouse-app.env` (one URL)
+for the app. The database runs on a tmpfs and is rebuilt from the seed at every
+start. A draft runs only after the statement check passes, as that role, wrapped
+in a row limit.
+
 ### Server and access
 
 | Variable | Default | Effect |
@@ -112,6 +146,9 @@ Read by the daemon (`app/eval/bench/daemon.mjs`) and by `bench.mjs` on the host:
 | `npm run eval:results` | Regenerates `app/eval/RESULTS.md` from the recorded baselines |
 | `node eval/bench/bench.mjs --model NAME` | Benchmarks a model on a rented A100 and scores its SQL by running it. `--report` prints the table of runs. See [the model benchmark](app/eval/bench/README.md) |
 | `app/deploy/a1/install-bench-daemon.sh` | Installs the benchmark daemon as a user service, for the PWA's Run a test tab |
+| `node deploy/a1/setup-warehouse.mjs` | Writes the warehouse's init scripts and passwords; `deploy.sh` runs it once if `warehouse-app.env` is missing |
+| `node scripts/export-catalog-files.mjs DIR` | Writes the agent's YAML table files and table index, to read |
+| `node eval/bench/bench.mjs --model NAME --answer agent` | Benchmarks the agent instead of the pipeline: tool parser and 32k context on vLLM, test queries against `banking-dwh-pg` |
 | `./deploy.sh` | Tests, builds the image, installs the units, restarts, health-checks |
 
 ## Order of operations

@@ -30,7 +30,7 @@
       <div class="gate-card">
         <span class="eyebrow">PRIVATE POC ACCESS</span>
         <h1>Your warehouse workspace, on this device.</h1>
-        <p>Enter the single-use invite code to register this browser. Your SQL drafts stay under your control and are never run against a database here.</p>
+        <p>Enter the single-use invite code to register this browser. Drafts run read-only against a synthetic warehouse, never a real one.</p>
         <form id="invite-form">
           <label for="invite-code">Invite code</label>
           <input id="invite-code" name="code" type="text" inputmode="text" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" placeholder="ABCDE-23456" required>
@@ -55,6 +55,14 @@
           <select id="domain-select"><option value="all">All banking domains</option></select>
           <span class="input-hint">Limits retrieval to one part of the catalog.</span>
         </div>
+        <div class="sidebar-section mode-section">
+          <label for="mode-select">Answer mode</label>
+          <select id="mode-select">
+            <option value="agent">Agent · looks tables up</option>
+            <option value="pipeline">Pipeline · one retrieval, one call</option>
+          </select>
+          <span id="mode-hint" class="input-hint">The agent searches the table index, reads table definitions and tests its SQL before answering.</span>
+        </div>
         <div class="sidebar-section">
           <div class="sidebar-section-title">TRY A QUESTION</div>
           <button class="sample-question" type="button" data-question="Show total actual payment amount by customer for loan repayments on business dates January 1 through 7, 2026" data-domain="lending">Loan repayments by customer <span>↗</span></button>
@@ -65,6 +73,7 @@
           <div class="sidebar-section-title">SYSTEM</div>
           <div class="system-row"><span>Elasticsearch</span><span id="elastic-status" class="system-value">Checking…</span></div>
           <div class="system-row"><span>Model API</span><span id="model-status" class="system-value">Checking…</span></div>
+          <div class="system-row"><span>Warehouse</span><span id="warehouse-status" class="system-value">Checking…</span></div>
           <div class="system-row"><span>Metadata</span><span class="system-value amber">Synthetic</span></div>
         </div>
         <div class="sidebar-bottom"><span id="device-name">Registered device</span><span>Private POC</span></div>
@@ -79,8 +88,8 @@
 
         <div id="draft-view">
         <div class="page-heading">
-          <div><span class="eyebrow">NATURAL LANGUAGE → REVIEWABLE SQL</span><h1>Draft a better query.</h1><p>Describe what you need. Review every assumption before taking SQL to your database client.</p></div>
-          <span class="draft-badge">DRAFT ONLY</span>
+          <div><span class="eyebrow">NATURAL LANGUAGE → REVIEWABLE SQL</span><h1>Draft a better query.</h1><p>Describe what you need. Review every assumption; results come from a synthetic warehouse.</p></div>
+          <span class="draft-badge">READ-ONLY</span>
         </div>
 
         <section id="history-panel" class="panel history-panel" aria-labelledby="history-title" hidden>
@@ -92,10 +101,10 @@
         </section>
 
         <section class="panel ask-panel" aria-labelledby="question-title">
-          <div class="panel-heading"><div><span class="step">01</span><h2 id="question-title">Ask a question</h2></div><span class="subtle">PostgreSQL · bank_dwh</span></div>
+          <div class="panel-heading"><div><span class="step">01</span><h2 id="question-title">Ask a question</h2></div><span id="conversation-chip" class="subtle">PostgreSQL · bank_dwh</span></div>
           <label for="question" class="sr-only">Question or revision instruction</label>
           <textarea id="question" rows="4" maxlength="1000" placeholder="Example: Show total actual payment amount by customer for loan repayments in January 2026…"></textarea>
-          <div class="ask-actions"><span class="input-hint">The model sees the retrieved synthetic schema, not DWH data rows.</span><div class="button-group"><button id="find-button" class="button button-secondary" type="button">Find tables</button><button id="generate-button" class="button button-primary" type="button">Generate draft <span aria-hidden="true">↗</span></button></div></div>
+          <div class="ask-actions"><span id="ask-hint" class="input-hint">The model sees the retrieved synthetic schema, not DWH data rows.</span><div class="button-group"><button id="new-conversation" class="button button-text" type="button" hidden>New conversation</button><button id="find-button" class="button button-secondary" type="button">Find tables</button><button id="generate-button" class="button button-primary" type="button">Generate draft <span aria-hidden="true">↗</span></button></div></div>
         </section>
 
         <div id="flash" class="flash" role="status" aria-live="polite" hidden></div>
@@ -106,14 +115,24 @@
 
         <div class="result-grid">
           <section class="panel draft-panel" aria-labelledby="draft-title">
-            <div class="panel-heading"><div><span class="step">02</span><h2 id="draft-title">SQL draft</h2></div><div class="button-group"><button id="check-button" class="button button-text" type="button">Check draft</button><button id="copy-button" class="button button-text" type="button">Copy SQL</button><button id="clear-button" class="button button-text" type="button">Clear</button></div></div>
+            <div class="panel-heading"><div><span class="step">02</span><h2 id="draft-title">SQL draft</h2></div><div class="button-group"><button id="run-button" class="button button-text" type="button">Run SQL</button><button id="check-button" class="button button-text" type="button">Check draft</button><button id="copy-button" class="button button-text" type="button">Copy SQL</button><button id="clear-button" class="button button-text" type="button">Clear</button></div></div>
             <div id="result-status" class="result-status neutral">Waiting for a question</div>
             <label for="sql-editor" class="sr-only">Editable SQL draft</label>
-            <textarea id="sql-editor" class="sql-editor" spellcheck="false" placeholder="Your editable SQL will appear here. The app will never execute it."></textarea>
-            <div class="editor-foot"><span>Editable draft · no automatic execution</span><span id="sql-length">0 characters</span></div>
+            <textarea id="sql-editor" class="sql-editor" spellcheck="false" placeholder="Your editable SQL will appear here. Run SQL executes it read-only against the synthetic warehouse."></textarea>
+            <div class="editor-foot"><span>Editable draft · runs read-only, synthetic data</span><span id="sql-length">0 characters</span></div>
+            <div id="results" class="results" hidden>
+              <div class="results-head"><h3>Results</h3><span id="results-meta" class="subtle"></span></div>
+              <p id="results-error" class="results-error" hidden></p>
+              <div class="table-wrap"><table id="results-table" class="results-table"></table></div>
+            </div>
           </section>
 
           <aside class="insight-column">
+            <section class="panel insight-panel" aria-labelledby="steps-title">
+              <div class="panel-heading"><div><span class="step">⋯</span><h2 id="steps-title">Agent steps</h2></div><span id="steps-meta" class="subtle"></span></div>
+              <p id="steps-empty" class="empty-copy">Each lookup the agent makes appears here as it happens.</p>
+              <ol id="steps-list" class="steps-list" aria-live="polite"></ol>
+            </section>
             <section class="panel insight-panel" aria-labelledby="context-title">
               <div class="panel-heading"><div><span class="step">A</span><h2 id="context-title">Retrieved context</h2></div></div>
               <p id="context-empty" class="empty-copy">Relevant tables will appear here after a search.</p>

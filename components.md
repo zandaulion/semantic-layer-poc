@@ -36,6 +36,9 @@ neither.
 | 11 | Access control | `server/auth.js` | **Reimplement** |
 | 12 | PWA client | `app/web/` | **Port** or discard |
 | 13 | Deployment | `app/deploy/`, `deploy.sh`, `app/eval/bench/daemon.mjs` | **Reimplement** |
+| 14 | Agent answer mode and catalog tools | `server/agent.js`, `server/catalog-files.js`, `server/catalog-tools.js`, `server/answer.js` | **Reuse** the design, **port** the search |
+| 15 | Warehouse execution | `server/warehouse.js`, `server/pg-client.js`, `app/deploy/a1/setup-warehouse.mjs` | **Reuse** the layering, **reimplement** the client |
+| 16 | Conversations and audit | `server/auth.js`, `server/index.js` (`/api/ask`) | **Port** |
 
 ---
 
@@ -290,6 +293,72 @@ daemon through a directory the quadlet mounts. Not a socket, because SELinux
 refuses a container a connection to a host process's socket, and not a port,
 because the host's loopback is not reachable from the container network.
 
+## 14. Agent answer mode and catalog tools
+
+**What it does.** Instead of retrieval choosing the context, the model gets
+tools and chooses what to read: `search_tables`, a fuzzy search over a table
+index (names, grains, column names and descriptions, with abbreviation
+matching, so `acct` finds account); `describe_table`, which returns one
+table's YAML definition; `run_sql`; and `submit_answer`, whose arguments are
+the response contract (6), so both modes produce the same reviewable answer.
+`tool_choice: required` makes every reply a tool call; out of steps, time or
+context, the agent is forced to answer from what it has read. The index and
+YAML files are generated from the catalog (1), so both modes see one source.
+
+**POC-specific.** The fuzzy search is hand-rolled over a few hundred
+kilobytes of index held in memory. Business rules are a short Markdown file.
+
+**Verdict.** Reuse the design. It is the single largest improvement measured
+here: on abbreviated names, 76–96% correct on the hardest questions against
+39–49% for the pipeline ([README](README.md#agent-or-pipeline)). Two findings
+should shape any port:
+
+- **The gain comes from execution feedback,** not from the tools' cleverness.
+  Without `run_sql` the agent finds the right tables but guesses columns on
+  tables it did not read, and about half its drafts fail. With it, the
+  database's error is enough. `EXPLAIN`, which returns no rows, keeps nearly
+  all of the gain.
+- **A model-chosen filter must not hide data.** The model guessed the subject
+  area "cards" for card authorizations, which this catalog files under
+  payments, and could not find the table in nine searches. A filter the model
+  chooses now only ranks; a filter the user chooses still filters.
+
+Port the search to whatever serves the real index; keep the rule that the
+agent flags any table its SQL uses without having read it.
+
+## 15. Warehouse execution
+
+**What it does.** Runs a draft read-only against a PostgreSQL warehouse:
+the app's own result after an answer, a user's edited SQL from the Run button,
+or the agent's `run_sql`. Three layers, so no one of them has to be right: the
+statement check refuses anything but one `SELECT` or `WITH`; the database role
+can only read, opens every transaction read-only and has a 15-second statement
+timeout; and the query is wrapped in a row limit. A successful run marks syntax
+and columns as verified in the checks.
+
+**POC-specific.** The warehouse is the benchmark's synthetic seed, rebuilt from
+a tmpfs at every start. The client is a small wire-protocol implementation
+(SCRAM, simple queries) written to keep the app free of dependencies; one
+connection per query.
+
+**Verdict.** Reuse the layering and the role settings. Reimplement the client
+with the bank's driver and a pool. Decide early whether the model may see rows:
+`AGENT_SQL_CHECK=explain` measured within a few points of full execution, and
+keeps production data away from the model entirely.
+
+## 16. Conversations and audit
+
+**What it does.** `/api/ask` streams an answer as server-sent events: each tool
+call and result, the answer, then the execution. Answers carry a conversation
+id, and a follow-up is given the conversation's earlier questions and SQL. An
+append-only audit table records every question, every statement executed (by
+the agent, the app or the user) and every answer, with model, steps and token
+counts. It has no foreign key to devices, so deleting a device keeps its trail.
+
+**Verdict.** Port. The event stream is what makes a 10–60 second agent answer
+tolerable to wait for. The audit belongs in the bank's own logging, but the
+events worth recording are these.
+
 ---
 
 ## What is missing entirely
@@ -298,16 +367,15 @@ Named explicitly, so nobody infers these exist:
 
 - **Entitlements.** No user identity, no scoping of any kind (see 11).
 - **Embeddings.** Retrieval is BM25 only. No encoder is called anywhere.
-- **Execution.** The application never runs the generated SQL, and has no
-  connection to a warehouse. Only the model benchmark runs drafts, read-only,
-  against a seeded synthetic copy, to score them (see 10).
+- **A real warehouse.** Execution (15) runs against the synthetic seed only.
 - **Business term / metric layer.** No glossary, no approved metric definitions.
   The catalog rules (7) are the nearest thing and they are hardcoded.
 - **Lineage.** Relationships are candidate joins, not derived lineage.
 - **Concurrent generation.** The server generates one draft at a time for all
-  users: `/api/generate` answers a second request with `429 busy` until the
+  users: `/api/generate` and `/api/ask` answer a second request with `429 busy` until the
   first finishes. The concurrency sweep measured the model server directly,
   around this guard, and found one RTX 4090 handling about 240 questions a
   minute with 32 in flight on vLLM. The application cannot use any of that until the
   single flag becomes a bounded pool with a queue and a timeout.
-- **Audit.** History is per-device convenience, not an audit trail.
+- **Audit retention.** The audit log (16) is append-only but local SQLite, with
+  no retention policy, export or tamper evidence.

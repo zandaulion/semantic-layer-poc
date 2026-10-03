@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build and restart Bank DWH Studio and its Elasticsearch, both rootless.
+# Build and restart Bank DWH Studio, its Elasticsearch and its warehouse, all
+# rootless.
 #
 # Caddy and the tunnel are configured separately and deliberately: changing
 # either affects the other applications on this host.
@@ -30,6 +31,12 @@ fi
 
 npm --prefix "$ROOT/app" test
 
+# The warehouse drafts run against, and the read-only URL the app is given.
+# Created once; rerun app/deploy/a1/setup-warehouse.mjs after the seed or the
+# catalog changes.
+WAREHOUSE_ENV="${CONFIG_ROOT}/banking-sql-poc/warehouse-app.env"
+[[ -f "$WAREHOUSE_ENV" ]] || node "$ROOT/app/deploy/a1/setup-warehouse.mjs"
+
 # Built from the repository root: the server resolves its catalogue one level
 # above itself, so `app/` alone is not a sufficient context.
 podman build \
@@ -39,7 +46,7 @@ podman build \
 
 install -d -m 0700 "$DATA_DIR"
 install -d -m 0755 "$QUADLET_DIR"
-for unit in banking-dwh.network banking-poc-elasticsearch.container banking-dwh.container; do
+for unit in banking-dwh.network banking-poc-elasticsearch.container banking-dwh-pg.container banking-dwh.container; do
   install -m 0644 "$ROOT/app/deploy/quadlet/${unit}" "${QUADLET_DIR}/${unit}"
 done
 systemctl --user daemon-reload
@@ -54,6 +61,8 @@ for _ in $(seq 1 60); do
     curl -fsS --max-time 2 http://127.0.0.1:9200/_cluster/health >/dev/null 2>&1 && break
   sleep 2
 done
+# Reloads the seed into a fresh tmpfs, which takes a few seconds.
+systemctl --user restart banking-dwh-pg.service
 systemctl --user restart banking-dwh.service
 
 for _ in $(seq 1 30); do

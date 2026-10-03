@@ -1,0 +1,33 @@
+# The warehouse the agent and the app run drafts against: the benchmark's
+# seeded copy of the synthetic warehouse, under readable names (database dwh)
+# and cryptic ones (dwh_cryptic).
+#
+# Rebuilt from the seed at every start: the data lives on a tmpfs, so nothing
+# a query does can outlive a restart, and there is no volume to manage. The
+# seed, the roles and the passwords come from app/deploy/a1/setup-warehouse.mjs.
+[Unit]
+Description=Bank DWH Studio warehouse (seeded PostgreSQL, read-only for the app)
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=docker.io/library/postgres:17-alpine
+ContainerName=banking-dwh-pg
+# No published port: only containers on the private network reach it.
+Network=banking-dwh.network
+Tmpfs=/var/lib/postgresql/data:rw,size=1g
+Volume=%h/.local/share/banking-dwh-pg/initdb:/docker-entrypoint-initdb.d:ro,Z
+EnvironmentFile=%h/.config/banking-sql-poc/warehouse-pg.env
+Environment=POSTGRES_DB=dwh
+Memory=768m
+ShmSize=128m
+NoNewPrivileges=true
+
+[Service]
+# Loading the 29 MB seed twice takes a while on four cores.
+TimeoutStartSec=300
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

@@ -4,8 +4,7 @@
  * which asks one question at a time, and the benchmark, which asks many.
  */
 
-import { searchTables } from '../server/elastic.js';
-import { generateDraft } from '../server/model.js';
+import { answerQuestion } from '../server/answer.js';
 import { referencedTables } from '../server/sql-check.js';
 
 /**
@@ -106,12 +105,11 @@ export async function withRateLimitRetry(work, attempts = Number(process.env.MOD
   }
 }
 
-export async function runCase(testCase) {
+export async function runCase(testCase, { runSql = null } = {}) {
   const started = Date.now();
   try {
-    const hits = await searchTables(testCase.question, testCase.domain ?? 'all');
     const { value: draft, startedAt: attemptStarted } = await withRateLimitRetry(
-      () => generateDraft({ question: testCase.question, hits }),
+      () => answerQuestion({ question: testCase.question, domain: testCase.domain ?? 'all', runSql }),
     );
     const score = scoreCase(testCase, draft);
     return {
@@ -124,6 +122,8 @@ export async function runCase(testCase) {
       // the control: it must not move when the backend does.
       path: draft.model === 'catalog_rule' ? 'catalog_rule' : 'model',
       usage: draft.usage ?? null,
+      mode: draft.mode ?? 'pipeline',
+      ...(draft.agent_trace ? { agent_steps: draft.agent_trace.length, agent_trace: draft.agent_trace } : {}),
       retrieved: (draft.retrieved_tables ?? []).length,
       ...score,
       sql: draft.sql || '',

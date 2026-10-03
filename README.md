@@ -1,6 +1,6 @@
 # Bank DWH Studio
 
-An invite-only PWA that turns natural-language banking questions into **editable, reviewable PostgreSQL SQL drafts**. This personal proof of concept runs on an Oracle Ampere A1 instance and searches a synthetic banking warehouse catalog with **100 tables and 5,000 columns**. It uses Elasticsearch for schema retrieval and a hosted GPT-OSS model for SQL drafting.
+An invite-only PWA that turns natural-language banking questions into **editable, reviewable PostgreSQL SQL drafts**. This personal proof of concept runs on an Oracle Ampere A1 instance and searches a synthetic banking warehouse catalog with **100 tables and 5,000 columns**. It answers in one of two modes: an **agent** that looks tables up with tools and tests its SQL against a seeded, read-only copy of the warehouse before answering, or a **pipeline** that retrieves the schema from Elasticsearch and drafts in a single model call. On the benchmark's hardest questions, with bank-style abbreviated names, the agent answers 76–96% correctly against the pipeline's 39–49% ([why](#agent-or-pipeline)).
 
 **[Open the PWA](https://semantic-layer-poc.zandaulion.com/)** (invite required) · **[Browse all 10 portfolio screenshots](portfolio/README.md)**
 
@@ -12,20 +12,25 @@ The [portfolio gallery](portfolio/README.md) covers ten hard banking questions a
 
 ## How it works
 
-1. A user asks a question and can narrow the search to a banking subject area.
-2. The Node backend retrieves relevant table metadata from Elasticsearch. It sends bounded schema context to the hosted model or applies a catalog-grounded rule for supported common questions.
-3. The PWA shows the SQL draft, retrieved tables, interpretation, assumptions, and basic checks. It can ask for a missing detail, such as the year in an end-of-August question, and keeps a per-device history of generated answers.
-4. The user edits or copies the SQL for review and runs it separately in their own database client.
+1. A user asks a question and can narrow the search to a banking subject area. The sidebar chooses the answer mode; `ANSWER_MODE` sets the default.
+2. **Agent mode.** The model gets four tools: a fuzzy search over a table index, a lookup that returns one table's YAML definition (grain, columns, joins), `run_sql`, which runs a read-only query and shows up to 20 rows, and `submit_answer`. It searches, reads the tables it means to use, tests its draft, fixes what the database rejects, and submits. The index and the YAML files are generated from the same catalog the pipeline indexes, and the agent is also given a short set of [business rules](banking-poc/domain-rules.md).
+3. **Pipeline mode.** The backend retrieves table metadata from Elasticsearch, assembles a bounded context, and makes one model call with a strict JSON schema, or applies a catalog-grounded rule for a few common questions.
+4. Both modes end in the same reviewable answer: SQL, interpretation, assumptions, sources and checks. The page streams the agent's steps as they happen (server-sent events), runs a draft that passes the statement check against the warehouse as a read-only user, and shows the rows. Follow-up questions keep the conversation's earlier turns.
+5. History is kept per device, and every question, executed statement and answer goes to an append-only audit log.
 
 ```mermaid
 flowchart LR
     U[User] --> P[Installable PWA]
-    P --> A[Node backend on Ampere A1]
-    A --> E[(Elasticsearch<br/>synthetic schema metadata)]
-    A --> M[Hosted GPT-OSS model]
+    P -->|question, SSE steps| A[Node backend on Ampere A1]
+    A --> E[(Elasticsearch<br/>pipeline retrieval)]
+    A --> Y[Table index and<br/>YAML definitions]
+    A --> M[Model, OpenAI-compatible API<br/>tool calling]
+    A -->|read-only role| W[(Seeded warehouse<br/>PostgreSQL, synthetic)]
+    A --> S[(SQLite<br/>history, audit)]
     A --> P
-    P -->|Copy reviewed SQL| C[User's SQL client]
 ```
+
+The warehouse is the benchmark's seeded synthetic data, rebuilt from the seed at every start. The application connects as a role that can only `SELECT`, in read-only transactions, with a 15-second statement timeout and a row cap; drafts that fail the statement check are never sent. `AGENT_SQL_CHECK=explain` limits the agent's testing to `EXPLAIN`, so the model learns whether its SQL is valid and what it returns but never sees a row.
 
 ## Portability to a different inference backend
 
@@ -147,6 +152,56 @@ money on runs.
 
 The browser never receives the model API key. The PWA does not connect to a banking warehouse or execute generated SQL. Its automated checks cover read-only statement shape and known table references; syntax, column references, and business meaning still need human review.
 
+## Agent or pipeline
+
+The benchmark (below) runs both modes on the same questions, data and model.
+With cryptic names, on an A100, 2026-10-02. T1 is the 23 questions described
+below; T4 is 17 harder ones: record history as of a past date, joins between
+two snapshot facts, currency conversion with daily rates, window functions,
+medians, customers active in every quarter. Each is asked three times.
+
+| Model | T4 agent | T4 pipeline | T1 agent | T1 pipeline | Agent confidently wrong, T1+T2 | Agent answer time (p50) |
+| --- | --- | --- | --- | --- | --- | --- |
+| Qwen3.8-27B (FP8) | 96% | 47% | 98.6% | 71% | 1 | 60 s |
+| gpt-oss-120b | 96% | not run | 92.8% | 62%¹ | 5 | 22 s |
+| Qwen3.6-35B-A3B (FP8) | 92% | 39% | 97.1% | 61% | 1 | 23 s |
+| Qwen3.6-35B-A3B, `EXPLAIN` only | 84% | — | 100% | — | 0 | 19 s |
+| gpt-oss-20b | 76% | 49% | 91.3% | 49% | 3 | 11 s |
+
+¹ From the 2026-09-27 run, before T4 existed.
+
+Where the gain comes from was measured by taking the agent apart, with
+gpt-oss-20b on T1:
+
+| Variant | Correct | Did not run | Confidently wrong |
+| --- | --- | --- | --- |
+| Pipeline | 46% | 7 | 17 |
+| Pipeline with the agent's business rules | 55% | 8 | 12 |
+| Agent: lookups only, no `run_sql`, no rules | 61% | 25 | 4 |
+| Agent without `run_sql` | 46% | 34 | 3 |
+| Agent without the business rules | 98.6% | 0 | 2 |
+| Agent | 94.2% | 0 | 2 |
+| Agent, `run_sql` limited to `EXPLAIN` | 92.8% | 0 | 5 |
+
+- **Looking tables up is what makes it safe.** Confidently wrong answers fall
+  from 17 to 3–4 without any execution, because the agent finds the right fact
+  where the pipeline's search never returned it, for example delinquency and
+  loan balance tables.
+- **Testing the draft is what makes it right.** Without `run_sql`, about half
+  the drafts do not run: columns guessed on tables the model never read,
+  mostly the date dimension. The database's error message is enough to fix
+  them. `EXPLAIN` alone keeps nearly all of the gain, so the model need not
+  see any data.
+- **The business rules add nothing measurable** to the agent.
+- **The cost is tokens and time.** An agent question uses about 18,000 tokens
+  against the pipeline's 5,000 and takes 2 to 3 times as long. A provider's
+  tokens-per-minute limit binds first: Groq's free tier held one agent
+  question to about three minutes.
+
+The harder questions separate the models where the original 23 no longer
+could: gpt-oss-20b's misses on them are drafts that run and answer wrongly,
+which execution feedback cannot catch.
+
 ## Explore the repository
 
 The code here is a small proof of concept. The architecture documents describe a
@@ -158,7 +213,7 @@ codebase. The two groups below are separated for that reason.
 
 - [Component inventory](components.md): every architectural piece, its contract, and whether to reuse, port or reimplement it for an on-premise deployment.
 - [Catalog contract](catalog-contract.md): the metadata input format — required fields, ignored fields, and what decides retrieval quality.
-- [Configuration](configuration.md): every environment variable, every command, and the order things must start in.
+- [Configuration](configuration.md): every environment variable, every command, and the order things must start in, including [the answer modes and the warehouse](configuration.md#answer-mode-and-agent).
 - [PWA and A1 deployment](app/README.md): local run, Elasticsearch ingestion, hosted model configuration, invite gate, and Cloudflare route.
 - [Portfolio gallery and capture method](portfolio/README.md): ten screenshots of hard benchmark questions, each draft verified by running it, viewport sizes, and regeneration steps.
 - [Synthetic banking warehouse fixture](banking-poc/README.md): PostgreSQL DDL, catalog, relationships, and a small seed for 100 tables and 5,000 columns.

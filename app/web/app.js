@@ -607,6 +607,14 @@ function showView(view) {
 const viewFromHash = () => Object.keys(VIEWS).find((name) => VIEWS[name] && VIEWS[name] === location.hash) ?? 'draft';
 
 const TIER_LABEL = { T1: 'Hard questions: the drafted query must return the reference answer', T4: 'Harder questions: history as of a date, two snapshot facts, currency conversion, windows',  T2: 'Data the warehouse does not hold: the model should ask', T3: 'Requests to change data: no write may reach the user' };
+// The results table's columns, in their groups. The tag under each column
+// names the questions it counts.
+const RESULT_GROUPS = [
+  { id: 'accuracy', label: 'Accuracy', columns: [['Harder', 'T4'], ['Core', 'T1']] },
+  { id: 'safety', label: 'Safety', columns: [['Confidently wrong', 'T1 + T2'], ['Asked back', 'T2'], ['Unsafe writes', 'T3']] },
+  { id: 'speed', label: 'Speed and cost', columns: [['Answer time'], ['Per minute'], ['Per 1,000'], ['Run']] },
+];
+const COLUMN_CLASSES = RESULT_GROUPS.flatMap((group) => group.columns.map((_, index) => `g-${group.id}${index === 0 ? ' g-start' : ''}`));
 const GOOD = { T1: 'correct', T4: 'correct', T2: 'asked', T3: 'safe' };
 const cellText = (value) => (value === null || value === undefined ? '—' : String(value));
 const el = (tag, className, text) => {
@@ -633,10 +641,11 @@ async function loadTests() {
   $('tests-status').textContent = 'Loading recorded runs…';
   let data;
   try { data = await api('/api/bench'); } catch (error) { $('tests-status').textContent = error.message; return; }
-  // Best first: by the share of hard questions answered correctly. A run that
-  // did not measure the model (a note says why) goes last whatever its score;
-  // ties go to the newer run.
+  // Best first: by the harder questions where a run has them, then by the core
+  // ones. A run that did not measure the model (a note says why) goes last
+  // whatever its score; ties go to the newer run.
   const ranked = (list) => [...list].sort((a, b) => Boolean(a.note || a.failed_start) - Boolean(b.note || b.failed_start)
+    || (b.summary?.t4?.accuracy_pct ?? -1) - (a.summary?.t4?.accuracy_pct ?? -1)
     || (b.summary?.t1.accuracy_pct ?? -1) - (a.summary?.t1.accuracy_pct ?? -1)
     || b.recorded_at.localeCompare(a.recorded_at));
   const runs = ranked(data.runs);
@@ -661,11 +670,29 @@ function renderTestsTable(runs, tableId, notesId) {
   const table = $(tableId);
   table.replaceChildren();
   if (!runs.length) { $(notesId).replaceChildren(); return; }
-  const head = table.createTHead().insertRow();
-  for (const [label, num] of [['Model', false], ['Correct', true], ['Harder', true], ['Confidently wrong', true], ['Asked', true], ['Unsafe writes', true], ['Answer time', true], ['Per minute', true], ['Per 1,000', true], ['Run', true]]) {
-    const th = el('th', num ? 'num' : '', label);
-    th.scope = 'col';
-    head.append(th);
+  // Two header rows: the groups, then the columns, each tagged with the
+  // questions it counts. The first column of a group carries its divider.
+  const thead = table.createTHead();
+  const groupRow = thead.insertRow();
+  groupRow.className = 'group-row';
+  const corner = el('th', 'model-col', 'Model');
+  corner.rowSpan = 2;
+  corner.scope = 'col';
+  groupRow.append(corner);
+  for (const group of RESULT_GROUPS) {
+    const th = el('th', `group-head g-${group.id}`, group.label);
+    th.colSpan = group.columns.length;
+    th.scope = 'colgroup';
+    groupRow.append(th);
+  }
+  const head = thead.insertRow();
+  for (const group of RESULT_GROUPS) {
+    group.columns.forEach(([label, tier], index) => {
+      const th = el('th', `num g-${group.id}${index === 0 ? ' g-start' : ''}`, label);
+      if (tier) th.append(el('span', 'col-tier', tier));
+      th.scope = 'col';
+      head.append(th);
+    });
   }
   const body = table.createTBody();
   const notes = [];
@@ -675,6 +702,7 @@ function renderTestsTable(runs, tableId, notesId) {
     if (run.weights) row.classList.add(`row-${run.weights}`);
     if (run.note || run.failed_start) { row.classList.add('flagged'); notes.push(run); }
     const name = row.insertCell();
+    name.className = 'model-col';
     name.append(el('span', 'model', run.model), weightsTag(run));
     if (run.failed_start) name.append(el('span', 'flag', 'DID NOT RUN'));
     else if (run.note) name.append(el('span', 'flag', 'NOT VALID'));
@@ -682,16 +710,16 @@ function renderTestsTable(runs, tableId, notesId) {
     name.title = run.about || '';
     if (!s) {
       // Nothing was asked: every measure is empty, and the note below says why.
-      for (let i = 0; i < 8; i++) { const cell = row.insertCell(); cell.className = 'num'; cell.textContent = '—'; }
+      for (let i = 0; i < 8; i++) { const cell = row.insertCell(); cell.className = `num ${COLUMN_CLASSES[i]}`; cell.textContent = '—'; }
       const last = row.insertCell();
-      last.className = 'num';
+      last.className = `num ${COLUMN_CLASSES[8]}`;
       last.append(el('span', '', run.minutes === null ? '—' : `${run.minutes} min`), el('span', 'card', run.cost_usd ? `$${run.cost_usd.toFixed(2)}` : ''));
       continue;
     }
     const cells = [
-      [`${cellText(s.t1.accuracy_pct)}%`, `${s.t1.correct} of ${s.t1.answers}`, tone(s.t1.accuracy_pct, 90, 60)],
       s.t4 ? [`${cellText(s.t4.accuracy_pct)}%`, `${s.t4.correct} of ${s.t4.answers} · ${s.t4.wrong_result} wrong`, tone(s.t4.accuracy_pct, 90, 60)] : ['—', 'not asked', ''],
-      [`${cellText(s.confidently_wrong.pct_of_t1_t2)}%`, `${s.confidently_wrong.count} answers`, s.confidently_wrong.count === 0 ? 'metric-good' : s.confidently_wrong.pct_of_t1_t2 >= 5 ? 'metric-bad' : 'metric-warn'],
+      [`${cellText(s.t1.accuracy_pct)}%`, `${s.t1.correct} of ${s.t1.answers}`, tone(s.t1.accuracy_pct, 90, 60)],
+      [`${cellText(s.confidently_wrong.pct_of_t1_t2)}%`, `${s.confidently_wrong.count} ${s.confidently_wrong.count === 1 ? 'answer' : 'answers'}`, s.confidently_wrong.count === 0 ? 'metric-good' : s.confidently_wrong.pct_of_t1_t2 >= 5 ? 'metric-bad' : 'metric-warn'],
       [`${cellText(s.t2.asked_pct)}%`, `${s.t2.asked} of ${s.t2.answers}`, tone(s.t2.asked_pct, 90, 60)],
       [String(s.t3.unsafe), `of ${s.t3.answers}`, s.t3.unsafe === 0 ? 'metric-good' : 'metric-bad'],
       [s.latency_ms.p50 ? `${(s.latency_ms.p50 / 1000).toFixed(1)} s` : '—', `${run.concurrency ?? '?'} in flight`, ''],
@@ -699,11 +727,11 @@ function renderTestsTable(runs, tableId, notesId) {
       [run.cost_per_1000 === null ? '—' : `$${run.cost_per_1000.toFixed(3)}`, run.price_per_hour ? 'GPU cost' : 'API cost', ''],
       [run.minutes === null ? '—' : `${run.minutes} min`, run.cost_usd === null ? '' : `$${run.cost_usd.toFixed(2)}`, ''],
     ];
-    for (const [value, detail, className] of cells) {
+    cells.forEach(([value, detail, className], index) => {
       const cell = row.insertCell();
-      cell.className = `num ${run.note ? '' : className}`;
+      cell.className = `num ${COLUMN_CLASSES[index]} ${run.note ? '' : className}`;
       cell.append(el('span', '', value), el('span', 'card', detail));
-    }
+    });
   }
   $(notesId).replaceChildren(...notes.map((run) => el('p', '', run.failed_start
     ? `DID NOT RUN — ${run.model} on ${shortCard(run.card)}: ${run.note ?? run.failed_start.reason}`

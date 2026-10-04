@@ -8,7 +8,7 @@
 .content{margin:0 auto}
 .print-only{display:none}
 @media print{
-@page{size:A4 landscape;margin:11mm 10mm}
+@page{margin:10mm}
 :root,body{background:#fff!important;color:#1b2430}
 *{box-shadow:none!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .topbar,.sidebar,.view-tabs,.page-footer,#tests-export,#tests-status,.draft-badge,#flash,.install-button{display:none!important}
@@ -55,3 +55,40 @@ section[aria-labelledby="tests-matrix-title"]{break-before:page}
 .tests-table .group-row th{padding:8px 10px 6px;border-bottom:0;font-size:10px;letter-spacing:.12em}.tests-table th.group-head{text-align:center;border-left:1px solid #2a4053}.tests-table th.g-accuracy.group-head{color:#62d9bb;box-shadow:inset 0 3px 0 #3bd5ae}.tests-table th.g-safety.group-head{color:#e8b76c;box-shadow:inset 0 3px 0 #e8b76c}.tests-table th.g-speed.group-head{color:#a8bdc6;box-shadow:inset 0 3px 0 #5f7a8a}.tests-table td.g-start,.tests-table th.g-start{border-left:1px solid #2a4053}.tests-table td.g-accuracy{background:#3bd5ae0a}.tests-table td.g-safety{background:#e8b76c08}.col-tier{display:block;margin-top:4px;font-size:9px;letter-spacing:.06em;color:#6f8a96;text-transform:none}.tests-table .model-col{position:sticky;left:0;z-index:1;background:#142337}.tests-table th.model-col{vertical-align:bottom}@media print{.tests-table .model-col{position:static;background:none}.tests-table td.g-accuracy,.tests-table td.g-safety{background:none}.tests-table td.g-start,.tests-table th.g-start,.tests-table th.group-head{border-left:1px solid #b9c3cc}}
 .tests-table .model-col{box-shadow:6px 0 8px -6px #020c17}.tests-table tr.row-open td.model-col{box-shadow:inset 3px 0 0 #3bd5ae,6px 0 8px -6px #020c17}.tests-table tr.row-closed td.model-col{box-shadow:inset 3px 0 0 #9b7dff,6px 0 8px -6px #020c17}
 @media(max-width:760px){.tests-table td.model-col{min-width:0;width:118px;max-width:118px;white-space:normal}.tests-table td.model-col .model{white-space:normal;font-size:11px;overflow-wrap:anywhere}.tests-table td.model-col .weights{margin-left:0;margin-top:3px}.tests-table td.model-col .card{font-size:9px}.tests-table th.model-col{width:118px}}
+
+/* Print on whatever paper the dialog chose. Forcing A4 landscape made Chrome
+   on Android lay each page out landscape and then shrink it onto portrait
+   Letter, leaving half of every sheet blank. The layout now follows the page,
+   denser when the page is portrait. */
+@media print{
+.screen-only{display:none!important}
+.tests-intro{color:#44505c}.tests-intro code{color:#16806a}
+#tests-matrix-print{display:block;border:0;padding:0;margin:0;font-size:inherit;color:inherit}
+.print-matrix-part+.print-matrix-part{margin-top:14px}
+.print-matrix-caption{font-size:8pt;color:#5a6672;margin:0 0 4px}
+/* Fixed layout: the question keeps a third of the width and the runs share the
+   rest equally. Left to auto layout, unwrapped model names took the width and
+   squeezed each question to a word per line. */
+#tests-matrix-print .tests-matrix{table-layout:fixed;width:100%}
+#tests-matrix-print .tests-matrix th:first-child{width:34%}
+#tests-matrix-print .tests-matrix th{white-space:normal;overflow-wrap:anywhere;vertical-align:bottom}
+#tests-matrix-print .tests-matrix td.question{width:auto}
+.print-matrix-landscape{display:none}
+.print-matrix-part+.print-matrix-part{break-before:page}
+.tests-table td.model-col,.tests-table th.model-col{min-width:34mm;width:34mm}
+.tests-table td.model-col .model{white-space:normal}
+.tests-table td:first-child{min-width:34mm}
+}
+@media print and (orientation:landscape){
+.print-matrix-portrait{display:none}
+.print-matrix-landscape{display:block}
+}
+@media print and (orientation:portrait){
+.page-heading h1{font-size:16pt}
+.tests-table{font-size:7pt}
+.tests-table th,.tests-table td{padding:3px 4px}
+.tests-table .card,.col-tier{font-size:6pt}
+.tests-table .group-row th{font-size:6.5pt}
+.tests-matrix td.question{width:34%}
+.tests-matrix{font-size:7pt}
+}

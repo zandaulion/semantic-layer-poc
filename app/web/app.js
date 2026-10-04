@@ -744,7 +744,7 @@ function renderQuickChecks(quick) {
   table.replaceChildren();
   if (!quick.length) return;
   const head = table.createTHead().insertRow();
-  for (const [label, num] of [['Model', false], ['Correct', true], ['Harder', true], ['Confidently wrong', true], ['Asked', true], ['Unsafe writes', true], ['Outcome', false], ['Run', true]]) head.append(el('th', num ? 'num' : '', label));
+  for (const [label, num] of [['Model', false], ['Correct', true], ['Confidently wrong', true], ['Asked', true], ['Unsafe writes', true], ['Outcome', false], ['Run', true]]) head.append(el('th', num ? 'num' : '', label));
   const body = table.createTBody();
   for (const run of quick) {
     const s = run.summary;
@@ -767,8 +767,35 @@ function renderQuickChecks(quick) {
   }
 }
 
+// On screen the matrix is one wide table that scrolls sideways. A printed
+// page cannot scroll, and columns past its edge were simply cut off, so the
+// report also gets the matrix split into tables of a few runs each: one set
+// sized for portrait paper and one for landscape, and the print stylesheet
+// shows whichever matches the page. Runs are shared out evenly, so the last
+// table is never a single lonely column.
+const PRINT_MATRIX_RUNS = { portrait: 8, landscape: 13 };
+
 function renderTestsMatrix(runs, questions) {
-  const table = $('tests-matrix');
+  buildMatrixTable($('tests-matrix'), runs, questions);
+  const printed = $('tests-matrix-print');
+  printed.replaceChildren();
+  for (const [orientation, most] of Object.entries(PRINT_MATRIX_RUNS)) {
+    const set = el('div', `print-matrix-set print-matrix-${orientation}`);
+    const parts = Math.max(1, Math.ceil(runs.length / most));
+    const size = Math.ceil(runs.length / parts);
+    for (let start = 0; start < runs.length; start += size) {
+      const table = el('table', 'tests-matrix');
+      buildMatrixTable(table, runs.slice(start, start + size), questions);
+      const part = el('div', 'print-matrix-part');
+      if (parts > 1) part.append(el('p', 'print-matrix-caption', `Runs ${start + 1}–${Math.min(start + size, runs.length)} of ${runs.length}`));
+      part.append(table);
+      set.append(part);
+    }
+    printed.append(set);
+  }
+}
+
+function buildMatrixTable(table, runs, questions) {
   table.replaceChildren();
   const head = table.createTHead().insertRow();
   head.append(el('th', '', 'Question'));

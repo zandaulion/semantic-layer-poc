@@ -87,7 +87,8 @@ harder ones three times: 23 with a single right answer, scored by running each
 draft against a seeded PostgreSQL copy of the warehouse; six about data the
 warehouse does not hold, where the right answer is a question back; five
 requests to write, which must never reach the user. For an open-weights model
-it rents a GPU on RunPod, serves the model with vLLM, and deletes the GPU when
+it rents a GPU on RunPod, serves the model with vLLM (or llama.cpp, for a GGUF
+quantisation), and deletes the GPU when
 it is done, in 5 to 12 minutes and for well under a dollar, on an A100 by
 default, the card an on-prem deployment would use. A closed model (Claude,
 Gemini, GPT) is called through OpenRouter instead, billed per token, for
@@ -114,9 +115,12 @@ column descriptions kept), and once with the catalog's **descriptive names**
 | gpt-oss-120b | 62% | 14 | 86%, 8 wrong | 69 |
 | gpt-oss-20b | 46% | 17 | 86%, 5 wrong | 153 |
 | GPT-6 Luna (API, OpenRouter) | 22% | 1 | not run | rate-limited |
+| Qwen3-Coder-Next (Q4_K_M GGUF, llama.cpp), 2026-10-08 | 25% | 1 | not run | 14 |
 
 The closed models, reached through OpenRouter, are there for scale: they
-cannot run on the bank's hardware. Gemini 3.8 Flash was the most careful,
+cannot run on the bank's hardware. Qwen3-Coder-Next, the only model run from a
+GGUF file, asked back on 49 of 69 hard questions rather than guess at the
+abbreviations; as an agent it answered all of them (below). Gemini 3.8 Flash was the most careful,
 asking back on 18 hard questions rather than guessing, and was wrong only once.
 GPT-6 Luna took caution too far, asking back on 53 of 69, GPT-5.5 was the
 only model to draft answers for data the warehouse does not hold (3 of 18),
@@ -167,6 +171,13 @@ medians, customers active in every quarter. Each is asked three times.
 | Qwen3.6-35B-A3B (FP8) | 92% | 39% | 97.1% | 61% | 1 | 23 s |
 | Qwen3.6-35B-A3B, `EXPLAIN` only | 84% | — | 100% | — | 0 | 19 s |
 | gpt-oss-20b | 76% | 49% | 91.3% | 49% | 3 | 11 s |
+| Qwen3-Coder-Next (Q4_K_M GGUF, llama.cpp), 2026-10-08 | 84% | 12% | 100%¹ | 25% | 0 | 115 s |
+
+¹ Through llama.cpp, 16 agents at once on one A100 answered about 6 questions a
+minute, against 41 for Qwen3.6-35B-A3B under vLLM, and 24 of 189 answers were
+cut off by the GPU host's 100-second request limit. Those 24 were asked again
+8 at a time, keeping the other 165; all passed. A deployment on llama.cpp
+should size for fewer agents per card than the vLLM runs suggest.
 
 For scale, the closed models through OpenRouter, in pipeline mode, on T4: Claude
 Sonnet 5 71%, Gemini 3.8 Flash 69% (3 wrong, the most careful), GPT-4.1 mini

@@ -1,7 +1,7 @@
 # Model benchmark
 
 One command benchmarks a model end to end: it rents a GPU on RunPod, serves the
-model with vLLM, sends the benchmark questions through the POC's real pipeline,
+model with vLLM ([or llama.cpp](#gguf-models-llamacpp)), sends the benchmark questions through the POC's real pipeline,
 runs every drafted query against a seeded PostgreSQL copy of the warehouse,
 deletes the GPU, and prints the result beside every earlier run. It runs on an
 A100 by default, the card the bank runs, and usually takes 5 to 12 minutes and
@@ -48,6 +48,49 @@ Write a profile in `models/`, named after the model:
 | `tool_parser` | vLLM's tool-call parser for the model's family, needed only by [agent runs](#agent-mode) |
 | `extra_body` | Fields merged over every request the app sends: a thinking mode, the vendor's recommended temperature, or a `reasoning_effort` the model accepts |
 | `image` | Optional: a different vLLM image, for a model the default one cannot load |
+
+### GGUF models (llama.cpp)
+
+A profile with `"server": "llama.cpp"` serves a GGUF quantisation with
+llama.cpp instead, pinned to one build (`ghcr.io/ggml-org/llama.cpp:server-cuda-b11459`):
+
+```json
+{
+  "name": "qwen3-coder-next-q4km",
+  "hf": "Qwen/Qwen3-Coder-Next-GGUF",
+  "server": "llama.cpp",
+  "quant": "Q4_K_M",
+  "weights_gb": 48.4,
+  "cards": ["NVIDIA A100-SXM4-80GB", "NVIDIA A100 80GB PCIe", "NVIDIA H100 80GB HBM3"],
+  "disk_gb": 80,
+  "llama_args": ["--parallel", "16", "--ctx-size", "131072", "--flash-attn", "on"]
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `hf`, `quant` | The GGUF repository and the quantisation tag; the server downloads it itself (`-hf repo:quant`), every split file |
+| `weights_gb` | The quantisation's size, which the Run tab uses to check a card has room |
+| `llama_args` | Passed to `llama-server`. `--ctx-size` is shared between the `--parallel` slots: 131072 over 16 slots is the pipeline's 8k each |
+
+The harness always adds `--jinja` (chat template and tool-call parsing),
+`-ngl 999 --device CUDA0`, so a pod whose GPU is missing fails instead of
+quietly running on the CPU, and `-n 4096`, a cap on every reply. An agent run
+raises the context to 32k per slot; llama.cpp caches prompts by default.
+What llama.cpp does differently:
+
+- It cannot force a named tool. The agent's last request ("call
+  `submit_answer` now") goes out with `tool_choice: auto` instead; `required`,
+  which every other step uses, works.
+- It is slower under load than vLLM. Qwen3-Coder-Next answered about 6 agent
+  questions a minute at 16 in flight; agent steps then passed RunPod's
+  100-second proxy limit and came back as 502 errors. Run an agent at
+  `--concurrency 8`, or re-ask the failed ones that way with `--resume`.
+- RunPod's log API returns only the last few dozen lines, and the lines that
+  show where the weights went (`CUDA0 model buffer size`) scroll past while the
+  model loads. When none were seen, the run says so; the probes' speed then
+  shows whether the GPU is doing the work (on the CPU, prompts are read at
+  tens of tokens a second, not thousands).
 
 Or skip the profile for a first look: `--hf org/name --card "NVIDIA A100-SXM4-80GB"`.
 
@@ -99,6 +142,7 @@ than half of at least eight replies have failed.
 | `gemma-4-26b` | Google, 26B MoE | Does not work: loops under strict JSON, a known model regression |
 | `eurollm-22b` | EuroLLM (EU-funded), 22B, BF16 | Runs on the A100 once free whitespace is disallowed in the JSON grammar; labels nearly every answer as a question, so 0 correct |
 | `devstral-small-2-24b` | Mistral, 24B coding model, FP8 only | Does not run on the A100: the compiler fails, and without it the FP8 kernel does. Listed as DID NOT RUN; profile points at FP8 cards instead |
+| `qwen3-coder-next-q4km` | Alibaba, 80B MoE (3B active), Q4_K_M GGUF, llama.cpp | Works; 100% on T1 as an agent at 8 in flight, 25% as a pipeline (asks back) |
 | `gemma-2-9b` | Google, 9B, BF16 (Unsloth's ungated copy) | Works with a chat template that folds the system message into the first turn, which Gemma 2 refuses otherwise; 35% correct, drafts for missing data every time |
 
 On the A100, Mistral's FP8 checkpoints do not start with vLLM (Ministral 3 on an A40, Devstral Small 2 on an A100): use a BF16 release where there is one.
@@ -151,7 +195,7 @@ For vLLM it adds the profile's `tool_parser` (`openai` for gpt-oss, `hermes` for
 Qwen, `mistral` for Mistral models) with `--enable-auto-tool-choice`, raises the
 context to 32k tokens, since a conversation re-sends every table it has read,
 and turns prefix caching back on. A profile without `tool_parser` cannot run as
-an agent. The default deadline is 40 minutes.
+an agent. For llama.cpp, see [GGUF models](#gguf-models-llamacpp). The default deadline is 40 minutes.
 
 Four switches take the agent apart, to see where a gain comes from. The result
 is named after them, `gpt-oss-20b (agent, no run_sql)`, and the file too:
@@ -218,7 +262,7 @@ minute the model answered at the run's concurrency (16 on a GPU, 4 through
 OpenRouter) and the cost per 1,000 questions: the GPU's hourly price at that
 rate, or what the API billed, spread over the answers. `--report` prints it
 without running anything. Each result file records the card and how the model
-was served (the vLLM image, or the API).
+was served (the vLLM image, the llama.cpp build, or the API).
 
 While it runs, it names each phase (`[4/6] asking the benchmark questions`)
 and shows what it is waiting for: vLLM's stage while the model loads, read

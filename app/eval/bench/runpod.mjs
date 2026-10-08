@@ -167,7 +167,7 @@ function rootCause(lines) {
   return [...new Set(chosen)].join(' | ').slice(0, 600) || 'no error line found in the log';
 }
 
-const FATAL = /Engine core initialization failed|EngineCore failed to start|CUDA out of memory|OutOfMemoryError|vllm serve: error|error: argument|error: unrecognized arguments/;
+const FATAL = /Engine core initialization failed|EngineCore failed to start|CUDA out of memory|OutOfMemoryError|vllm serve: error|error: argument|error: unrecognized arguments|error loading model|failed to load model|unknown model architecture|invalid device|exiting due to model loading error|failed to download/;
 
 export async function waitForServer({ id, apiKey: serverKey, model, deadline, onTick }) {
   const url = `https://${id}-8000.proxy.runpod.net/v1/models`;
@@ -198,7 +198,7 @@ export async function waitForServer({ id, apiKey: serverKey, model, deadline, on
           const hostSide = system.filter((l) => !/start container|create container|Pulling|Digest|Status: Image/i.test(l));
           const reason = tail.length ? rootCause(tail)
             : `the container exited before vLLM wrote anything, so the cause is on the host. Pod system log: ${hostSide.slice(-4).join(' | ').slice(0, 500) || '(nothing beyond container starts)'}`;
-          const error = new Error(`vLLM keeps restarting (${starts} starts): ${reason}`);
+          const error = new Error(`the server keeps restarting (${starts} starts): ${reason}`);
           error.logs = { container: tail.slice(-40), system: system.slice(-40) };
           // With vLLM's own errors in the log, the model cannot be served this
           // way: a result. With nothing, it was the machine: not one.
@@ -206,7 +206,7 @@ export async function waitForServer({ id, apiKey: serverKey, model, deadline, on
           throw error;
         }
         if (tail.some((l) => FATAL.test(l))) {
-          const error = new Error(`vLLM failed to start: ${rootCause(tail)}`);
+          const error = new Error(`the server failed to start: ${rootCause(tail)}`);
           error.logs = { container: tail.slice(-40), system: system.slice(-40) };
           error.kind = 'model';
           error.logged = true;

@@ -60,6 +60,16 @@ export async function validateModel(input) {
   if (!info) return fail(`No public model called ${id} on Hugging Face. Check the spelling and capitals.`);
   if (info.gated) return fail(`${info.id} is gated: it needs an accepted licence and a Hugging Face token, which the GPU pod does not have.`);
   if (info.private) return fail(`${info.id} is private.`);
+  // A GGUF profile is served by llama.cpp, which needs no safetensors; its
+  // size is the chosen quantisation's, written in the profile.
+  if (known?.server === 'llama.cpp') {
+    return {
+      ok: true, input: name, model: info.id, profile: known.name, about: known.about ?? null, cards: known.cards ?? [],
+      params_b: null, weights_gb: known.weights_gb, need_gb: Math.ceil(known.weights_gb + OVERHEAD_GB),
+      dtypes: [known.quant], fp8: false, architecture: null, pipeline: info.pipeline_tag ?? null,
+      license: info.cardData?.license ?? null, warnings: [],
+    };
+  }
   const tensors = info.safetensors?.parameters;
   if (!tensors || !Object.keys(tensors).length) return fail(`${info.id} has no safetensors weights, which vLLM needs. A GGUF-only repository cannot be served this way.`);
   if (info.pipeline_tag && !TEXT.has(info.pipeline_tag)) return fail(`${info.id} is a model for ${info.pipeline_tag.replaceAll('-', ' ')}, not one that writes text.`);

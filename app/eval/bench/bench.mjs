@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Benchmarks one model end to end: rents a GPU, serves the model with vLLM,
+ * Benchmarks one model end to end: rents a GPU, serves the model with vLLM
+ * (or llama.cpp, for a GGUF profile),
  * runs the benchmark questions through the real pipeline, scores the drafts by
  * running them, deletes the GPU, and prints the result next to every earlier
  * run.
@@ -45,6 +46,8 @@ const resultsDir = path.join(here, 'results');
 const crypticDir = path.join(resultsDir, 'cryptic');
 const CRYPTIC_INDEX = 'bench-cryptic';
 const IMAGE = 'vllm/vllm-openai:v0.30.0';
+// GGUF weights are served with llama.cpp: the build is pinned, as vLLM's is.
+const LLAMA_IMAGE = 'ghcr.io/ggml-org/llama.cpp:server-cuda-b11459';
 const RUNNER_IMAGE = 'docker.io/library/node:24-alpine';
 
 const argv = process.argv.slice(2);
@@ -81,8 +84,13 @@ let phaseCount = 0;
 const phase = (text) => say(`[${++phaseCount}/${PHASES}] ${text}`);
 let PHASES = 6;
 
-/** What vLLM is doing, judged from the last lines of the pod's log. */
+/** What vLLM (or llama.cpp) is doing, judged from the last lines of the pod's log. */
 function stage(lines, system = []) {
+  const recent = lines.slice(-5).join(' ');
+  if (/server is listening|all slots are idle/.test(recent)) return 'starting the API server';
+  if (/warming up|common_init_from_params/.test(recent)) return 'warming up';
+  if (/load_tensors|llama_model_load|llama_context|KV buffer|loading model/.test(recent)) return 'loading weights into the GPU';
+  if (/common_download|downloading|\.gguf/i.test(recent) && !/safetensors/.test(recent)) return 'downloading the weights';
   // The container's own log first: the system log's early "pulling" lines
   // would otherwise outrank a model that is already loading.
   if (!lines.length) return /start container/.test(system.join('\n')) ? 'starting the container' : /Pulling|Downloading|Extracting|pull/i.test(system.join('\n')) ? 'pulling the vLLM image' : 'starting';
@@ -127,7 +135,10 @@ async function loadProfile() {
   // For experiments: extra server arguments without editing the profile, e.g.
   // --vllm-extra '["--attention-backend","FLEX_ATTENTION"]'. The result file
   // records the arguments actually used.
-  if (flag('--vllm-extra')) profile.vllm_args = [...profile.vllm_args, ...JSON.parse(flag('--vllm-extra'))];
+  if (flag('--vllm-extra')) {
+    const key = profile.server === 'llama.cpp' ? 'llama_args' : 'vllm_args';
+    profile[key] = [...profile[key], ...JSON.parse(flag('--vllm-extra'))];
+  }
   if (flag('--image')) profile.image = flag('--image');
   return profile;
 }
@@ -141,6 +152,7 @@ async function loadProfile() {
  * than one pipeline prompt: at least 32k tokens.
  */
 function agentArgs(profile) {
+  if (profile.server === 'llama.cpp') return llamaAgentArgs(profile);
   if (!profile.tool_parser) throw new Error(`${profile.name} has no tool_parser in its profile; an agent run needs one (openai, hermes, mistral...).`);
   // Prefix caching back on: every step re-sends the conversation so far, and
   // an agent deployment would not pay for that prefix again at each one.
@@ -150,6 +162,37 @@ function agentArgs(profile) {
   else args[at + 1] = String(Math.max(Number(args[at + 1]), 32768));
   return [...args, '--enable-auto-tool-choice', '--tool-call-parser', profile.tool_parser];
 }
+
+/**
+ * llama.cpp splits --ctx-size between its --parallel slots, so an agent's 32k
+ * a conversation is 32k times the slots. Prompt caching is on by default, and
+ * --jinja (always given) is what parses tool calls.
+ */
+function llamaAgentArgs(profile) {
+  const args = [...profile.llama_args];
+  const slots = Number(args[args.indexOf('--parallel') + 1] || 1);
+  const at = args.indexOf('--ctx-size');
+  if (at === -1) args.push('--ctx-size', String(slots * 32768));
+  else args[at + 1] = String(Math.max(Number(args[at + 1]), slots * 32768));
+  return args;
+}
+
+/**
+ * How a profile's server is started: vLLM's arguments, or llama-server's. A
+ * GGUF is fetched by the server itself (-hf repo:quant, every split file).
+ * --device CUDA0 makes a pod without a working GPU fail at start instead of
+ * quietly running on the host's CPU, which llama.cpp otherwise does. -n caps
+ * every reply, in case a client's own limit is not honoured.
+ */
+function serverCommand(profile, agent) {
+  if (profile.server !== 'llama.cpp') return ['--model', profile.hf, '--served-model-name', profile.name, ...(agent ? agentArgs(profile) : profile.vllm_args)];
+  return ['-hf', `${profile.hf}:${profile.quant}`, '--alias', profile.name, '--host', '0.0.0.0', '--port', '8000',
+    '-ngl', '999', '--device', 'CUDA0', '--jinja', '-n', '4096', '--metrics', ...(agent ? agentArgs(profile) : profile.llama_args)];
+}
+const serverImage = (profile) => profile.image ?? (profile.server === 'llama.cpp' ? LLAMA_IMAGE : IMAGE);
+const serverLabel = (profile) => profile.server === 'llama.cpp'
+  ? `llama.cpp ${serverImage(profile).split(':').pop().replace(/^server-cuda-/, '')}`
+  : `vLLM ${serverImage(profile).split(':').pop()}`;
 
 /**
  * The read-only URL the application uses (deploy/a1/setup-warehouse.mjs), on
@@ -521,9 +564,9 @@ async function main() {
       const name = `bench-${profile.name}`.slice(0, 60);
       phase(`renting a GPU (${profile.cards.join(', then ')})`);
       const created = await createPod({
-        name, cards: profile.cards, cloud, image: profile.image ?? IMAGE, disk: profile.disk_gb,
-        minCuda: profile.min_cuda ?? '12.8', env: { VLLM_API_KEY: serverKey },
-        cmd: ['--model', profile.hf, '--served-model-name', profile.name, ...(agent ? agentArgs(profile) : profile.vllm_args)],
+        name, cards: profile.cards, cloud, image: serverImage(profile), disk: profile.disk_gb,
+        minCuda: profile.min_cuda ?? '12.8', env: profile.server === 'llama.cpp' ? { LLAMA_API_KEY: serverKey } : { VLLM_API_KEY: serverKey },
+        cmd: serverCommand(profile, agent),
       });
       podId = created.pod.id;
       podStarted = Date.now();
@@ -532,14 +575,19 @@ async function main() {
       await pods.add({ id: podId, name, card, created_at: new Date().toISOString() });
       for (const refusal of created.refusals) say(`skipped ${refusal}`);
       say(`rented ${card} as pod ${podId}, $${price}/h`);
-      phase(`loading ${profile.hf} into vLLM (usually 2 to 8 minutes)`);
+      phase(`loading ${profile.hf}${profile.quant ? ` ${profile.quant}` : ''} into ${serverLabel(profile).split(' ')[0]} (usually 2 to 8 minutes)`);
       let lastLook = 0;
       let current = 'starting';
+      // RunPod returns only the last few dozen log lines, so llama.cpp's
+      // buffer lines are collected while it loads, not looked for afterwards.
+      const placement = new Set();
+      const BUFFERS = /(CUDA\d|CPU_Mapped|CPU) (model|KV|compute|RS) buffer size/;
       const onTick = async () => {
         if (Date.now() - lastLook > 30_000) {
           lastLook = Date.now();
           const [system, container] = await Promise.all([podLog(podId, 15, 'system'), podLog(podId, 40, 'container')].map((p) => p.catch(() => [])));
           current = stage(container, system);
+          for (const line of container) if (BUFFERS.test(line)) placement.add(line.trim().replace(/^[\d.]+ \w /, ''));
         }
         progress(`${current}, ${Math.round((Date.now() - podStarted) / 1000)} s since the pod started`);
       };
@@ -562,8 +610,8 @@ async function main() {
             recorded_at: recordedAt,
             // Named apart, so the tables show an agent run beside the same model's
     // pipeline runs rather than as one more run of it.
-    model: { name: variant.length ? `${profile.name} (${variant.join(', ')})` : profile.name, hf: profile.hf, about: profile.about, vllm_args: profile.vllm_args ?? null, extra_body: profile.extra_body ?? {} },
-            server: `vLLM ${(profile.image ?? IMAGE).split(':').pop()}`, server_image: profile.image ?? IMAGE,
+    model: { name: variant.length ? `${profile.name} (${variant.join(', ')})` : profile.name, hf: profile.hf, quant: profile.quant, about: profile.about, vllm_args: profile.vllm_args ?? null, server_args: profile.server === 'llama.cpp' ? serverCommand(profile, agent) : undefined, extra_body: profile.extra_body ?? {} },
+            server: serverLabel(profile), server_image: serverImage(profile),
             card, cloud, price_per_hour: price,
             cost_usd: price && timings.pod_s ? Math.round(price * timings.pod_s / 36) / 100 : null,
             timings: { ...timings, total_s: Math.round((Date.now() - t0) / 1000) },
@@ -580,9 +628,15 @@ async function main() {
       }
       timings.ready_s = Math.round((Date.now() - podStarted) / 1000);
       // Which kernels vLLM chose: the first suspect when a model misbehaves.
-      const chosen = (await podLog(podId, 1500, 'container').catch(() => []))
+      const startLog = await podLog(podId, 1500, 'container').catch(() => []);
+      const chosen = startLog
         .filter((l) => /attention backend|MoE backend|Using .*backend/i.test(l)).map((l) => l.replace(/^.*\] /, ''));
       for (const line of [...new Set(chosen)].slice(0, 4)) say(`vLLM: ${line.slice(0, 160)}`);
+      // llama.cpp: where the weights and the KV cache went. CUDA0 buffers are
+      // the proof that the GPU is doing the work.
+      for (const line of startLog) if (BUFFERS.test(line)) placement.add(line.trim().replace(/^[\d.]+ \w /, ''));
+      for (const line of [...placement].slice(0, 8)) say(`llama.cpp: ${line.slice(0, 160)}`);
+      if (profile.server === 'llama.cpp' && !placement.size) say('llama.cpp: no buffer lines seen in the log; judge GPU use by the speed in the probes');
       say(`server answering after ${timings.ready_s} s`);
     }
 
@@ -689,11 +743,11 @@ async function main() {
     recorded_at: recordedAt,
     // Named apart, so the tables show an agent run beside the same model's
     // pipeline runs rather than as one more run of it.
-    model: { name: variant.length ? `${profile.name} (${variant.join(', ')})` : profile.name, hf: profile.hf, about: profile.about, vllm_args: profile.vllm_args ?? null, extra_body: profile.extra_body ?? {} },
+    model: { name: variant.length ? `${profile.name} (${variant.join(', ')})` : profile.name, hf: profile.hf, quant: profile.quant, about: profile.about, vllm_args: profile.vllm_args ?? null, server_args: profile.server === 'llama.cpp' ? serverCommand(profile, agent) : undefined, extra_body: profile.extra_body ?? {} },
     // How the model was served: the vLLM image (whose tag is the vLLM version)
     // for a rented pod, or the API's host for an existing endpoint.
-    server: external ? `API: ${openrouter ? 'OpenRouter' : flag('--provider', new URL(external).host)}` : `vLLM ${(profile.image ?? IMAGE).split(':').pop()}`,
-    server_image: external ? null : profile.image ?? IMAGE,
+    server: external ? `API: ${openrouter ? 'OpenRouter' : flag('--provider', new URL(external).host)}` : serverLabel(profile),
+    server_image: external ? null : serverImage(profile),
     card, cloud: external ? null : cloud, price_per_hour: price,
     cost_usd: openrouter ? await openrouterCost() : price && timings.pod_s ? Math.round(price * timings.pod_s / 36) / 100 : null,
     // Which names the model was shown: the catalog as written, or the same

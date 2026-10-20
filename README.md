@@ -10,6 +10,22 @@ An invite-only PWA that turns natural-language banking questions into **editable
 
 The [portfolio gallery](portfolio/README.md) covers ten hard banking questions at desktop, laptop, tablet, and phone sizes, taken from the model benchmark. Their SQL was drafted by the POC's own pipeline and model, and each draft was verified by running it against a seeded copy of the synthetic warehouse; the screenshots render those recorded responses in the PWA for repeatable capture.
 
+
+## Start here
+
+The repository name is `semantic-layer-poc`; the application is **Bank DWH Studio**.
+It is a proof of concept using a synthetic warehouse, not a production banking
+integration. The hosted PWA requires an invitation.
+
+1. For a local app, read [configuration.md](configuration.md) and [app/README.md](app/README.md)
+   for the supported runtime, Elasticsearch, model credentials, warehouse and first invite.
+2. To inspect or regenerate the fixture without a model backend, start in
+   [banking-poc/README.md](banking-poc/README.md).
+3. For model comparison, use [the evaluation guide](app/eval/README.md); model/API
+   calls and rented compute can have costs.
+
+[Project overview](https://zandaulion.com/bankdwhstudio.html).
+
 ## How it works
 
 1. A user asks a question and can narrow the search to a banking subject area. The sidebar chooses the answer mode; `ANSWER_MODE` sets the default.
@@ -256,3 +272,12 @@ All warehouse names, relationships, and measures here are synthetic POC material
 ## License
 
 Released under [GPL-3.0-only](LICENSE). The PWA update files are adapted from [pwa-kit](https://github.com/zandaulion/pwa-kit), also GPL-3.0, at commit `e2ad9dced4f471afb3d307b00af214dacd0d2e6e`. The invite administration API follows the contract of [pwa-invite-console](https://github.com/zandaulion/pwa-invite-console); that console's source is not bundled here.
+
+
+## Support and contributions
+
+Use this repository’s Issues for reproducible bugs and focused feature requests. Include the version, relevant runtime/browser, expected behavior and a minimal synthetic example. Remove credentials, personal records, device identifiers and deployment-specific values before sharing logs or screenshots.
+
+Run `npm test` from `app/` for application changes and `python validate_banking_warehouse.py` for fixture changes. Keep real warehouse schemas, records, model credentials and infrastructure configuration outside this public project.
+
+Keep changes focused and update the affected documentation. Security-sensitive reports should follow [SECURITY.md](SECURITY.md).

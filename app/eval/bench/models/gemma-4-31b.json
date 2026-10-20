@@ -1,0 +1,31 @@
+{
+  "name": "gemma-4-31b",
+  "about": "Google Gemma 4, 31B dense, BF16 as released. Apache-2.0. Matched to the October gemma-4-26b retest: vLLM 0.31.0, Gemma tool/reasoning parsers and tool chat template, explicit non-thinking requests, no free JSON whitespace. Run --quick before a full benchmark; the Gemma 4 family previously exhibited repetition under strict JSON.",
+  "hf": "google/gemma-4-31B-it",
+  "image": "vllm/vllm-openai:v0.31.0",
+  "tool_parser": "gemma4",
+  "cards": [
+    "NVIDIA A100-SXM4-80GB",
+    "NVIDIA A100 80GB PCIe",
+    "NVIDIA H100 80GB HBM3"
+  ],
+  "disk_gb": 150,
+  "vllm_args": [
+    "--max-model-len", "8192",
+    "--gpu-memory-utilization", "0.9",
+    "--max-num-seqs", "16",
+    "--max-num-batched-tokens", "4096",
+    "--limit-mm-per-prompt", "{\"image\":0}",
+    "--reasoning-parser", "gemma4",
+    "--chat-template", "examples/tool_chat_template_gemma4.jinja",
+    "--no-enable-prefix-caching",
+    "--structured-outputs-config", "{\"backend\":\"xgrammar\",\"disable_any_whitespace\":true}"
+  ],
+  "extra_body": {
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "top_k": 64,
+    "reasoning_effort": null,
+    "chat_template_kwargs": { "enable_thinking": false }
+  }
+}

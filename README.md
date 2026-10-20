@@ -146,8 +146,10 @@ With descriptive names, on an A100, on 2026-09-26:
 Gemma 2 9B answered 35% with 35 confidently wrong, and drafted an answer for
 every question about data the warehouse does not hold; Ministral 3 14B answered
 45% with 40 confidently wrong; EuroLLM-22B, the EU-funded model, labelled nearly
-every answer as a question and got none right. Gemma 4 26B could not be served
-under strict JSON output, a known model regression, and Devstral Small 2, only
+every answer as a question and got none right. Gemma 4 26B's September run failed
+under strict JSON output; the [20 October Gemma 4 retest](app/eval/GEMMA4.md)
+compares the 26B MoE and 31B dense models with updated serving settings in both
+pipeline and agent modes. Devstral Small 2, only
 published in FP8, does not start on an A100 at all. The
 PWA's **Model tests** tab shows every run, cryptic names first, each tagged
 open or closed weights, and exports them as a PDF. Its **Run a test** tab checks

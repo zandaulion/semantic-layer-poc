@@ -1,7 +1,9 @@
 {
   "name": "gemma-4-26b",
-  "about": "Google Gemma 4, mixture of experts (26B, 4B active), BF16 as released. Apache-2.0. NOT USABLE with the POC as of 2026-09: under strict JSON output it collapses into repeating a token mid-answer, a known model-level regression from Gemma 3 (google-deepmind/gemma#622, vllm-project/vllm#40080) that penalties do not fix. Tried here: default settings, no-whitespace grammar, Google's recommended sampling, and FLEX_ATTENTION (would not start); short prompts answer correctly, benchmark prompts loop. See results/superseded and results/quick.",
+  "about": "Google Gemma 4, mixture of experts (26B, 4B active), BF16 as released. Apache-2.0. October retest: vLLM 0.31.0, Gemma tool/reasoning parsers and tool chat template, explicit non-thinking requests, no free JSON whitespace. September's vLLM 0.30.0 runs repeated tokens under strict JSON; those results retain their original configuration. Compatibility of this configuration must be checked with --quick before a full run.",
   "hf": "google/gemma-4-26B-A4B-it",
+  "image": "vllm/vllm-openai:v0.31.0",
+  "tool_parser": "gemma4",
   "cards": [
     "NVIDIA A100-SXM4-80GB",
     "NVIDIA A100 80GB PCIe",
@@ -13,6 +15,16 @@
     "8192",
     "--gpu-memory-utilization",
     "0.9",
+    "--max-num-seqs",
+    "16",
+    "--max-num-batched-tokens",
+    "4096",
+    "--limit-mm-per-prompt",
+    "{\"image\":0}",
+    "--reasoning-parser",
+    "gemma4",
+    "--chat-template",
+    "examples/tool_chat_template_gemma4.jinja",
     "--no-enable-prefix-caching",
     "--structured-outputs-config",
     "{\"backend\": \"xgrammar\", \"disable_any_whitespace\": true}"
@@ -20,6 +32,8 @@
   "extra_body": {
     "temperature": 1.0,
     "top_p": 0.95,
-    "top_k": 64
+    "top_k": 64,
+    "reasoning_effort": null,
+    "chat_template_kwargs": { "enable_thinking": false }
   }
 }

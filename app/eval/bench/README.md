@@ -139,11 +139,17 @@ than half of at least eight replies have failed.
 | `ministral-3-14b` | Mistral, 14B, FP8 | Works on Ada or Blackwell; failed to compile on an A40 |
 | `ministral-3-14b-bf16` | The same in BF16 | Works on the A100 |
 | `mistral-small-3.2-24b` | Mistral, 24B, BF16 | Works on the A100 |
-| `gemma-4-26b` | Google, 26B MoE | Does not work: loops under strict JSON, a known model regression |
+| `gemma-4-26b` | Google, 26B MoE, BF16 | October vLLM 0.31 retest supports strict JSON and agent tools; see the [matched comparison](../GEMMA4.md). September's 0.30 run looped under strict JSON |
+| `gemma-4-31b` | Google, 31B dense, BF16 | Matched vLLM 0.31 profile with Gemma tool parser and thinking disabled; see the [comparison](../GEMMA4.md) for single-A100 capacity limits |
 | `eurollm-22b` | EuroLLM (EU-funded), 22B, BF16 | Runs on the A100 once free whitespace is disallowed in the JSON grammar; labels nearly every answer as a question, so 0 correct |
 | `devstral-small-2-24b` | Mistral, 24B coding model, FP8 only | Does not run on the A100: the compiler fails, and without it the FP8 kernel does. Listed as DID NOT RUN; profile points at FP8 cards instead |
 | `qwen3-coder-next-q4km` | Alibaba, 80B MoE (3B active), Q4_K_M GGUF, llama.cpp | Works; 100% on T1 as an agent at 8 in flight, 25% as a pipeline (asks back) |
 | `gemma-2-9b` | Google, 9B, BF16 (Unsloth's ungated copy) | Works with a chat template that folds the system message into the first turn, which Gemma 2 refuses otherwise; 35% correct, drafts for missing data every time |
+
+For a full Gemma 4 31B agent run on one A100, pass
+`--runner-minutes 45 --max-minutes 60`: the October run took about 33 minutes
+of drafting, so the default 15-minute runner window is too short. See the
+[Gemma comparison](../GEMMA4.md) for the complete commands and serving settings.
 
 On the A100, Mistral's FP8 checkpoints do not start with vLLM (Ministral 3 on an A40, Devstral Small 2 on an A100): use a BF16 release where there is one.
 Every Mistral 3 model needs vLLM v0.29.0 (v0.30.0 cannot load them,

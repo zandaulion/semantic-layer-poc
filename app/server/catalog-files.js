@@ -85,6 +85,9 @@ export function writeCatalogFiles(dir) {
   fs.writeFileSync(path.join(staging, 'table-index.json'), JSON.stringify({ schema: schemaName, tables: tables.map(indexEntry) }));
   // Renamed into place whole, so a reader never sees half a catalog; a second
   // process that got there first wins, and its files are the same.
+  // A directory left without its index (an interrupted write, or an older
+  // layout) would block the rename forever, so it is cleared first.
+  if (fs.existsSync(dir) && !fs.existsSync(path.join(dir, 'table-index.json'))) fs.rmSync(dir, { recursive: true, force: true });
   try { fs.renameSync(staging, dir); }
   catch (error) {
     fs.rmSync(staging, { recursive: true, force: true });
